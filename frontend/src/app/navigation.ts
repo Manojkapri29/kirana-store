@@ -31,16 +31,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     path: '/products',
     icon: PackageSearch,
     labelKey: 'nav.products',
-    descriptionKey: 'modules.products.description',
-    phase: 3,
   },
   {
     id: 'inventory',
     path: '/inventory',
     icon: Boxes,
     labelKey: 'nav.inventory',
-    descriptionKey: 'modules.inventory.description',
-    phase: 10,
   },
   {
     id: 'purchases',

@@ -16,14 +16,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.core.dev import DEV_SHOP_NAME, DEV_USER_EMAIL, UNUSABLE_PASSWORD_HASH
 from app.db.session import write_transaction
 from app.models import Shop, User
 from app.models.enums import UserRole
-
-DEV_SHOP_NAME = "Development Shop"
-DEV_USER_EMAIL = "owner@dev.kirana.local"
-# Not a valid hash of any password, so nobody can log in as this user. Real credentials arrive in Phase 14.
-UNUSABLE_PASSWORD_HASH = "!"
 
 
 @dataclass(frozen=True)

@@ -8,6 +8,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.errors import register_error_handlers
 from app.api.routes import health
 from app.api.v1.router import api_v1_router
 from app.core.config import get_settings
@@ -31,7 +32,9 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["Content-Disposition"],  # lets the browser read export file names
     )
+    register_error_handlers(app)
 
     app.include_router(health.router)
     app.include_router(api_v1_router, prefix="/api/v1")

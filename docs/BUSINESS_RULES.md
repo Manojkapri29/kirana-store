@@ -24,6 +24,22 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
   visible. A **void** corrects a data-entry mistake and is recorded with `REVERSAL` entries. A document that
   has returns cannot be voided until those returns are voided.
 
+- **L7. Opening stock** (Phase 3). The starting balance of a product, recorded as one `OPENING` ledger row:
+  - the quantity must be greater than zero, in whole numbers for units that cannot be split (pieces) and
+    up to 3 decimals for units that can (kg, litre);
+  - a product has **at most one** opening row, and it must be recorded **before any other stock movement**,
+    so it is always the true starting balance. Later corrections are adjustments;
+  - the date defaults to today (shop timezone), may be in the past, never in the future;
+  - the product must be active;
+  - an optional cost per unit becomes the product's average cost. **No cost means the cost stays unknown
+    (`NULL`), never 0**;
+  - it can be entered while creating the product (both happen in one transaction: if the opening stock is
+    refused, the product is not created) or later from the product page.
+- **L8. Negative stock.** `shops.allow_negative_stock` (default false) governs every *removal* of stock (an
+  adjustment now; sales in Phase 7). Opening stock is never negative, whatever the setting.
+- **L9. Stock status.** Out of Stock when stock is 0 or below; Low Stock when stock is above 0 and at or
+  below the product's reorder level; otherwise In Stock.
+
 ## S. Sales modes
 
 - **S1. Detailed Sale:** a product-wise bill with at least one line (product, quantity, selling price,
@@ -82,6 +98,25 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
 - **C5.** Stock value = stock × average cost (not selling price), with the same missing-cost flag.
 - **C6.** Purchases are not expenses. Buying stock does not reduce profit until that stock is sold.
 
+## PR. Products (Phase 3)
+
+- **PR1.** SKU is required, trimmed and stored upper-case (`rice-5kg` and `RICE-5KG` are the same SKU),
+  and unique within a shop. The same SKU may exist in different shops. Barcode is optional (blank counts as
+  none), unique within a shop when present, and may repeat across shops.
+- **PR2.** Products are **never deleted**, only deactivated. An inactive product is hidden from the default
+  lists, cannot be given new stock, keeps its history and its SKU/barcode, can still be edited, and can be
+  activated again. Deactivating twice is harmless.
+- **PR3.** Purchase price and MRP are optional; when left empty they are stored as unknown, not 0. Selling
+  price and reorder level are required (reorder level defaults to 0).
+- **PR4.** `avg_cost` is calculated, never typed in: it is set by the opening cost now and maintained by the
+  costing service from Phase 5. `current_stock` is not a field at all; sending it is an error.
+- **PR5.** A unit cannot be changed once the product has any stock movement (it would change what the
+  numbers mean). A reorder level must respect the unit (no fractions of a piece).
+- **PR6.** A category is required. Inactive categories cannot be chosen for new products. Category names are
+  unique per shop, ignoring case.
+- **PR7.** Every create, update, activate/deactivate and opening-stock action writes an audit log entry with
+  the values before and after. An update that changes nothing writes nothing.
+
 ## P. Pricing and MRP
 
 - **P1.** A product has four separate values: **purchase price**, **average cost**, **selling price** and
@@ -91,7 +126,10 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
   the printed MRP on packaged goods is generally not allowed in India, which is why the check exists.
   The setting is `shops.mrp_validation_mode` (`WARN` or `BLOCK`). The database does not enforce
   `selling price <= MRP`, because in `WARN` mode a higher price is allowed.
-  **(open, Phase 3):** which mode is the default for a new shop.
+  **Decided in Phase 3:** the default for a new shop is `WARN` (the price is saved and the user is shown a
+  warning), because a stale MRP should not stop a shopkeeper from saving a product. A shop can be set to
+  `BLOCK`. In `BLOCK` mode the check applies only when the selling price or MRP is being changed. Changing
+  the setting has no screen yet; it is a shop setting read by the API.
 - **P3.** The MRP in force is copied onto each sale line as a snapshot.
 
 ## K. Khata (customer credit)
@@ -145,7 +183,14 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
 - **X2.** Formats are CSV (UTF-8 with BOM so Excel shows Hindi text and ₹ correctly) and XLSX. Voided rows are
   included with a status column. Dates are ISO in CSV and real date cells in XLSX.
 - **X3.** Cells starting with `=`, `+`, `-` or `@` are neutralised to prevent spreadsheet-formula injection.
-- **X4.** Exports are scoped to the shop and available to the owner role.
+- **X4.** Exports are scoped to the shop and available to the owner role. Responses are marked `no-store`.
+- **X5.** *(Implemented in Phase 3.)* Formula injection: text starting with `=`, `+`, `-`, `@`, tab or carriage
+  return is prefixed with an apostrophe in CSV and XLSX so a spreadsheet shows it as text. Real numbers,
+  including negative ones, are not changed. Amounts are written from exact decimals. Money columns use
+  `#,##0.00`, quantity columns `#,##0.000`, dates are real Excel date cells shown as `dd/mm/yyyy`; recorded-at
+  times are converted to the shop's timezone. CSV dates are ISO. Files are named like `products_2026-09-20.csv`.
+- **X6.** Available now: Products, Inventory (current stock) and Inventory history (the ledger with running
+  balance). The engine is generic; each later module supplies its own columns and rows.
 
 ## T. Tenancy and security
 
@@ -186,3 +231,14 @@ need business logic in services, which arrive in later phases.
 | E1 void needs a reason; a row is reversed once | E1 edit = void + new document; audit entries |
 | | P2 MRP warn/block |
 | | F1-F4 profit, X1-X4 exports |
+
+## API conventions (Phase 3)
+
+- Money and quantities are **strings** in JSON (`"250.00"`, `"2.500"`). A JSON number with a fraction is
+  refused, so no client can send a float. Money allows 2 decimals, quantities 3; neither may be negative.
+  Responses always show money with 2 decimals and quantities with 3.
+- Unknown fields are errors, not ignored.
+- Errors: **404** for a missing thing and for another shop's data (the two look identical); **409** for a
+  conflict such as a duplicate SKU or a second opening stock; **422** for invalid input or a broken rule.
+  Field problems name the field.
+- Every query is scoped to the caller's shop. There is no endpoint that changes or deletes a ledger row.

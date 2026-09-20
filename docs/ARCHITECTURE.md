@@ -21,14 +21,29 @@ it possible to split later if ever needed.
 
 - The frontend is a static single-page app. It contains **no business rules**: it collects input,
   calls the API, and displays results. Anything that affects stock, money or profit is decided by the backend.
-- All HTTP goes through `frontend/src/api/`. React components never call `fetch` directly.
+  The form validation in the UI (required fields, decimal places, whole numbers for pieces) is only quick
+  feedback; the server checks everything again and its messages are shown when they differ.
+- All HTTP goes through `frontend/src/api/`. React components never call `fetch` directly. Server state
+  (lists, details, caching, refetching after a change) is handled by TanStack Query.
+- **Money and quantities are JSON strings** (`"25.50"`, `"2.500"`) in both directions, and the frontend never
+  turns them into JavaScript numbers except to display them. The API refuses a JSON number with a fraction.
 - In development the Vite dev server proxies `/api` and `/health` to the backend, so there is no CORS
   friction. In production the API origin is set with `VITE_API_BASE_URL` and allowed in the backend's
   `KIRANA_CORS_ORIGINS`.
-- The UI is mobile-first with large tap targets. Text lives in typed locale files (English, Hindi), so
-  no user-facing string is hard-coded in components, and a missing translation fails the TypeScript build.
-- Money, quantities and dates are formatted only at the edge (`en-IN`, DD/MM/YYYY, ₹). The API exchanges
-  exact values, never pre-formatted strings.
+- The UI is mobile-first with large tap targets: tables on desktop, cards on phones. Text lives in typed
+  locale files (English, Hindi), so no user-facing string is hard-coded in components, and a missing or
+  mistyped translation key fails the TypeScript build. Messages produced by the server are shown as sent
+  (English for now).
+- Money, quantities and dates are formatted only at the edge (`en-IN`, DD/MM/YYYY, ₹).
+
+```
+frontend/src/
+├── api/          typed API calls (client, products, inventory, catalog, exports)
+├── features/     products/ (list, form, detail, opening stock, history), inventory/
+├── components/   shared UI: buttons, fields, alerts, pagination, search, export buttons
+├── lib/          decimal.ts (exact decimal checks), format.ts (display formatting)
+├── layouts/  pages/  hooks/  i18n/  app/
+```
 
 ## Backend layers
 
@@ -37,12 +52,15 @@ backend/
 ├── app/
 │   ├── main.py            application factory and entry point
 │   ├── seed.py            development seed (one shop + owner); refuses to run in production
-│   ├── core/              settings and other cross-cutting setup
+│   ├── core/              settings, request context, development identity
 │   ├── db/                engine, sessions/transactions, Money/Quantity/UTC types
 │   ├── models/            SQLAlchemy models, one module per area
+│   ├── schemas/           Pydantic request/response models (the JSON contract)
 │   ├── api/
+│   │   ├── deps.py        current shop/user, owner check
+│   │   ├── errors.py      service errors -> HTTP responses
 │   │   ├── routes/        operational routes (health)
-│   │   └── v1/            versioned business routers, mounted at /api/v1
+│   │   └── v1/            versioned routers: reference, products, inventory, exports
 │   └── services/          business rules and transactions
 ├── migrations/            Alembic environment and versions
 └── tests/
@@ -50,29 +68,45 @@ backend/
 
 | Layer | Responsibility | Must not |
 |---|---|---|
-| Routers (`api/`) | Parse and validate the request, call a service, shape the response | Contain business rules or touch the database |
-| Services (`services/`) | Enforce rules, run one write transaction per action | Import from `api/`; call `commit()` themselves |
+| Routers (`api/`) | Parse the request, open the transaction for writes, call a service, shape the response | Contain business rules; import models |
+| Schemas (`schemas/`) | Describe request/response JSON and parse money/quantity strictly | Import `api/` |
+| Services (`services/`) | Enforce rules, raise `DomainError`s, never commit | Import `api/`, `schemas/` or `fastapi` |
 | Models (`models/`) | Table definitions, constraints, column types | Contain workflows; import services or `api/` |
 | DB (`db/`) | Engine, SQLite settings, transactions, column types | Know about models or business rules |
 | Reporting (planned) | Read-only queries | Write anything |
 
 These import rules are enforced by `tests/test_architecture.py`.
 
-## Service layer and boundaries (planned)
+**Request flow (a write):** router -> `write_transaction()` -> service (rules, ledger, audit log) ->
+commit -> response built from the same transaction. A `DomainError` rolls everything back and becomes a
+404 (not found, also for another shop's data), 409 (conflict, e.g. duplicate SKU) or 422 (rule broken),
+with the offending field named so a form can show the message next to it.
 
-| Service | Responsibility |
-|---|---|
-| `inventory_service` | **The only writer of the stock ledger.** Opening stock, purchases, sales, returns, adjustments, reversals, and the "stock cannot go negative" check |
-| `khata_service` | **The only writer of the customer ledger** |
-| `purchase_service` | Purchases and purchase returns |
-| `detailed_sale_service` | Product-wise bills and sales returns |
-| `quick_sale_service` | Money-only sales. It has **no dependency on `inventory_service`**, by design |
-| `costing_service` | Moving weighted average cost, cost snapshots for COGS |
-| `numbering_service` | Document numbers from a sequence table (portable across databases) |
-| `export_service` | CSV/XLSX generation with formula-injection protection |
+**Current shop and user:** `api/deps.py` resolves them through `context_service`. Until Phase 14 that is
+the seeded development owner; in production it answers 503 so a deployment cannot run without login.
+Phase 14 replaces that one function.
 
-Other services call `inventory_service` and `khata_service`; nothing else writes their tables. This gives
-one place to test and reason about stock and balances.
+## Service layer and boundaries
+
+| Service | Responsibility | Status |
+|---|---|---|
+| `inventory_service` | **The only reader and writer of the stock ledger.** Opening stock, adjustments, stock queries, inventory list, history, stock status | Phase 3 (purchases, sales, returns join it later) |
+| `product_service` | Products: create, update, search, activate/deactivate; MRP setting; derives stock through `inventory_service` | Phase 3 |
+| `catalog_service` | Units and categories | Phase 3 |
+| `export_service` | Format engine: CSV/XLSX rendering, formula-injection protection. Knows nothing about products | Phase 3 |
+| `export_datasets` | What each export contains (columns and rows), built from the domain services | Phase 3 |
+| `audit_service` | Writes the insert-only audit log | Phase 3 |
+| `shop_service`, `context_service` | Shop settings and "today"; the current shop/user | Phase 3 |
+| `khata_service` | **The only writer of the customer ledger** | Phase 6 |
+| `purchase_service` | Purchases and purchase returns | Phases 5, 9 |
+| `detailed_sale_service` | Product-wise bills and sales returns | Phases 7, 9 |
+| `quick_sale_service` | Money-only sales. It has **no dependency on `inventory_service`**, by design | Phase 8 |
+| `costing_service` | Moving weighted average cost, cost snapshots for COGS | Phase 5 |
+| `numbering_service` | Document numbers from a sequence table | Phase 7 |
+
+Other services call `inventory_service` and `khata_service`; nothing else touches their tables. For
+example the product list gets stock from `inventory_service.get_stock_map`, and exports get their rows from
+`inventory_service.list_inventory` / `list_transactions`.
 
 ## Inventory ledger
 
@@ -157,19 +191,23 @@ PostgreSQL, is in [DATABASE.md](DATABASE.md).
 
 ## Current state
 
-**Phase 1 (foundation)**
-- Backend: application factory, settings, `GET /health`, an empty `/api/v1` router.
-- Frontend: routing, responsive shell (sidebar drawer on mobile), dashboard placeholder, "coming soon"
-  pages for planned modules, English/Hindi switching, API client, and a live server-status badge.
+**Phase 1 (foundation):** application factory, settings, `GET /health`, responsive React shell,
+English/Hindi switching, API client layer, live server-status badge.
 
-**Phase 2 (database foundation)**
-- SQLite engine (foreign keys, WAL, busy timeout, explicit transactions), `read_session` /
-  `write_transaction`, and the `Money`, `Quantity` and `UTCDateTime` types.
-- 23 tables (see [DATABASE.md](DATABASE.md)), created by Alembic migration `0001`, with the shared units
-  seeded and the insert-only triggers installed.
-- A development seed script.
-- **No services, endpoints or screens use the database yet.** `inventory_service` and `khata_service` are
-  documented placeholders.
+**Phase 2 (database foundation):** SQLite engine and transactions, `Money`/`Quantity`/`UTCDateTime` types,
+23 tables created by Alembic migration `0001` (units seeded, insert-only triggers), development seed.
+
+**Phase 3 (first business functionality):**
+- Products (create, edit, search, filter, activate/deactivate) and categories, through a JSON API with
+  strict money/quantity parsing and shop isolation.
+- The inventory ledger in use: opening stock, adjustments (service level), current stock derived from the
+  ledger, inventory list with In/Low/Out of stock, transaction history with running balance.
+- CSV/XLSX exports of products, inventory and stock history through a reusable export engine.
+- Audit log entries for product, category and opening-stock changes.
+- Screens: Products (list, add, edit, detail with history and opening stock) and Inventory.
+
+**Not built yet:** suppliers, purchases, sales, returns, khata, expenses, dashboard analytics, reports,
+authentication, and screens for adjustments. `khata_service` is still a placeholder.
 
 ## Testing strategy
 
@@ -179,8 +217,11 @@ PostgreSQL, is in [DATABASE.md](DATABASE.md).
   `Money`/`Quantity` exactness, migration up/down and model-versus-migration drift (`alembic check`),
   PostgreSQL DDL rendering, uniqueness, foreign keys, cross-shop references, value validity, the ledger rules
   and insert-only triggers, seed data, and the architecture rules.
-- From Phase 3, each service rule gets tests, plus invariant tests (ledger sum equals reported stock across
-  random sequences) and a concurrency test for overselling.
+- Phase 3 added tests through the real HTTP API (a client acting as a chosen shop, so two shops can be
+  compared side by side) and at service level: products, opening stock and adjustments, derived stock and
+  status, history with running balance, shop isolation, insert-only ledger, and exports (CSV/XLSX contents,
+  formula neutralisation, scoping). Still to come: invariant tests (ledger sum equals reported stock across
+  random sequences) and the overselling concurrency test, when sales exist.
 - Frontend: TypeScript strict checks, oxlint, and a production build on every change.
 - PostgreSQL: the same suite runs on PostgreSQL at the checkpoint after Phase 10 and again in Phase 15.
 

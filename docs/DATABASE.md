@@ -1,6 +1,6 @@
 # Database
 
-> **Status: implemented in Phase 2** (migration `0001`). Rules are in [BUSINESS_RULES.md](BUSINESS_RULES.md);
+> **Status: implemented in Phase 2** (migration `0001`); **Phase 3 uses these tables and needs no migration**. Rules are in [BUSINESS_RULES.md](BUSINESS_RULES.md);
 > the workflows that fill these tables arrive in Phases 3 to 13.
 
 ## Principles
@@ -144,6 +144,18 @@ never be deleted, tests build a fresh database per test rather than cleaning up.
 ### Document lifecycle (purchases, purchase_returns, sales, sales_returns, quick_sales, expenses)
 `status` (`POSTED`/`VOID`), `void_reason` (required when void), `voided_at`, `replaces_id?` (unique; points
 at the document this one corrects), `created_by` (required, same shop), and timestamps.
+
+## How Phase 3 uses the tables
+
+| Table | Use |
+|---|---|
+| `products`, `categories`, `units` | Product management. `avg_cost` is set from the opening cost |
+| `inventory_transactions` | `OPENING` rows (reference `PRODUCT` + product id) and `ADJUSTMENT` rows (service level). Stock is `SUM(qty_delta)` |
+| `audit_log` | Product, category and opening-stock changes, with before/after values (money as strings) |
+| `shops` | `allow_negative_stock`, `mrp_validation_mode` (default `WARN`), timezone for "today" |
+
+Because there is **one `OPENING` row per product** (`UNIQUE (shop_id, reference_type, reference_id, txn_type)`),
+a second opening entry is refused by the database as well as by the service.
 
 ## Always derived, never stored
 

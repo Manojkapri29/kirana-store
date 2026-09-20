@@ -16,10 +16,10 @@ const KPI_PLACEHOLDERS: readonly KpiPlaceholder[] = [
   { id: 'purchases', labelKey: 'dashboard.kpi.todaysPurchases', phase: 5 },
   { id: 'expenses', labelKey: 'dashboard.kpi.todaysExpenses', phase: 11 },
   { id: 'profit', labelKey: 'dashboard.kpi.estimatedProfit', phase: 13 },
-  { id: 'products', labelKey: 'dashboard.kpi.totalProducts', phase: 3 },
-  { id: 'stock-value', labelKey: 'dashboard.kpi.stockValue', phase: 10 },
-  { id: 'low-stock', labelKey: 'dashboard.kpi.lowStock', phase: 10 },
-  { id: 'out-of-stock', labelKey: 'dashboard.kpi.outOfStock', phase: 10 },
+  { id: 'products', labelKey: 'dashboard.kpi.totalProducts', phase: 12 },
+  { id: 'stock-value', labelKey: 'dashboard.kpi.stockValue', phase: 12 },
+  { id: 'low-stock', labelKey: 'dashboard.kpi.lowStock', phase: 12 },
+  { id: 'out-of-stock', labelKey: 'dashboard.kpi.outOfStock', phase: 12 },
 ]
 
 export function DashboardPage() {
@@ -54,7 +54,7 @@ export function DashboardPage() {
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <PanelPlaceholder title={t('dashboard.panels.salesTrend')} phase={12} />
-        <PanelPlaceholder title={t('dashboard.panels.lowStockList')} phase={10} />
+        <PanelPlaceholder title={t('dashboard.panels.lowStockList')} phase={12} />
       </section>
     </div>
   )

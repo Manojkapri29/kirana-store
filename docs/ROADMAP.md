@@ -7,8 +7,8 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 | # | Phase | Status |
 |---|---|---|
 | 1 | Project setup and foundation | Done |
-| 2 | Database/models + SQLite + Alembic | Done, awaiting review |
-| 3 | Products + inventory ledger core + export framework | Planned |
+| 2 | Database/models + SQLite + Alembic | Done |
+| 3 | Products + inventory ledger core + export framework | Done, awaiting review |
 | 4 | Suppliers | Planned |
 | 5 | Purchases + weighted average cost | Planned |
 | 6 | Customers + Khata | Planned |
@@ -43,12 +43,17 @@ values round-trip exactly; ledgers cannot be updated or deleted; a row cannot re
 migration renders valid PostgreSQL DDL. No services, endpoints or screens use the database yet.
 
 ### Phase 3: Products + inventory ledger core + export framework
-The temporary single-shop development context (current shop and user for routes, until Phase 14),
-categories and products (including MRP and barcode field), `OPENING` ledger entries, `inventory_service`
-as the only ledger writer, the stock query, and the shared CSV/XLSX exporter with Products and Inventory
-exports. Decides the default `mrp_validation_mode` for new shops.
-**Done when:** a product created with opening stock 20 reads 20; MRP validation follows the shop setting;
-exports open cleanly in Excel.
+The temporary development context (current shop and user until Phase 14); categories and products (create,
+edit, search, filter, activate/deactivate, MRP, barcode field) with the JSON API and shop isolation;
+`inventory_service` as the only ledger writer with opening stock, adjustments (service level), derived
+current stock, the inventory list with In/Low/Out of stock, and transaction history with a running balance;
+the audit log for product changes; the reusable CSV/XLSX export engine with Products, Inventory and
+Inventory-history exports; and the Products and Inventory screens. Default `mrp_validation_mode` decided:
+`WARN`.
+**Done when:** a product created with opening stock 20 reads 20 from the ledger; two shops can hold the same
+SKU/barcode but one shop cannot repeat them; a shop cannot see or change another's products or stock;
+exports open cleanly in Excel with formulas neutralised.
+*Not in this phase:* screens and API for adjustments and stock count (Phase 10).
 
 ### Phase 4: Suppliers
 Supplier create/edit/deactivate, search, and export.

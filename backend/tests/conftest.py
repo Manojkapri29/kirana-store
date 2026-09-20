@@ -13,13 +13,19 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, text
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.deps import get_request_context
 from app.core.config import BACKEND_DIR
+from app.core.context import RequestContext
+from app.db import session as session_module
 from app.db.engine import create_db_engine
+from app.main import create_app
 from app.models import Category, Shop, User
+from app.models.enums import UserRole
 from tests import factories
 
 
@@ -112,3 +118,71 @@ def assert_sql_rejected(
     with pytest.raises(IntegrityError, match=match):
         session.execute(text(sql), params or {})
     session.rollback()
+
+
+# --- API fixtures ----------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def make_client(monkeypatch: pytest.MonkeyPatch, session_factory: sessionmaker[Session]):
+    """Build an API client that acts as the given tenant's user (replacing the development login).
+
+    Several clients can coexist, each bound to a different shop, which is how isolation is tested.
+    """
+    monkeypatch.setattr(session_module, "get_session_factory", lambda: session_factory)
+    clients: list[TestClient] = []
+
+    def _make(tenant: Tenant, role: UserRole = UserRole.OWNER) -> TestClient:
+        app = create_app()
+        context = RequestContext(shop_id=tenant.shop.id, user_id=tenant.user.id, role=role)
+        app.dependency_overrides[get_request_context] = lambda: context
+        client = TestClient(app)
+        clients.append(client)
+        return client
+
+    yield _make
+    for client in clients:
+        client.close()
+
+
+@pytest.fixture
+def client_a(make_client, tenant_a: Tenant) -> TestClient:
+    return make_client(tenant_a)
+
+
+@pytest.fixture
+def client_b(make_client, tenant_b: Tenant) -> TestClient:
+    return make_client(tenant_b)
+
+
+@pytest.fixture
+def units(session: Session) -> dict[str, int]:
+    """Unit code -> id, e.g. units["kg"]."""
+    return {code: unit_id for unit_id, code in session.execute(text("SELECT id, code FROM units"))}
+
+
+@pytest.fixture
+def fresh(session_factory: sessionmaker[Session]):
+    """Run a query in a brand-new session, so a test never reads a stale snapshot."""
+
+    def _run(fn):
+        with session_factory() as new_session:
+            return fn(new_session)
+
+    return _run
+
+
+@pytest.fixture
+def set_shop(session_factory: sessionmaker[Session]):
+    """Change shop settings directly in the database: set_shop(tenant, allow_negative_stock=True)."""
+
+    def _set(tenant: Tenant, **values: object) -> None:
+        with session_factory() as new_session:
+            new_session.execute(update(Shop).where(Shop.id == tenant.shop.id).values(**values))
+            new_session.commit()
+
+    return _set
+
+
+def context_for(tenant: Tenant, role: UserRole = UserRole.OWNER) -> RequestContext:
+    return RequestContext(shop_id=tenant.shop.id, user_id=tenant.user.id, role=role)

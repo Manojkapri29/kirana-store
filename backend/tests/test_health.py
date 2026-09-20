@@ -12,8 +12,12 @@ def test_health_returns_ok():
     assert response.json() == {"status": "ok"}
 
 
-def test_versioned_api_router_is_mounted_but_empty():
-    # No business endpoints exist in Phase 1, so the versioned prefix has no routes yet.
-    response = client.get("/api/v1/products")
+def test_versioned_api_is_mounted_under_api_v1():
+    paths = client.get("/openapi.json").json()["paths"]
 
-    assert response.status_code == 404
+    assert "/api/v1/products" in paths and "/api/v1/inventory" in paths
+    assert "/health" in paths  # operational routes stay outside the versioned prefix
+
+
+def test_unknown_routes_are_404():
+    assert client.get("/api/v1/no-such-thing").status_code == 404

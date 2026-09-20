@@ -4,9 +4,10 @@ Inventory and business management for small Indian grocery (kirana) shops: stock
 detailed and quick sales, returns, suppliers, customer khata (credit), expenses, reports and exports.
 Built to start as a single-shop app and grow into a multi-shop SaaS.
 
-> **Status: Phase 2 of 16 (database foundation).** The API answers `GET /health`, the UI shell renders,
-> and the SQLite database, models and migration are in place. There are no business features yet:
-> nothing reads or writes the database from the app. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Status: Phase 3 of 16 (products, inventory ledger, exports).** You can manage products and categories,
+> record opening stock, see current stock (In / Low / Out of stock) and stock history, and export products,
+> inventory and history to CSV or Excel. Suppliers, purchases, sales, khata and the rest come in later phases.
+> See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Stack
 
@@ -16,7 +17,7 @@ Built to start as a single-shop app and grow into a multi-shop SaaS.
 | Backend | Python, FastAPI, Pydantic settings |
 | Database | SQLAlchemy 2 + Alembic on SQLite for the MVP; PostgreSQL later (nothing to install now) |
 
-Recharts is added in Phase 12, when the first chart is built.
+TanStack Query (server state) and openpyxl (Excel export) arrived in Phase 3; Recharts is added in Phase 12, when the first chart is built.
 
 ## Prerequisites
 
@@ -56,6 +57,14 @@ npm run dev
 
 In development the Vite dev server forwards `/api` and `/health` to the backend, so the browser
 needs no CORS setup. The header shows a green "Server connected" badge when the backend is reachable.
+
+There is no login yet: until Phase 14 every request acts as the development owner created by
+`python -m app.seed`, so run the seed once. The backend refuses to serve business data in production
+mode without real authentication.
+
+**Try it:** open http://localhost:5173, add a category and a product (with opening stock if you like), then
+look at Inventory and the product page. API documentation for every endpoint is at
+http://127.0.0.1:8000/docs while the backend runs.
 
 ## Checks
 
