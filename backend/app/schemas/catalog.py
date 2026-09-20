@@ -31,9 +31,37 @@ class CategoryOut(BaseModel):
     is_active: bool
 
 
+class BusinessTypeOut(BaseModel):
+    code: str
+    name: str
+
+
+class SuggestedCategoryOut(BaseModel):
+    name: str
+    exists: bool
+
+
+class ShopTemplateOut(BaseModel):
+    """Defaults suggested by the shop's business type. Suggestions only: nothing here restricts the shop."""
+
+    business_type: str
+    business_type_name: str
+    categories: list[SuggestedCategoryOut]
+    unit_codes: list[str]
+
+
+class ShopUpdate(BaseModel):
+    """The shop settings that can be changed. Only the business type for now."""
+
+    model_config = ConfigDict(extra="forbid")
+    business_type: Annotated[str, StringConstraints(strip_whitespace=True, max_length=30)] | None = None
+
+
 class ShopOut(BaseModel):
     id: int
-    name: str
+    name: str  # the business name
+    business_type: str
+    business_type_name: str
     timezone: str
     language: Language
     allow_negative_stock: bool

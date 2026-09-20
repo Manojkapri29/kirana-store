@@ -9,6 +9,7 @@ import type { Product } from '@/api/types'
 import { TextField } from '@/components/fields'
 import { Alert, Button } from '@/components/ui'
 import { checkDecimal, isWhole, isZero } from '@/lib/decimal'
+import { CURRENCY_SYMBOL } from '@/lib/format'
 
 import { MONEY_DECIMALS, QUANTITY_DECIMALS } from './productForm'
 
@@ -100,7 +101,7 @@ export function OpeningStockForm({ product }: { product: Product }) {
             onChange={(event) => setCost(event.target.value)}
             error={errors.cost}
             inputMode="decimal"
-            prefix="₹"
+            prefix={CURRENCY_SYMBOL}
           />
           <div className="sm:col-span-2">
             <TextField

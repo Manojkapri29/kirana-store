@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.dev import DEV_SHOP_NAME, DEV_USER_EMAIL, UNUSABLE_PASSWORD_HASH
+from app.core.dev import DEV_SHOP_BUSINESS_TYPE, DEV_SHOP_NAME, DEV_USER_EMAIL, UNUSABLE_PASSWORD_HASH
 from app.db.session import write_transaction
 from app.models import Shop, User
 from app.models.enums import UserRole
@@ -35,7 +35,12 @@ def seed_development_data(session: Session) -> SeedResult:
 
     shop = session.scalar(select(Shop).where(Shop.name == DEV_SHOP_NAME))
     if shop is None:
-        shop = Shop(name=DEV_SHOP_NAME, phone="0000000000", address="Local development only")
+        shop = Shop(
+            name=DEV_SHOP_NAME,
+            business_type=DEV_SHOP_BUSINESS_TYPE,
+            phone="0000000000",
+            address="Local development only",
+        )
         session.add(shop)
         session.flush()
         created = True

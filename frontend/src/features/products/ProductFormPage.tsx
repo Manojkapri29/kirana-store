@@ -3,15 +3,15 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
-import { createCategory, getShop, listCategories, listUnits } from '@/api/catalog'
+import { createCategory, getShop, getShopTemplate, listCategories, listUnits } from '@/api/catalog'
 import { ApiError } from '@/api/client'
 import { getProductHistory } from '@/api/inventory'
 import { createProduct, getProduct, updateProduct } from '@/api/products'
-import type { Category, Product, Shop, Unit } from '@/api/types'
+import type { Category, Product, Shop, ShopTemplate, Unit } from '@/api/types'
 import { SelectField, TextField } from '@/components/fields'
 import { buttonClasses } from '@/components/buttonStyles'
 import { Alert, Button, LinkButton, PageHeader, QueryError, Spinner } from '@/components/ui'
-import { formatMoney } from '@/lib/format'
+import { CURRENCY_SYMBOL, formatMoney } from '@/lib/format'
 
 import {
   API_FIELD_TO_FORM_FIELD,
@@ -33,27 +33,30 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'edit' }) {
   const { t } = useTranslation()
   const params = useParams()
   const productId = Number(params.id)
+  const validId = mode === 'create' || (Number.isInteger(productId) && productId > 0)
 
   const categories = useQuery({ queryKey: ['categories'], queryFn: listCategories })
   const units = useQuery({ queryKey: ['units'], queryFn: listUnits })
   const shop = useQuery({ queryKey: ['shop'], queryFn: getShop })
+  // Suggestions for this kind of business. If they cannot be loaded, the form works without them.
+  const template = useQuery({ queryKey: ['shopTemplate'], queryFn: getShopTemplate })
   const product = useQuery({
     queryKey: ['product', productId],
     queryFn: () => getProduct(productId),
-    enabled: mode === 'edit',
+    enabled: mode === 'edit' && validId,
   })
   // The unit is locked once stock exists. Any history row means stock exists.
   const history = useQuery({
     queryKey: ['history', productId, 'exists'],
     queryFn: () => getProductHistory(productId, { limit: 1 }),
-    enabled: mode === 'edit',
+    enabled: mode === 'edit' && validId,
   })
 
   const title = mode === 'create' ? t('products.form.addTitle') : t('products.form.editTitle')
   const queries = [categories, units, shop, ...(mode === 'edit' ? [product, history] : [])]
 
-  if (queries.some((query) => query.isError)) {
-    const notFound = product.error instanceof ApiError && product.error.status === 404
+  if (!validId || queries.some((query) => query.isError)) {
+    const notFound = !validId || (product.error instanceof ApiError && product.error.status === 404)
     return (
       <div className="space-y-6">
         <PageHeader title={title} />
@@ -82,6 +85,7 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'edit' }) {
         categories={categories.data}
         units={units.data}
         shop={shop.data}
+        template={template.data}
         unitLocked={mode === 'edit' && (history.data?.total ?? 0) > 0}
       />
     </div>
@@ -94,10 +98,11 @@ interface ProductFormProps {
   categories: Category[]
   units: Unit[]
   shop: Shop
+  template: ShopTemplate | undefined
   unitLocked: boolean
 }
 
-function ProductForm({ mode, product, categories, units, shop, unitLocked }: ProductFormProps) {
+function ProductForm({ mode, product, categories, units, shop, template, unitLocked }: ProductFormProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -110,6 +115,16 @@ function ProductForm({ mode, product, categories, units, shop, unitLocked }: Pro
   const [newCategoryName, setNewCategoryName] = useState('')
 
   const unit = units.find((candidate) => String(candidate.id) === values.unitId)
+  // Units the business type suggests come first. Every other unit stays available: no lock-in.
+  const suggestedCodes = template?.unit_codes ?? []
+  const suggestedUnits = suggestedCodes.flatMap((code) => units.filter((candidate) => candidate.code === code))
+  const otherUnits = units.filter((candidate) => !suggestedCodes.includes(candidate.code))
+  const unitOption = (candidate: Unit) => (
+    <option key={candidate.id} value={candidate.id}>
+      {candidate.name} ({candidate.code})
+    </option>
+  )
+  const missingSuggestions = (template?.categories ?? []).filter((suggestion) => !suggestion.exists)
   const aboveMrp = sellingAboveMrp(values)
   const blockAboveMrp = aboveMrp && shop.mrp_validation_mode === 'BLOCK'
 
@@ -127,9 +142,12 @@ function ProductForm({ mode, product, categories, units, shop, unitLocked }: Pro
   }
 
   const addCategory = useMutation({
-    mutationFn: () => createCategory(newCategoryName.trim()),
+    mutationFn: (name: string) => createCategory(name.trim()),
     onSuccess: async (category) => {
-      await queryClient.invalidateQueries({ queryKey: ['categories'] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['categories'] }),
+        queryClient.invalidateQueries({ queryKey: ['shopTemplate'] }),
+      ])
       setField('categoryId', String(category.id))
       setAddingCategory(false)
       setNewCategoryName('')
@@ -241,6 +259,24 @@ function ProductForm({ mode, product, categories, units, shop, unitLocked }: Pro
               ))}
             <option value={NEW_CATEGORY}>{t('products.form.newCategory')}</option>
           </SelectField>
+          {missingSuggestions.length > 0 && !addingCategory && (
+            <div>
+              <p className="mb-1.5 text-sm text-slate-500">{t('products.form.suggestedCategories')}</p>
+              <div className="flex flex-wrap gap-2">
+                {missingSuggestions.slice(0, 6).map((suggestion) => (
+                  <button
+                    key={suggestion.name}
+                    type="button"
+                    disabled={addCategory.isPending}
+                    onClick={() => addCategory.mutate(suggestion.name)}
+                    className="min-h-10 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-emerald-600 disabled:opacity-60"
+                  >
+                    + {suggestion.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {addingCategory && (
             <div className="flex gap-2">
               <div className="flex-1">
@@ -251,7 +287,7 @@ function ProductForm({ mode, product, categories, units, shop, unitLocked }: Pro
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
                       event.preventDefault()
-                      if (newCategoryName.trim()) addCategory.mutate()
+                      if (newCategoryName.trim()) addCategory.mutate(newCategoryName)
                     }
                   }}
                   maxLength={100}
@@ -262,7 +298,7 @@ function ProductForm({ mode, product, categories, units, shop, unitLocked }: Pro
                 <Button
                   loading={addCategory.isPending}
                   disabled={!newCategoryName.trim()}
-                  onClick={() => addCategory.mutate()}
+                  onClick={() => addCategory.mutate(newCategoryName)}
                 >
                   {t('products.form.addCategory')}
                 </Button>
@@ -279,11 +315,14 @@ function ProductForm({ mode, product, categories, units, shop, unitLocked }: Pro
           disabled={unitLocked}
         >
           <option value="">{t('products.form.choose')}</option>
-          {units.map((candidate) => (
-            <option key={candidate.id} value={candidate.id}>
-              {candidate.name} ({candidate.code})
-            </option>
-          ))}
+          {suggestedUnits.length > 0 ? (
+            <>
+              <optgroup label={t('products.form.suggestedUnits')}>{suggestedUnits.map(unitOption)}</optgroup>
+              <optgroup label={t('products.form.otherUnits')}>{otherUnits.map(unitOption)}</optgroup>
+            </>
+          ) : (
+            units.map(unitOption)
+          )}
         </SelectField>
         <TextField
           label={t('products.form.fields.barcode')}
@@ -329,7 +368,7 @@ function ProductForm({ mode, product, categories, units, shop, unitLocked }: Pro
           onChange={(event) => setField('mrp', event.target.value)}
           error={errorFor('mrp')}
           inputMode="decimal"
-          prefix="₹"
+          prefix={CURRENCY_SYMBOL}
         />
         <TextField
           label={t('products.form.fields.sellingPrice')}
@@ -337,7 +376,7 @@ function ProductForm({ mode, product, categories, units, shop, unitLocked }: Pro
           onChange={(event) => setField('sellingPrice', event.target.value)}
           error={errorFor('sellingPrice') ?? (blockAboveMrp ? t('products.form.validation.aboveMrpBlock') : undefined)}
           inputMode="decimal"
-          prefix="₹"
+          prefix={CURRENCY_SYMBOL}
         />
         <TextField
           label={t('products.form.fields.purchasePrice')}
@@ -347,7 +386,7 @@ function ProductForm({ mode, product, categories, units, shop, unitLocked }: Pro
           onChange={(event) => setField('purchasePrice', event.target.value)}
           error={errorFor('purchasePrice')}
           inputMode="decimal"
-          prefix="₹"
+          prefix={CURRENCY_SYMBOL}
         />
         {mode === 'edit' && product && (
           <TextField
@@ -385,7 +424,7 @@ function ProductForm({ mode, product, categories, units, shop, unitLocked }: Pro
             onChange={(event) => setField('openingStockCost', event.target.value)}
             error={errorFor('openingStockCost')}
             inputMode="decimal"
-            prefix="₹"
+            prefix={CURRENCY_SYMBOL}
           />
         </Section>
       )}

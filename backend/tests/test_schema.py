@@ -7,7 +7,7 @@ from sqlalchemy import Engine, Float, Numeric, inspect
 
 from app.models import Base
 
-GLOBAL_TABLES = {"shops", "units"}  # not owned by a shop
+GLOBAL_TABLES = {"shops", "units", "business_types"}  # not owned by a shop
 INSERT_ONLY_TABLES = ["inventory_transactions", "customer_ledger", "audit_log"]
 POSTGRES_IDENTIFIER_LIMIT = 63
 

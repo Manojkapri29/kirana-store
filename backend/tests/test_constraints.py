@@ -225,7 +225,9 @@ class TestValuesMustBeValid:
 
     def test_blank_names_are_rejected(self, session, tenant_a):
         assert_rejected(session, new_product(session, tenant_a, name="   "), match="name_not_blank")
-        assert_rejected(session, Shop(name="", phone="1", address="x"), match="name_not_blank")
+        assert_rejected(
+            session, Shop(name="", business_type="OTHER", phone="1", address="x"), match="name_not_blank"
+        )
         assert_rejected(session, Supplier(shop_id=tenant_a.shop.id, name=" "), match="name_not_blank")
 
     def test_invalid_enum_values_are_refused_by_the_database(self, session, tenant_a):
@@ -239,7 +241,7 @@ class TestValuesMustBeValid:
         )
 
     def test_invalid_enum_values_are_also_caught_before_reaching_the_database(self, session, tenant_a):
-        session.add(Shop(name="S", phone="1", address="x", language="fr"))
+        session.add(Shop(name="S", business_type="OTHER", phone="1", address="x", language="fr"))
         with pytest.raises(StatementError, match="not among the defined enum values"):
             session.flush()
         session.rollback()

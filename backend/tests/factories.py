@@ -1,7 +1,8 @@
 """Small helpers that build valid rows. Tests override only the field they are testing."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,8 +13,8 @@ from app.models.enums import UserRole
 TODAY = date(2026, 9, 20)
 
 
-def make_shop(session: Session, name: str = "Shop A") -> Shop:
-    shop = Shop(name=name, phone="9999999999", address="1 Test Street")
+def make_shop(session: Session, name: str = "Shop A", business_type: str = "GROCERY") -> Shop:
+    shop = Shop(name=name, business_type=business_type, phone="9999999999", address="1 Test Street")
     session.add(shop)
     session.flush()
     return shop
@@ -77,3 +78,8 @@ def make_product(session: Session, shop: Shop, category: Category, **overrides: 
     session.add(product)
     session.flush()
     return product
+
+
+def today_in_shop_timezone() -> date:
+    """Today as the app sees it (the shop's timezone, Asia/Kolkata), not the machine's local date."""
+    return datetime.now(ZoneInfo("Asia/Kolkata")).date()

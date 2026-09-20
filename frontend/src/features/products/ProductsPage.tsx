@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 import { listCategories } from '@/api/catalog'
 import { listProducts } from '@/api/products'
@@ -14,13 +14,13 @@ import { SearchInput } from '@/components/SearchInput'
 import { Badge, EmptyState, LinkButton, PageHeader, QueryError, Spinner } from '@/components/ui'
 import { StockStatusBadge } from '@/features/inventory/StockStatusBadge'
 import { useDebounced } from '@/hooks/useDebounced'
+import { useOpenOnSingleMatch } from '@/hooks/useOpenOnSingleMatch'
 import { formatMoney, formatQuantity } from '@/lib/format'
 
 const PAGE_SIZE = 25
 
 export function ProductsPage() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
 
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -42,13 +42,7 @@ export function ProductsPage() {
     setOffset(0)
   }
 
-  // A barcode scanner types the code and presses Enter: if exactly one product matches, open it.
-  async function openIfSingleMatch() {
-    const text = search.trim()
-    if (!text) return
-    const result = await listProducts({ q: text, status: 'all', limit: 2 })
-    if (result.total === 1) void navigate(`/products/${result.items[0].id}`)
-  }
+  const openIfSingleMatch = useOpenOnSingleMatch()
 
   const data = products.data
   const isFiltering = q !== '' || categoryId !== '' || status !== 'active'
@@ -71,7 +65,7 @@ export function ProductsPage() {
           <SearchInput
             value={search}
             onChange={change(setSearch)}
-            onEnter={() => void openIfSingleMatch()}
+            onEnter={() => void openIfSingleMatch(search)}
             placeholder={t('products.searchPlaceholder')}
             autoFocus
           />

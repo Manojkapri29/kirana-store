@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   PackageSearch,
   ReceiptText,
+  Settings,
   ShoppingCart,
   Truck,
   Users,
@@ -86,4 +87,5 @@ export const NAV_ITEMS: readonly NavItem[] = [
     descriptionKey: 'modules.reports.description',
     phase: 13,
   },
+  { id: 'settings', path: '/settings', icon: Settings, labelKey: 'nav.settings' },
 ]

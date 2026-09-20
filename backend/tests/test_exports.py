@@ -19,6 +19,7 @@ from app.services.export_service import (
     render_csv,
     render_xlsx,
 )
+from tests.factories import today_in_shop_timezone
 
 PRODUCTS = "/api/v1/products"
 INV = "/api/v1/inventory"
@@ -235,7 +236,7 @@ class TestProductExport:
         assert response.headers["content-type"] == "text/csv; charset=utf-8"
         assert (
             response.headers["content-disposition"]
-            == f'attachment; filename="products_{date.today().isoformat()}.csv"'
+            == f'attachment; filename="products_{today_in_shop_timezone().isoformat()}.csv"'
         )
         assert response.headers["cache-control"] == "no-store"
         assert response.content.startswith(b"\xef\xbb\xbf")
@@ -347,7 +348,7 @@ class TestInventoryHistoryExport:
             "200.00",
         )
         assert (row["SKU"], row["Source"], row["Recorded By"]) == ("A-RICE", "PRODUCT", "Test Owner")
-        assert row["Date"] == date.today().isoformat()
+        assert row["Date"] == today_in_shop_timezone().isoformat()
 
     def test_xlsx_dates_are_real_date_cells(self, client_a, shops):
         sheet = read_xlsx(client_a.get(f"{EXPORTS}/inventory-history", params={"format": "xlsx"}).content)

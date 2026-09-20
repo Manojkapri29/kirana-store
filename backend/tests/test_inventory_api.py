@@ -1,11 +1,12 @@
 """Inventory API: opening stock, current stock, the inventory list, and transaction history."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from sqlalchemy import func, select
 
 from app.models import InventoryTransaction
+from tests.factories import today_in_shop_timezone
 
 PRODUCTS = "/api/v1/products"
 INV = "/api/v1/inventory"
@@ -71,7 +72,7 @@ class TestOpeningStockEndpoint:
 
     def test_a_past_date_is_kept(self, client_a, tenant_a, units):
         product = make_product(client_a, tenant_a, units)
-        past = (date.today() - timedelta(days=30)).isoformat()
+        past = (today_in_shop_timezone() - timedelta(days=30)).isoformat()
 
         assert opening(client_a, product["id"], "5", txn_date=past).json()["transaction"]["txn_date"] == past
 
@@ -100,7 +101,7 @@ class TestOpeningStockEndpoint:
 
     def test_the_date_cannot_be_in_the_future(self, client_a, tenant_a, units):
         product = make_product(client_a, tenant_a, units)
-        future = (date.today() + timedelta(days=3)).isoformat()
+        future = (today_in_shop_timezone() + timedelta(days=3)).isoformat()
 
         assert opening(client_a, product["id"], "5", txn_date=future).status_code == 422
 
@@ -213,7 +214,8 @@ class TestHistory:
         only_second = client_a.get(f"{INV}/transactions", params={"product_id": second["id"]}).json()
         only_opening = client_a.get(f"{INV}/transactions", params={"txn_type": "OPENING"}).json()
         none_after_tomorrow = client_a.get(
-            f"{INV}/transactions", params={"date_from": (date.today() + timedelta(days=2)).isoformat()}
+            f"{INV}/transactions",
+            params={"date_from": (today_in_shop_timezone() + timedelta(days=2)).isoformat()},
         ).json()
 
         assert everything["total"] == 2

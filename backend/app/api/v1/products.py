@@ -29,8 +29,8 @@ def active_flag(status: StatusFilter) -> bool | None:
 def list_products(
     ctx: Ctx,
     session: ReadSession,
-    q: Annotated[str | None, Query(description="Search SKU, name, brand or barcode")] = None,
-    barcode: Annotated[str | None, Query(description="Exact barcode match")] = None,
+    q: Annotated[str | None, Query(max_length=100, description="Search SKU, name, brand or barcode")] = None,
+    barcode: Annotated[str | None, Query(max_length=50, description="Exact barcode match")] = None,
     category_id: int | None = None,
     unit_id: int | None = None,
     status: StatusFilter = StatusFilter.ACTIVE,

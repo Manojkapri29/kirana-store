@@ -5,7 +5,18 @@
 
 ## Overview
 
-A modular monolith: one FastAPI backend, one React single-page app, one database.
+**Shop Manager is a multi-business small-shop management SaaS.** Grocery / Kirana is one supported business
+type among many (sweet shop, bakery, fruit, vegetable, dairy, general store, garments, footwear, cosmetics,
+electronics, hardware, stationery, meat/food, other). The core is generic and business-agnostic:
+
+```
+Products -> Inventory -> Purchases -> Sales -> Returns -> Customers -> Expenses -> Reports -> Online Ordering
+```
+
+The internal project folder `kirana-store/` and a few technical names (`KIRANA_*` variables, `kirana.db`) are
+the original working name; they are not part of the product identity and are renamed later.
+
+The system is a modular monolith: one FastAPI backend, one React single-page app, one database.
 
 ```
 React + Vite + TypeScript  ──HTTP/JSON──►  FastAPI  ──►  Service layer  ──►  Database
@@ -86,6 +97,36 @@ with the offending field named so a form can show the message next to it.
 the seeded development owner; in production it answers 503 so a deployment cannot run without login.
 Phase 14 replaces that one function.
 
+## Business types: a generic core with optional defaults
+
+Every shop has a `business_type` (a row in the `business_types` table). It exists to provide **defaults and
+suggestions** and never to restrict anything:
+
+- The **core** (products, inventory, purchases, sales, returns, customers, expenses, reports, exports) never
+  reads the business type. There is one product model, one unit list, and one inventory ledger for every kind
+  of business. Fractional quantities (25.5 kg of potatoes, 2.5 m of cloth) are a property of the *unit*,
+  not of the business. A test scans the core source for business-specific wording and for any use of the type.
+- The **only** module that knows what a type suggests is `business_type_service`: suggested categories and a
+  suggested unit order. Every shop can still create any category and use any unit.
+- A type is data. Adding one is an INSERT (a data migration); a type without a template simply suggests nothing.
+- The template is the extension seam for later, still optional, defaults: dashboard labels, product templates,
+  report layouts, online-store presentation.
+
+### Future business-specific modules (not built)
+
+Some kinds of business will eventually need specialised modules. They are **optional add-ons that reuse the
+core**, never separate inventory systems or forks of it:
+
+| Business | Possible future module |
+|---|---|
+| Halwai / Bakery | Production, recipes, ingredients, finished goods, wastage. Ingredients and finished goods are ordinary products; production is a pair of ledger movements (ingredients out, finished goods in) |
+| Fruit / Vegetable | Wastage and spoilage (ledger adjustments with reasons), variable purchase cost. Weight-based stock already works |
+| Garments / Footwear | Size and colour variants of a product |
+| Electronics | Serial number / IMEI tracking and warranty per unit sold |
+
+Each would add its own tables and screens next to the core, be enabled per shop (for example by business
+type), and write stock only through `inventory_service`.
+
 ## Service layer and boundaries
 
 | Service | Responsibility | Status |
@@ -93,6 +134,7 @@ Phase 14 replaces that one function.
 | `inventory_service` | **The only reader and writer of the stock ledger.** Opening stock, adjustments, stock queries, inventory list, history, stock status | Phase 3 (purchases, sales, returns join it later) |
 | `product_service` | Products: create, update, search, activate/deactivate; MRP setting; derives stock through `inventory_service` | Phase 3 |
 | `catalog_service` | Units and categories | Phase 3 |
+| `business_type_service` | Business types, the shop's type, and the suggested categories/units. The only module that knows what a type suggests | Phase 3 |
 | `export_service` | Format engine: CSV/XLSX rendering, formula-injection protection. Knows nothing about products | Phase 3 |
 | `export_datasets` | What each export contains (columns and rows), built from the domain services | Phase 3 |
 | `audit_service` | Writes the insert-only audit log | Phase 3 |
@@ -164,13 +206,26 @@ Not built in the MVP, but the foundations are laid now because they are expensiv
 - Later: PostgreSQL Row-Level Security as defence in depth, subscription plans and usage limits, an admin
   panel, WhatsApp notifications, scheduled reports and cloud backup.
 
-## Future: online ordering (not built)
+## Future: online ordering (not built, and not grocery-specific)
 
-A customer storefront, cart, online orders (COD/UPI), delivery address and status, and order history are
-future work. The rule for it is **reuse, never duplicate**: it uses the same `products`, `customers`,
-pricing and inventory. There is no second inventory system; an accepted order becomes a normal Detailed
-Sale created through `detailed_sale_service`, which posts stock through `inventory_service`. Details are in
-[DATABASE.md](DATABASE.md#future-online-ordering).
+A customer-facing online store is future work and must work for every business type:
+
+```
+Customer -> Shop online store -> Browse products -> Cart -> Address -> Payment -> Order
+         -> Shop accepts -> Preparing -> Ready -> Out for delivery -> Delivered
+```
+
+The stages fit a grocery basket, a hot-sweets order (Preparing/Ready), a bakery cake, a bunch of vegetables or
+a mobile charger alike. The design rule is **reuse, never duplicate**:
+
+- It uses the same `products`, units, pricing, `customers` and inventory. There is **no second inventory
+  system**. Stock stays the sum of `inventory_transactions`; an accepted order becomes a normal Detailed Sale
+  through `detailed_sale_service`, which posts stock through `inventory_service`.
+- Product presentation comes from the generic product fields; the business type may later supply storefront
+  defaults (labels, categories order) through the same template seam. Business-specific pieces such as
+  "Preparing" times or variants plug in as optional modules.
+- New tables (storefront settings, carts, orders and order items, order payments, customer addresses, delivery)
+  all carry `shop_id` and the composite tenant foreign keys. Details are in [DATABASE.md](DATABASE.md#future-online-ordering).
 
 ## Database strategy
 
@@ -206,6 +261,10 @@ English/Hindi switching, API client layer, live server-status badge.
 - Audit log entries for product, category and opening-stock changes.
 - Screens: Products (list, add, edit, detail with history and opening stock) and Inventory.
 
+**Phase 3, extension (generic platform):** a `business_type` on every shop (15 types, extensible by data),
+migration `0002`, four more units (metre, pair, bottle, tray), suggested categories and units per type, a
+Settings screen, and generic wording in the UI (the app is "Shop Manager" and shows the business's own name).
+
 **Not built yet:** suppliers, purchases, sales, returns, khata, expenses, dashboard analytics, reports,
 authentication, and screens for adjustments. `khata_service` is still a placeholder.
 
@@ -217,6 +276,10 @@ authentication, and screens for adjustments. `khata_service` is still a placehol
   `Money`/`Quantity` exactness, migration up/down and model-versus-migration drift (`alembic check`),
   PostgreSQL DDL rendering, uniqueness, foreign keys, cross-shop references, value validity, the ledger rules
   and insert-only triggers, seed data, and the architecture rules.
+- Business-type tests check that products and stock work identically for every type and every unit, that types
+  only ever suggest, and that the core source contains no business-specific code. Migration `0002` is tested
+  against a database that already holds data. Simultaneous requests are tested for duplicate SKUs, barcodes
+  and opening stock.
 - Phase 3 added tests through the real HTTP API (a client acting as a chosen shop, so two shops can be
   compared side by side) and at service level: products, opening stock and adjustments, derived stock and
   status, history with running balance, shop isolation, insert-only ledger, and exports (CSV/XLSX contents,

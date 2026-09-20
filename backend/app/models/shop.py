@@ -1,6 +1,6 @@
 """Tenancy: shops and their users."""
 
-from sqlalchemy import Boolean, CheckConstraint, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import expression
 
@@ -15,8 +15,29 @@ from app.models.base import (
 from app.models.enums import Language, MrpValidationMode, UserRole
 
 
+class BusinessType(Base):
+    """A kind of business a shop can be: grocery, bakery, garments, and so on.
+
+    Reference data shared by all shops. Adding a new kind of business is an INSERT (a data migration), not
+    a schema or code change: the identifier is just a row here. What a type *suggests* (categories, units)
+    lives in `app.services.business_type_service`. A business type only ever provides defaults; it never
+    restricts what a shop may sell.
+    """
+
+    __tablename__ = "business_types"
+    __table_args__ = (not_blank("code"), not_blank("name"))
+
+    code: Mapped[str] = mapped_column(String(30), primary_key=True)  # e.g. "GROCERY"
+    name: Mapped[str] = mapped_column(String(100))  # English display name; screens translate by code
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=expression.true())
+
+
 class Shop(TimestampMixin, Base):
-    """One kirana store. Every other business table points back here through `shop_id`."""
+    """One business (a shop, stall or vendor). Every other business table points back here via `shop_id`.
+
+    `name` is the business name. `business_type` says what kind of business it is; it drives defaults only.
+    """
 
     __tablename__ = "shops"
     __table_args__ = (
@@ -30,6 +51,7 @@ class Shop(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200))
     phone: Mapped[str] = mapped_column(String(20))
     address: Mapped[str] = mapped_column(String(500))
+    business_type: Mapped[str] = mapped_column(String(30), ForeignKey("business_types.code"))
     gstin: Mapped[str | None] = mapped_column(String(15))
     upi_id: Mapped[str | None] = mapped_column(String(100))
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Kolkata", server_default="Asia/Kolkata")

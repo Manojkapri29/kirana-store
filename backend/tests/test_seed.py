@@ -11,7 +11,7 @@ from app.models.enums import UserRole
 from app.seed import DEV_SHOP_NAME, DEV_USER_EMAIL, UNUSABLE_PASSWORD_HASH, seed_development_data
 
 # Tables that are allowed to have rows after seeding.
-SEEDED_TABLES = {"shops", "users", "units"}
+SEEDED_TABLES = {"shops", "users", "units", "business_types"}
 
 
 def count(session, table: str) -> int:
@@ -66,7 +66,7 @@ def test_no_products_sales_or_money_are_seeded(session):
 
 
 def test_units_are_reference_data_present_before_any_seeding(session):
-    assert count(session, "units") == 8
+    assert count(session, "units") == 12
     assert count(session, "shops") == 0
 
 

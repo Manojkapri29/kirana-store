@@ -2,8 +2,8 @@
 // hi.ts is typed as `typeof en`, so a missing or extra key fails `tsc`.
 export const en = {
   app: {
-    name: 'Kirana Store',
-    tagline: 'Shop management',
+    name: 'Shop Manager',
+    tagline: 'Small business management',
   },
   nav: {
     dashboard: 'Dashboard',
@@ -15,6 +15,7 @@ export const en = {
     suppliers: 'Suppliers',
     expenses: 'Expenses',
     reports: 'Reports',
+    settings: 'Settings',
   },
   modules: {
     purchases: {
@@ -76,6 +77,48 @@ export const en = {
     title: 'Page not found',
     message: 'The page you are looking for does not exist.',
     backToDashboard: 'Go to dashboard',
+  },
+  businessTypes: {
+    GROCERY: 'Grocery / Kirana',
+    GENERAL_STORE: 'General Store',
+    SWEET_SHOP: 'Sweet Shop / Halwai',
+    BAKERY: 'Bakery',
+    DAIRY: 'Dairy',
+    FRUIT: 'Fruit Shop',
+    VEGETABLE: 'Vegetable Vendor',
+    MEAT_FOOD: 'Meat / Food Shop',
+    GARMENTS: 'Garments',
+    FOOTWEAR: 'Footwear',
+    COSMETICS: 'Cosmetics',
+    ELECTRONICS: 'Electronics / Mobile Shop',
+    HARDWARE: 'Hardware',
+    STATIONERY: 'Stationery',
+    OTHER: 'Other',
+  },
+  settings: {
+    title: 'Settings',
+    subtitle: 'Your business, and what the app suggests for it.',
+    businessSection: 'Business',
+    businessName: 'Business name',
+    businessType: 'Type of business',
+    businessTypeHint:
+      'This only sets suggestions such as categories and units. You can always sell any product, in any unit.',
+    saved: 'Saved.',
+    detailsSection: 'Shop details',
+    timezone: 'Timezone',
+    language: 'Language',
+    mrpMode: 'Selling above MRP',
+    mrpWarn: 'Warn',
+    mrpBlock: 'Block',
+    negativeStock: 'Allow negative stock',
+    yes: 'Yes',
+    no: 'No',
+    suggestionsSection: 'Suggested categories',
+    suggestionsHint:
+      'Ready-made categories for your type of business. Add the ones you want. You can rename or ignore any of them.',
+    addAllMissing: 'Add all missing',
+    alreadyAdded: 'Added',
+    noSuggestions: 'There are no suggestions for this type of business. Create your own categories.',
   },
   common: {
     save: 'Save',
@@ -210,7 +253,7 @@ export const en = {
         openingStockCost: 'Cost per unit',
       },
       hints: {
-        sku: 'A short code that is unique in your shop, for example RICE-5KG.',
+        sku: 'A short code that is unique in your shop, for example P-1001.',
         reorderLevel: 'Stock at or below this level shows as Low Stock.',
         mrp: 'The maximum retail price printed on the pack. Optional.',
         purchasePrice: 'What you pay your supplier. Leave empty if unknown.',
@@ -225,6 +268,9 @@ export const en = {
       newCategoryName: 'New category name',
       addCategory: 'Add',
       choose: 'Choose…',
+      suggestedUnits: 'Suggested for your business',
+      otherUnits: 'Other units',
+      suggestedCategories: 'Suggested categories',
       submitAdd: 'Add product',
       submitEdit: 'Save changes',
       fixErrors: 'Please correct the highlighted fields.',

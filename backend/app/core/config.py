@@ -24,7 +24,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "Kirana Store API"
+    app_name: str = "Shop Manager API"
     app_version: str = "0.1.0"
     environment: Literal["development", "test", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

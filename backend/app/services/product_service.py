@@ -1,7 +1,7 @@
 """Products: create, update, search, activate/deactivate.
 
 Rules implemented here (see docs/BUSINESS_RULES.md):
-  * SKU is unique per shop (stored upper-case, so 'rice-5kg' and 'RICE-5KG' are the same SKU);
+  * SKU is unique per shop (stored upper-case, so 'sku-1' and 'SKU-1' are the same SKU);
   * a barcode is optional and unique per shop when present;
   * there is NO stock column: stock is always read from the inventory ledger via `inventory_service`;
   * missing prices stay NULL, never 0 (purchase price and MRP are optional);
@@ -9,6 +9,10 @@ Rules implemented here (see docs/BUSINESS_RULES.md):
   * MRP is separate from the selling price; whether a selling price above MRP is a warning or an error is
     the shop's setting `mrp_validation_mode`;
   * products are never deleted, only deactivated.
+
+Nothing here depends on the kind of business. A product is a name, a unit and prices, whether it is rice
+counted in kilograms, a T-shirt counted in pieces or cloth counted in metres. The kind of business only
+suggests defaults elsewhere (see the business-type module) and never limits what can be created.
 """
 
 from dataclasses import dataclass, field
@@ -20,6 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.context import RequestContext
+from app.core.locale import CURRENCY_SYMBOL
 from app.models import Category, Product, Supplier, Unit
 from app.models.enums import MrpValidationMode
 from app.services import inventory_service
@@ -195,7 +200,9 @@ def _mrp_check(mode: MrpValidationMode, mrp: Decimal | None, selling_price: Deci
     """Selling above MRP: a warning or an error, depending on the shop's setting (BUSINESS_RULES P2)."""
     if mrp is None or selling_price <= mrp:
         return []
-    message = f"Selling price ₹{selling_price:.2f} is above the MRP ₹{mrp:.2f}."
+    message = (
+        f"Selling price {CURRENCY_SYMBOL}{selling_price:.2f} is above the MRP {CURRENCY_SYMBOL}{mrp:.2f}."
+    )
     if mode is MrpValidationMode.BLOCK:
         raise InvalidInputError(
             message + " This shop does not allow selling above MRP.", field="selling_price"

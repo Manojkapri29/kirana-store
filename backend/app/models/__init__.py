@@ -9,12 +9,13 @@ from app.models.khata import CustomerLedgerEntry
 from app.models.parties import Customer, Supplier
 from app.models.purchasing import Purchase, PurchaseItem, PurchaseReturn, PurchaseReturnItem
 from app.models.sales import QuickSale, Sale, SaleItem, SalesReturn, SalesReturnItem
-from app.models.shop import Shop, User
+from app.models.shop import BusinessType, Shop, User
 from app.models.system import AuditLog, DocumentSequence, IdempotencyKey
 
 __all__ = [
     "AuditLog",
     "Base",
+    "BusinessType",
     "Category",
     "Customer",
     "CustomerLedgerEntry",

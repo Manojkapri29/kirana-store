@@ -5,6 +5,9 @@ const quantity = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 3 })
 
 export const NOT_SET = '—'
 
+/** The symbol shown in money inputs. Amounts themselves carry no currency (see docs/ARCHITECTURE.md). */
+export const CURRENCY_SYMBOL = '₹'
+
 /** "250.00" -> "₹250.00", with Indian digit grouping (₹1,25,000.00). `null` means "not set", not zero. */
 export function formatMoney(value: string | null | undefined): string {
   return value === null || value === undefined ? NOT_SET : money.format(Number(value))

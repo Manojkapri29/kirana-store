@@ -188,7 +188,13 @@ class TestQuantityStoredInDatabase:
 class TestUtcDateTimeType:
     def test_aware_datetime_in_another_timezone_is_stored_as_utc(self, session: Session):
         ist = timezone(timedelta(hours=5, minutes=30))
-        shop = Shop(name="TZ", phone="1", address="x", created_at=datetime(2026, 1, 1, 12, 0, tzinfo=ist))
+        shop = Shop(
+            name="TZ",
+            business_type="OTHER",
+            phone="1",
+            address="x",
+            created_at=datetime(2026, 1, 1, 12, 0, tzinfo=ist),
+        )
         session.add(shop)
         session.commit()
 
@@ -202,6 +208,14 @@ class TestUtcDateTimeType:
 
     def test_naive_datetime_is_rejected(self, session: Session):
         with pytest.raises(Exception, match="Naive datetime"):
-            session.add(Shop(name="Naive", phone="1", address="x", created_at=datetime(2026, 1, 1)))
+            session.add(
+                Shop(
+                    name="Naive",
+                    business_type="OTHER",
+                    phone="1",
+                    address="x",
+                    created_at=datetime(2026, 1, 1),
+                )
+            )
             session.flush()
         session.rollback()

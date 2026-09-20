@@ -86,8 +86,8 @@ class Tenant:
     category: Category
 
 
-def _make_tenant(session: Session, name: str) -> Tenant:
-    shop = factories.make_shop(session, name)
+def _make_tenant(session: Session, name: str, business_type: str = "GROCERY") -> Tenant:
+    shop = factories.make_shop(session, name, business_type)
     user = factories.make_user(session, shop)
     category = factories.make_category(session, shop)
     session.commit()
@@ -102,6 +102,20 @@ def tenant_a(session: Session) -> Tenant:
 @pytest.fixture
 def tenant_b(session: Session) -> Tenant:
     return _make_tenant(session, "Shop B")
+
+
+@pytest.fixture
+def tenant_of(session: Session):
+    """Create a shop of a chosen business type: tenant_of("BAKERY"). Names are unique per call."""
+    created: list[Tenant] = []
+
+    def _make(business_type: str) -> Tenant:
+        tenant = _make_tenant(session, f"{business_type.title()} Shop {len(created)}", business_type)
+        # the shop's user needs a unique email; make_user derives it from the shop id, which is unique
+        created.append(tenant)
+        return tenant
+
+    return _make
 
 
 def assert_rejected(session: Session, *objects: object, match: str | None = None) -> None:

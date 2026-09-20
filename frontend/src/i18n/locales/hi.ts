@@ -2,8 +2,8 @@ import type { Translations } from './en'
 
 export const hi: Translations = {
   app: {
-    name: 'किराना स्टोर',
-    tagline: 'दुकान का प्रबंधन',
+    name: 'शॉप मैनेजर',
+    tagline: 'छोटे व्यापार का प्रबंधन',
   },
   nav: {
     dashboard: 'डैशबोर्ड',
@@ -15,6 +15,7 @@ export const hi: Translations = {
     suppliers: 'सप्लायर',
     expenses: 'खर्च',
     reports: 'रिपोर्ट',
+    settings: 'सेटिंग',
   },
   modules: {
     purchases: {
@@ -76,6 +77,48 @@ export const hi: Translations = {
     title: 'पेज नहीं मिला',
     message: 'आप जो पेज ढूँढ रहे हैं वह मौजूद नहीं है।',
     backToDashboard: 'डैशबोर्ड पर जाएँ',
+  },
+  businessTypes: {
+    GROCERY: 'किराना / परचून',
+    GENERAL_STORE: 'जनरल स्टोर',
+    SWEET_SHOP: 'मिठाई की दुकान (हलवाई)',
+    BAKERY: 'बेकरी',
+    DAIRY: 'डेयरी',
+    FRUIT: 'फल की दुकान',
+    VEGETABLE: 'सब्ज़ी की दुकान',
+    MEAT_FOOD: 'मीट / फ़ूड शॉप',
+    GARMENTS: 'कपड़े की दुकान',
+    FOOTWEAR: 'जूते-चप्पल की दुकान',
+    COSMETICS: 'कॉस्मेटिक्स',
+    ELECTRONICS: 'इलेक्ट्रॉनिक्स / मोबाइल शॉप',
+    HARDWARE: 'हार्डवेयर',
+    STATIONERY: 'स्टेशनरी',
+    OTHER: 'अन्य',
+  },
+  settings: {
+    title: 'सेटिंग',
+    subtitle: 'आपका व्यापार, और ऐप आपके लिए क्या सुझाता है।',
+    businessSection: 'व्यापार',
+    businessName: 'व्यापार का नाम',
+    businessType: 'व्यापार का प्रकार',
+    businessTypeHint:
+      'यह सिर्फ़ श्रेणी और इकाई जैसे सुझाव तय करता है। आप कोई भी सामान, किसी भी इकाई में बेच सकते हैं।',
+    saved: 'सहेज लिया।',
+    detailsSection: 'दुकान की जानकारी',
+    timezone: 'समय क्षेत्र',
+    language: 'भाषा',
+    mrpMode: 'MRP से ऊपर बेचना',
+    mrpWarn: 'चेतावनी',
+    mrpBlock: 'रोकें',
+    negativeStock: 'माइनस स्टॉक की अनुमति',
+    yes: 'हाँ',
+    no: 'नहीं',
+    suggestionsSection: 'सुझाई गई श्रेणियाँ',
+    suggestionsHint:
+      'आपके व्यापार के हिसाब से तैयार श्रेणियाँ। जो चाहें जोड़ें। किसी का भी नाम बदल सकते हैं या छोड़ सकते हैं।',
+    addAllMissing: 'बाकी सब जोड़ें',
+    alreadyAdded: 'जुड़ गई',
+    noSuggestions: 'इस प्रकार के व्यापार के लिए कोई सुझाव नहीं है। अपनी श्रेणियाँ बनाएँ।',
   },
   common: {
     save: 'सहेजें',
@@ -210,7 +253,7 @@ export const hi: Translations = {
         openingStockCost: 'प्रति इकाई लागत',
       },
       hints: {
-        sku: 'आपकी दुकान में अलग होने वाला छोटा कोड, जैसे RICE-5KG।',
+        sku: 'आपकी दुकान में अलग होने वाला छोटा कोड, जैसे P-1001।',
         reorderLevel: 'स्टॉक इस स्तर या इससे कम हो तो "कम स्टॉक" दिखेगा।',
         mrp: 'पैक पर छपा अधिकतम खुदरा मूल्य। वैकल्पिक।',
         purchasePrice: 'सप्लायर को आप कितना देते हैं। पता न हो तो खाली छोड़ें।',
@@ -225,6 +268,9 @@ export const hi: Translations = {
       newCategoryName: 'नई श्रेणी का नाम',
       addCategory: 'जोड़ें',
       choose: 'चुनें…',
+      suggestedUnits: 'आपके व्यापार के लिए सुझाई गई',
+      otherUnits: 'अन्य इकाइयाँ',
+      suggestedCategories: 'सुझाई गई श्रेणियाँ',
       submitAdd: 'सामान जोड़ें',
       submitEdit: 'बदलाव सहेजें',
       fixErrors: 'कृपया लाल निशान वाली जानकारी ठीक करें।',

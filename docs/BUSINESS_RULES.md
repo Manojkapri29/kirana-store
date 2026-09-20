@@ -98,6 +98,29 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
 - **C5.** Stock value = stock × average cost (not selling price), with the same missing-cost flag.
 - **C6.** Purchases are not expenses. Buying stock does not reduce profit until that stock is sold.
 
+## B. Business types (Phase 3 extension)
+
+- **B1.** The product is a **multi-business small-shop platform**. Grocery / Kirana is one business type. Types:
+  `GROCERY`, `GENERAL_STORE`, `SWEET_SHOP`, `BAKERY`, `DAIRY`, `FRUIT`, `VEGETABLE`, `MEAT_FOOD`, `GARMENTS`,
+  `FOOTWEAR`, `COSMETICS`, `ELECTRONICS`, `HARDWARE`, `STATIONERY`, `OTHER`. A type is a database row, so
+  new ones can be added without changing code or schema.
+- **B2.** Every shop has exactly one business type, chosen explicitly (there is no silent default). The
+  owner can change it at any time; changing it changes only *suggestions*.
+- **B3. No lock-in.** A business type provides defaults and suggestions, never restrictions. Any shop may create
+  any category, any product and use any unit. A grocery shop may sell flowers; a fruit shop may sell bottled water.
+- **B4. One engine.** Products, units, prices, and the inventory ledger are identical for every business type.
+  There is no per-type stock logic and no separate inventory system for any business. Current stock is always
+  derived from `inventory_transactions`.
+- **B5. Units decide fractions.** Whether a quantity may be fractional depends only on its unit: kg, litre,
+  dozen and metre allow it; piece, gram, millilitre, packet, box, pair, bottle and tray do not. Examples that
+  must work: 25.5 kg potatoes, 8.5 kg apples, 5 kg gulab jamun, 100 pieces samosa, 37.25 m cloth, 20 T-shirts.
+- **B6.** What a type suggests (categories, unit order, later labels and templates) lives only in
+  `business_type_service`. Product, inventory, purchase, sales and report logic must not read the type.
+- **B7. Specialised modules are future and optional** (recipes/production, wastage, size and colour variants,
+  IMEI/serial numbers). They reuse the core and write stock only through `inventory_service`.
+- **B8.** Online ordering, when built, is generic for every type and reuses products, customers, pricing and
+  inventory (see O1, O2).
+
 ## PR. Products (Phase 3)
 
 - **PR1.** SKU is required, trimmed and stored upper-case (`rice-5kg` and `RICE-5KG` are the same SKU),
@@ -208,7 +231,8 @@ GST invoicing, payment reminders, multi-shop accounts, subscriptions, WhatsApp n
 ## O. Online ordering (future, not in the MVP)
 
 - **O1.** A future customer storefront, cart, online orders (COD/UPI), delivery and order history must reuse
-  the same products, customers, pricing and inventory as in-store sales.
+  the same products, customers, pricing and inventory as in-store sales, and must work for every business
+  type (order stages: accepted, preparing, ready, out for delivery, delivered).
 - **O2.** There is **no second inventory system**. Stock remains the sum of `inventory_transactions`. An
   accepted online order is fulfilled by creating a normal Detailed Sale, so stock, cost snapshots, MRP checks,
   returns and reports all behave exactly as for a shop sale.

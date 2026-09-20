@@ -493,3 +493,46 @@ class TestListingAndHistory:
 
         assert [r.txn_type.value for r in recent] == ["ADJUSTMENT"]
         assert [r.txn_type.value for r in oldest_first] == ["OPENING", "ADJUSTMENT"]
+
+
+class TestStatusFilterAgreesWithTheStatusRule:
+    """The status is decided twice: in Python (`stock_status`) and in SQL (the inventory filter).
+    They must never disagree, especially at the boundaries."""
+
+    STOCKS = ["0", "0.001", "4.999", "5", "5.001", "10", "-3"]
+    REORDERS = ["0", "5"]
+
+    def test_every_boundary(self, session, tenant_a, ctx, units):
+        tenant_a.shop.allow_negative_stock = True  # lets one product go below zero
+        session.commit()
+        expected: dict[str, StockStatus] = {}
+        for stock in self.STOCKS:
+            for reorder in self.REORDERS:
+                sku = f"S{stock}R{reorder}"
+                product = factories.make_product(
+                    session, tenant_a.shop, tenant_a.category, sku=sku, unit_id=units["kg"],
+                    reorder_level=Decimal(reorder),
+                )  # fmt: skip
+                session.commit()
+                value = Decimal(stock)
+                if value > 0:
+                    inv.record_opening_stock(session, ctx, product_id=product.id, quantity=value)
+                elif value < 0:
+                    inv.record_adjustment(
+                        session,
+                        ctx,
+                        product_id=product.id,
+                        quantity_delta=value,
+                        reason_code=AdjustmentReason.LOST,
+                    )
+                session.commit()
+                expected[sku] = stock_status(value, Decimal(reorder))
+
+        rows, _ = inv.list_inventory(session, tenant_a.shop.id, limit=None)
+        assert {r.sku: r.status for r in rows} == expected  # the row-by-row status
+        assert set(expected.values()) == set(StockStatus)  # the data really exercises all three states
+
+        for wanted in StockStatus:
+            filtered, total = inv.list_inventory(session, tenant_a.shop.id, status=wanted, limit=None)
+            assert {r.sku for r in filtered} == {sku for sku, status in expected.items() if status is wanted}
+            assert total == len(filtered)

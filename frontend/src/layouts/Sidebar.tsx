@@ -1,8 +1,10 @@
 import { X, Store } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router-dom'
 
+import { getShop } from '@/api/catalog'
 import { NAV_ITEMS } from '@/app/navigation'
 
 interface SidebarProps {
@@ -12,6 +14,8 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { t } = useTranslation()
+  // The business's own name, so the app never presents itself as belonging to one kind of shop.
+  const shop = useQuery({ queryKey: ['shop'], queryFn: getShop })
 
   // Close the mobile drawer with the Escape key.
   useEffect(() => {
@@ -46,7 +50,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             </span>
             <div className="leading-tight">
               <p className="font-semibold text-slate-900">{t('app.name')}</p>
-              <p className="text-xs text-slate-500">{t('app.tagline')}</p>
+              <p className="max-w-40 truncate text-xs text-slate-500">{shop.data?.name ?? t('app.tagline')}</p>
             </div>
           </div>
           <button

@@ -1,10 +1,16 @@
-# Kirana Store
+# Shop Manager
 
-Inventory and business management for small Indian grocery (kirana) shops: stock, purchases,
-detailed and quick sales, returns, suppliers, customer khata (credit), expenses, reports and exports.
-Built to start as a single-shop app and grow into a multi-shop SaaS.
+A multi-business **small shop management** platform for India: stock, purchases, detailed and quick sales,
+returns, suppliers, customer credit (khata), expenses, reports and exports, for many kinds of shops and
+vendors. Grocery / Kirana is one supported business type, alongside sweet shops, bakeries, fruit and vegetable
+vendors, dairies, garments, footwear, electronics, hardware, stationery and more. Built to start as a
+single-shop app and grow into a multi-shop SaaS.
 
-> **Status: Phase 3 of 16 (products, inventory ledger, exports).** You can manage products and categories,
+> The project folder and a few internal names (`kirana-store/`, the `KIRANA_` environment prefix,
+> `kirana.db`) are the original working name. They are internal only and will be renamed later.
+
+> **Status: Phase 3 of 16 (products, inventory ledger, exports, business types).** You choose your type of
+> business, and can manage products and categories,
 > record opening stock, see current stock (In / Low / Out of stock) and stock history, and export products,
 > inventory and history to CSV or Excel. Suppliers, purchases, sales, khata and the rest come in later phases.
 > See [docs/ROADMAP.md](docs/ROADMAP.md).

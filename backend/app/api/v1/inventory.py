@@ -35,7 +35,7 @@ Offset = Annotated[int, Query(ge=0)]
 def list_inventory(
     ctx: Ctx,
     session: ReadSession,
-    q: Annotated[str | None, Query(description="Search SKU, name, brand or barcode")] = None,
+    q: Annotated[str | None, Query(max_length=100, description="Search SKU, name, brand or barcode")] = None,
     category_id: int | None = None,
     status: StatusFilter = StatusFilter.ACTIVE,
     stock_status: StockStatus | None = None,

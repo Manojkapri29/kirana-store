@@ -35,7 +35,7 @@ def export_products(
     ctx: OwnerCtx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
-    q: str | None = None,
+    q: Annotated[str | None, Query(max_length=100)] = None,
     category_id: int | None = None,
     status: StatusFilter = StatusFilter.ACTIVE,
 ) -> Response:
@@ -51,7 +51,7 @@ def export_inventory(
     ctx: OwnerCtx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
-    q: str | None = None,
+    q: Annotated[str | None, Query(max_length=100)] = None,
     category_id: int | None = None,
     status: StatusFilter = StatusFilter.ACTIVE,
     stock_status: StockStatus | None = None,

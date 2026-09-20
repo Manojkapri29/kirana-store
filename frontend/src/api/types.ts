@@ -17,9 +17,25 @@ export interface Category {
   is_active: boolean
 }
 
+export interface BusinessType {
+  code: string
+  name: string
+}
+
+/** Defaults suggested for the shop's kind of business. Suggestions only, never restrictions. */
+export interface ShopTemplate {
+  business_type: string
+  business_type_name: string
+  categories: { name: string; exists: boolean }[]
+  unit_codes: string[]
+}
+
 export interface Shop {
   id: number
+  /** The business name. */
   name: string
+  business_type: string
+  business_type_name: string
   timezone: string
   language: 'en' | 'hi'
   allow_negative_stock: boolean

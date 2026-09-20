@@ -1,6 +1,7 @@
 # Database
 
-> **Status: implemented in Phase 2** (migration `0001`); **Phase 3 uses these tables and needs no migration**. Rules are in [BUSINESS_RULES.md](BUSINESS_RULES.md);
+> **Status: implemented.** Migration `0001` (Phase 2) created the schema; migration `0002` (Phase 3 extension)
+> added business types. 24 tables. Rules are in [BUSINESS_RULES.md](BUSINESS_RULES.md);
 > the workflows that fill these tables arrive in Phases 3 to 13.
 
 ## Principles
@@ -66,15 +67,22 @@ Global tables: `shops` (the tenants) and `units` (shared reference data).
 ## Tables
 
 ### Tenancy and users
-- **`shops`**: name, phone, address (all required), gstin?, upi_id?, timezone, language (`en`/`hi`),
+- **`business_types`** *(0002)*: code (primary key, e.g. `GROCERY`), English name, sort order, active flag. Shared
+  reference data. Adding a kind of business is an `INSERT`, with no schema change. The 15 types are GROCERY, GENERAL_STORE,
+  SWEET_SHOP, BAKERY, DAIRY, FRUIT, VEGETABLE, MEAT_FOOD, GARMENTS, FOOTWEAR, COSMETICS, ELECTRONICS, HARDWARE,
+  STATIONERY and OTHER. What a type *suggests* (categories, units) lives in `business_type_service`, not here.
+- **`shops`**: name (the business name), **`business_type`** *(0002, required, foreign key to `business_types`, no
+  default so a new shop must choose)*, phone, address (all required), gstin?, upi_id?, timezone, language (`en`/`hi`),
   `allow_negative_stock` (default false), `mrp_validation_mode` (`WARN`/`BLOCK`).
   `mrp_validation_mode` has no database default so the default for new shops (Phase 3) can be chosen without a migration.
 - **`users`**: shop, email (globally unique, stored lower-case, enforced by `CHECK`), phone?, password_hash,
   full_name, role (`OWNER`/`STAFF`), is_active. Login is built in Phase 14.
 
 ### Catalogue
-- **`units`**: code (unique), name, allows_decimal. Seeded by the migration: pcs, kg, g, L, ml, pkt, box, doz
-  (kg, L and doz allow fractions).
+- **`units`**: code (unique), name, allows_decimal. Shared by every business type. Seeded by the migrations: pcs, kg,
+  g, L, ml, pkt, box, doz (`0001`) and m (metre), pair, btl (bottle), tray (`0002`). Units that allow fractions:
+  kg, L, doz, m. Whether a quantity may have a fraction depends only on the unit, never on the business type.
+  *Future:* per-shop custom units would be an additive change (a nullable `shop_id` on `units`).
 - **`categories`**: shop, name (unique per shop), is_active.
 - **`products`**: shop, sku (unique per shop), name, brand?, category (required), unit, default_supplier?,
   reorder_level (>= 0), **mrp?**, selling_price, **purchase_price?**, **avg_cost?**, barcode? (unique per shop
@@ -157,6 +165,19 @@ at the document this one corrects), `created_by` (required, same shop), and time
 Because there is **one `OPENING` row per product** (`UNIQUE (shop_id, reference_type, reference_id, txn_type)`),
 a second opening entry is refused by the database as well as by the service.
 
+## Migration 0002: business types
+
+- Creates `business_types` and seeds the 15 types; inserts the four new units.
+- Adds `shops.business_type`. **Existing shops become `GROCERY`**, because every shop that existed before was a
+  kirana/grocery shop. The temporary default is dropped in a second step so future shops must choose.
+- On SQLite adding a foreign-keyed column means rebuilding `shops`, a table that many tables reference. SQLite's
+  documented procedure needs foreign key enforcement **off** while the table is rebuilt, so the migration
+  environment connects with enforcement off and then runs `PRAGMA foreign_key_check`; any violation fails the
+  migration. The application itself always runs with foreign keys on. On PostgreSQL it is plain `ALTER TABLE`.
+- Tested against a database that already holds a shop, user, category, product and ledger row: all rows and
+  constraints survive, foreign keys stay valid, the ledger trigger survives, downgrade and re-upgrade work.
+- The downgrade removes the four new units and fails loudly if a product already uses one.
+
 ## Always derived, never stored
 
 - Current stock and the Opening / Purchased / Sold / Returned / Adjusted columns of the inventory screen
@@ -238,6 +259,8 @@ PostgreSQL becomes necessary when many shops write concurrently in a hosted depl
 Security is wanted, or when managed backups and replicas are needed.
 
 ## Future: online ordering
+
+*(Generic: it must work for every business type; see [ARCHITECTURE.md](ARCHITECTURE.md).)*
 
 Not built, and the schema does not prevent it. The design rule is **reuse, never duplicate**: an online
 order must use the same `products`, `customers`, pricing and inventory as in-store sales.

@@ -19,13 +19,15 @@ export function ProductDetailPage() {
   const queryClient = useQueryClient()
   const location = useLocation()
   const productId = Number(useParams().id)
+  const validId = Number.isInteger(productId) && productId > 0
   const warnings = (location.state as { warnings?: string[] } | null)?.warnings ?? []
 
-  const product = useQuery({ queryKey: ['product', productId], queryFn: () => getProduct(productId) })
+  const product = useQuery({ queryKey: ['product', productId], queryFn: () => getProduct(productId), enabled: validId })
   // The opening-stock form is offered only while the product has no stock history at all.
   const history = useQuery({
     queryKey: ['history', productId, 'exists'],
     queryFn: () => getProductHistory(productId, { limit: 1 }),
+    enabled: validId,
   })
 
   const toggleActive = useMutation({
@@ -39,8 +41,8 @@ export function ProductDetailPage() {
     },
   })
 
-  if (product.isError) {
-    const notFound = product.error instanceof ApiError && product.error.status === 404
+  if (!validId || product.isError) {
+    const notFound = !validId || (product.error instanceof ApiError && product.error.status === 404)
     return (
       <div className="space-y-6">
         {notFound ? <Alert tone="error">{t('products.detail.notFound')}</Alert> : <QueryError onRetry={() => void product.refetch()} />}

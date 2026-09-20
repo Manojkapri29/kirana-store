@@ -32,13 +32,13 @@ def _resolve_sqlite_url(url: URL) -> URL:
     return url.set(database=str(path))
 
 
-def _configure_sqlite(engine: Engine, busy_timeout_ms: int) -> None:
+def _configure_sqlite(engine: Engine, busy_timeout_ms: int, enforce_foreign_keys: bool) -> None:
     @event.listens_for(engine, "connect")
     def on_connect(dbapi_connection, _connection_record):  # type: ignore[no-untyped-def]
         # Take over transaction control from the sqlite3 driver; see the "begin" listener below.
         dbapi_connection.isolation_level = None
         cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute(f"PRAGMA foreign_keys={'ON' if enforce_foreign_keys else 'OFF'}")
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
         cursor.close()
@@ -55,8 +55,16 @@ def _configure_sqlite(engine: Engine, busy_timeout_ms: int) -> None:
             connection.exec_driver_sql("BEGIN")
 
 
-def create_db_engine(url: str, *, busy_timeout_ms: int = 5000, echo: bool = False) -> Engine:
-    """Build an engine for `url`. Used by the app, Alembic and the tests."""
+def create_db_engine(
+    url: str, *, busy_timeout_ms: int = 5000, echo: bool = False, enforce_foreign_keys: bool = True
+) -> Engine:
+    """Build an engine for `url`. Used by the app, Alembic and the tests.
+
+    `enforce_foreign_keys=False` is for schema migrations only. SQLite cannot alter most table definitions in
+    place, so Alembic rebuilds the table, and rebuilding a table that other tables point at is only possible
+    with enforcement off (SQLite's documented procedure). Alembic then runs `PRAGMA foreign_key_check` to
+    prove nothing was broken. The application itself always enforces foreign keys.
+    """
     parsed = make_url(url)
     if parsed.get_backend_name() == "sqlite":
         engine = create_engine(
@@ -65,7 +73,7 @@ def create_db_engine(url: str, *, busy_timeout_ms: int = 5000, echo: bool = Fals
             # FastAPI serves requests from a thread pool, so connections cross threads.
             connect_args={"check_same_thread": False},
         )
-        _configure_sqlite(engine, busy_timeout_ms)
+        _configure_sqlite(engine, busy_timeout_ms, enforce_foreign_keys)
         return engine
     return create_engine(parsed, echo=echo, pool_pre_ping=True)
 

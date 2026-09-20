@@ -55,7 +55,8 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    engine = create_db_engine(_database_url())
+    # Foreign keys are OFF while migrating (see create_db_engine) and verified afterwards.
+    engine = create_db_engine(_database_url(), enforce_foreign_keys=False)
     try:
         with engine.connect() as connection:
             # Start migration transactions with BEGIN IMMEDIATE on SQLite so nothing can interleave.
@@ -63,8 +64,18 @@ def run_migrations_online() -> None:
             _configure(connection=connection)
             with context.begin_transaction():
                 context.run_migrations()
+        if engine.dialect.name == "sqlite":
+            _assert_no_foreign_key_violations(engine)
     finally:
         engine.dispose()
+
+
+def _assert_no_foreign_key_violations(engine) -> None:  # type: ignore[no-untyped-def]
+    """A migration that rebuilt a table must not leave a row pointing at something that no longer exists."""
+    with engine.connect() as connection:
+        violations = connection.exec_driver_sql("PRAGMA foreign_key_check").all()
+    if violations:
+        raise RuntimeError(f"Migration left foreign key violations: {violations[:5]}")
 
 
 if context.is_offline_mode():

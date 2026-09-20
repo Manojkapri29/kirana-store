@@ -55,6 +55,14 @@ SKU/barcode but one shop cannot repeat them; a shop cannot see or change another
 exports open cleanly in Excel with formulas neutralised.
 *Not in this phase:* screens and API for adjustments and stock count (Phase 10).
 
+**Phase 3 extension: a generic platform.** The product is a multi-business small-shop management SaaS, with
+Grocery / Kirana as one business type. Added: `business_types` and `shops.business_type` (migration `0002`,
+existing shops become GROCERY), 15 business types, four more units (metre, pair, bottle, tray), suggested
+categories and units per type (defaults only, never restrictions), `GET/PATCH /shop`, `/business-types`,
+`/shop/template`, a Settings screen, and generic UI wording. **Done when:** products and inventory behave
+identically for every business type and every unit, two shops can have different types, and the core code
+contains nothing business-specific.
+
 ### Phase 4: Suppliers
 Supplier create/edit/deactivate, search, and export.
 **Done when:** validation and duplicate-handling tests pass.
@@ -114,9 +122,21 @@ and the full suite green on both SQLite and PostgreSQL.
 ### Phase 16: Deployment preparation
 Containers, production configuration, backups, and a security review.
 
+## Future specialised modules (not scheduled)
+
+Optional add-ons that reuse the core (products, the inventory ledger, purchases, sales) and are enabled per shop,
+often by business type:
+
+- **Halwai / Bakery:** production, recipes, ingredients, finished goods, wastage.
+- **Fruit / Vegetable:** wastage and spoilage tracking, variable purchase cost.
+- **Garments / Footwear:** size and colour variants.
+- **Electronics:** serial number / IMEI and warranty.
+- **Per-shop custom units.**
+
 ## Explicitly out of MVP scope
 Payment reminders, GST invoicing, UPI/payment-gateway integration, barcode scanner integrations,
 multiple shops per account, subscription billing, WhatsApp notifications, **customer online ordering
 (storefront, cart, COD/UPI orders, delivery)**, and the AI assistant. The architecture leaves room for each
 (see [ARCHITECTURE.md](ARCHITECTURE.md) and [DATABASE.md](DATABASE.md#future-online-ordering)). Online
-ordering will reuse the same products, customers, pricing and inventory; it will not get its own inventory.
+ordering will be generic for every business type and will reuse the same products, customers, pricing and
+inventory; it will not get its own inventory.

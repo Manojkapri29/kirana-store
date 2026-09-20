@@ -369,6 +369,11 @@ class TestReadAndSearch:
 
         assert (page["total"], page["limit"], page["offset"], len(page["items"])) == (3, 2, 2, 1)
 
+    def test_an_absurdly_long_search_text_is_refused(self, client_a):
+        assert client_a.get(API, params={"q": "x" * 101}).status_code == 422
+        assert client_a.get(API, params={"q": "x" * 100}).status_code == 200
+        assert client_a.get("/api/v1/inventory", params={"q": "x" * 101}).status_code == 422
+
     def test_bad_paging_parameters_are_refused(self, client_a):
         assert client_a.get(API, params={"limit": 0}).status_code == 422
         assert client_a.get(API, params={"limit": 500}).status_code == 422
@@ -605,7 +610,7 @@ class TestCategoriesAndReferenceData:
     def test_units_are_listed(self, client_a):
         codes = [u["code"] for u in client_a.get("/api/v1/units").json()]
 
-        assert codes == ["pcs", "kg", "g", "L", "ml", "pkt", "box", "doz"]
+        assert codes == ["pcs", "kg", "g", "L", "ml", "pkt", "box", "doz", "m", "pair", "btl", "tray"]
 
     def test_create_rename_and_deactivate_a_category(self, client_a):
         created = client_a.post("/api/v1/categories", json={"name": "  Dairy   Items "})

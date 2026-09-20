@@ -77,7 +77,9 @@ class TestWriteTransactions:
         with pytest.raises(Exception):  # noqa: B017 - any database error will do
             with write_transaction(session_factory) as session:
                 factories.make_shop(session, "First step")
-                session.add(Shop(name="   ", phone="1", address="x"))  # violates a CHECK constraint
+                session.add(
+                    Shop(name="   ", business_type="OTHER", phone="1", address="x")
+                )  # violates a CHECK constraint
                 session.flush()
 
         with read_session(session_factory) as session:

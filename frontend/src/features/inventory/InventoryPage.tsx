@@ -2,11 +2,10 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { History } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 import { listCategories } from '@/api/catalog'
 import { listInventory } from '@/api/inventory'
-import { listProducts } from '@/api/products'
 import type { InventoryItem, StatusFilter, StockStatus } from '@/api/types'
 import { ExportButtons } from '@/components/ExportButtons'
 import { FilterSelect } from '@/components/fields'
@@ -14,6 +13,7 @@ import { Pagination } from '@/components/Pagination'
 import { SearchInput } from '@/components/SearchInput'
 import { Badge, EmptyState, PageHeader, QueryError, Spinner } from '@/components/ui'
 import { useDebounced } from '@/hooks/useDebounced'
+import { useOpenOnSingleMatch } from '@/hooks/useOpenOnSingleMatch'
 import { formatQuantity } from '@/lib/format'
 
 import { StockStatusBadge } from './StockStatusBadge'
@@ -22,7 +22,6 @@ const PAGE_SIZE = 25
 
 export function InventoryPage() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
 
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -49,13 +48,7 @@ export function InventoryPage() {
     setOffset(0)
   }
 
-  // A scanned barcode + Enter opens the product when it is the only match.
-  async function openIfSingleMatch() {
-    const text = search.trim()
-    if (!text) return
-    const result = await listProducts({ q: text, status: 'all', limit: 2 })
-    if (result.total === 1) void navigate(`/products/${result.items[0].id}`)
-  }
+  const openIfSingleMatch = useOpenOnSingleMatch()
 
   const data = inventory.data
   const STATUS_CHIPS: { value: StockStatus | ''; label: string }[] = [
@@ -74,7 +67,7 @@ export function InventoryPage() {
           <SearchInput
             value={search}
             onChange={change(setSearch)}
-            onEnter={() => void openIfSingleMatch()}
+            onEnter={() => void openIfSingleMatch(search)}
             placeholder={t('inventory.searchPlaceholder')}
             autoFocus
           />
