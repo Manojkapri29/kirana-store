@@ -4,6 +4,9 @@ import { InventoryPage } from '@/features/inventory/InventoryPage'
 import { ProductDetailPage } from '@/features/products/ProductDetailPage'
 import { ProductFormPage } from '@/features/products/ProductFormPage'
 import { ProductsPage } from '@/features/products/ProductsPage'
+import { PurchaseDetailPage } from '@/features/purchases/PurchaseDetailPage'
+import { PurchaseFormPage } from '@/features/purchases/PurchaseFormPage'
+import { PurchasesPage } from '@/features/purchases/PurchasesPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { SupplierDetailPage } from '@/features/suppliers/SupplierDetailPage'
 import { SupplierFormPage } from '@/features/suppliers/SupplierFormPage'
@@ -25,6 +28,10 @@ export function App() {
         <Route path="products/:id" element={<ProductDetailPage />} />
         <Route path="products/:id/edit" element={<ProductFormPage mode="edit" />} />
         <Route path="inventory" element={<InventoryPage />} />
+        <Route path="purchases" element={<PurchasesPage />} />
+        <Route path="purchases/new" element={<PurchaseFormPage mode="create" />} />
+        <Route path="purchases/:id" element={<PurchaseDetailPage />} />
+        <Route path="purchases/:id/edit" element={<PurchaseFormPage mode="edit" />} />
         <Route path="suppliers" element={<SuppliersPage />} />
         <Route path="suppliers/new" element={<SupplierFormPage mode="create" />} />
         <Route path="suppliers/:id" element={<SupplierDetailPage />} />

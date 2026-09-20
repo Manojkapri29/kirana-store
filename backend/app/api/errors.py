@@ -11,12 +11,16 @@ from fastapi.responses import JSONResponse
 from app.services.errors import ConflictError, DomainError, InvalidInputError, NotFoundError
 
 
+def _location(field: str | None) -> list[str | int]:
+    """`"items.2.quantity"` becomes ["body", "items", 2, "quantity"], like FastAPI's own errors."""
+    if not field:
+        return ["body"]
+    return ["body", *(int(part) if part.isdigit() else part for part in field.split("."))]
+
+
 def _field_errors(exc: DomainError, kind: str) -> list[dict[str, object]]:
     pairs = getattr(exc, "errors", None) or [(exc.field, exc.message)]
-    return [
-        {"loc": ["body", field] if field else ["body"], "msg": message, "type": kind}
-        for field, message in pairs
-    ]
+    return [{"loc": _location(field), "msg": message, "type": kind} for field, message in pairs]
 
 
 def register_error_handlers(app: FastAPI) -> None:

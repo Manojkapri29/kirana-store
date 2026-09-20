@@ -9,8 +9,8 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 | 1 | Project setup and foundation | Done |
 | 2 | Database/models + SQLite + Alembic | Done |
 | 3 | Products + inventory ledger core + export framework | Done |
-| 4 | Suppliers | Done, awaiting review |
-| 5 | Purchases + weighted average cost | Planned |
+| 4 | Suppliers | Done |
+| 5 | Purchases + weighted average cost | Done, awaiting review |
 | 6 | Customers + Khata | Planned |
 | 7 | Detailed Sales | Planned |
 | 8 | Quick/Daily Sales | Planned |
@@ -77,8 +77,17 @@ another shop's suppliers.
 add one at any time).
 
 ### Phase 5: Purchases + weighted average cost
-Purchase entry with paid/unpaid amounts, void, the `costing` service (moving weighted average), and export.
-**Done when:** opening 20 + purchase 30 = 50; voiding the purchase returns stock to 20; average cost is correct.
+Supplier → purchase → purchase items → inventory ledger → moving weighted average cost. Purchases are drafted,
+posted (numbered `PUR/2026-27/0001`, stock added, average cost updated, all in one transaction) and voided
+(stock reversed, average rebuilt from history) or corrected as a new linked draft. Line discounts are
+supported and costing uses the net line total. Screens: purchase list with filters, entry form with product
+search (barcode friendly), detail page with the stock and cost effect, purchase history on the supplier page,
+and links from a product's stock history. CSV/XLSX exports of purchases, purchase items and one purchase.
+Migration `0004`. New services: `purchase_service`, `costing_service`, `numbering_service`.
+**Done when:** 100 at ₹20 then 50 at ₹30 gives 150 units at ₹23.33; opening 20 + purchase 30 = 50 and voiding the
+purchase returns stock to 20; posting twice is refused; a failed posting leaves no stock or number behind.
+*Not in this phase:* supplier payments and the supplier ledger (the `amount_paid` columns stay unused), purchase
+returns (Phase 9), a purchase-order or goods-receipt step, and unit conversion between purchase and stock units.
 
 ### Phase 6: Customers + Khata
 Customers, `khata_service` as the only customer-ledger writer, opening balance, payment received,

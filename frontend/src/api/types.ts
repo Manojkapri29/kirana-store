@@ -150,6 +150,9 @@ export interface InventoryTransaction {
   note: string | null
   created_by_name: string
   created_at: string
+  /** Set when the row came from a purchase line (or from voiding one). */
+  purchase_id: number | null
+  purchase_no: string | null
 }
 
 export interface OpeningStockPayload {
@@ -206,3 +209,91 @@ export interface SupplierOption {
 }
 
 export type ExportFormat = 'csv' | 'xlsx'
+
+export type PurchaseStatus = 'DRAFT' | 'POSTED' | 'VOID'
+
+export interface PurchaseInventoryEffect {
+  id: number
+  txn_type: TransactionType
+  qty_delta: string
+  txn_date: string
+}
+
+export interface PurchaseItem {
+  id: number
+  product_id: number
+  sku: string
+  product_name: string
+  unit_id: number
+  unit_code: string
+  unit_name: string
+  unit_allows_decimal: boolean
+  quantity: string
+  unit_cost: string
+  discount: string
+  line_total: string
+  /** Snapshot taken when the purchase was posted; null on a draft. A null cost means "unknown". */
+  stock_before: string | null
+  stock_after: string | null
+  avg_cost_before: string | null
+  avg_cost_after: string | null
+  inventory_effects: PurchaseInventoryEffect[]
+}
+
+export interface Purchase {
+  id: number
+  /** Assigned when posted, e.g. PUR/2026-27/0001. A draft has none. */
+  purchase_no: string | null
+  status: PurchaseStatus
+  supplier_id: number
+  supplier_name: string
+  supplier_invoice_no: string | null
+  purchase_date: string
+  notes: string | null
+  total_amount: string
+  item_count: number
+  created_by_name: string
+  created_at: string
+  updated_at: string
+  posted_at: string | null
+  posted_by_name: string | null
+  void_reason: string | null
+  voided_at: string | null
+  replaces_id: number | null
+  replaced_by_id: number | null
+  items: PurchaseItem[]
+}
+
+/** One row of the purchase list (no lines). */
+export interface PurchaseSummary {
+  id: number
+  purchase_no: string | null
+  status: PurchaseStatus
+  supplier_id: number
+  supplier_name: string
+  supplier_invoice_no: string | null
+  purchase_date: string
+  total_amount: string
+  item_count: number
+  created_by_name: string
+  created_at: string
+}
+
+export interface PurchaseItemPayload {
+  product_id: number
+  quantity: string
+  unit_cost: string
+  discount: string | null
+}
+
+export interface PurchaseHeaderPayload {
+  supplier_id: number
+  supplier_invoice_no: string | null
+  purchase_date: string
+  notes: string | null
+}
+
+export interface SupplierPurchaseTotals {
+  posted_count: number
+  posted_total: string
+}

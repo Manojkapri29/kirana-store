@@ -131,7 +131,7 @@ type), and write stock only through `inventory_service`.
 
 | Service | Responsibility | Status |
 |---|---|---|
-| `inventory_service` | **The only reader and writer of the stock ledger.** Opening stock, adjustments, stock queries, inventory list, history, stock status | Phase 3 (purchases, sales, returns join it later) |
+| `inventory_service` | **The only reader and writer of the stock ledger, and the only place `avg_cost` is assigned.** Opening stock, adjustments, stock queries, inventory list, history (with the purchase behind each row), stock status; Phase 5 adds receiving purchase lines, reversing them, and rebuilding the average cost | Phase 3 (purchases from Phase 5; sales, returns later) |
 | `product_service` | Products: create, update, search, activate/deactivate; MRP setting; derives stock through `inventory_service` | Phase 3 |
 | `catalog_service` | Units and categories | Phase 3 |
 | `supplier_service` | Suppliers: create, update, search, activate/deactivate; duplicate warnings; the count of products per supplier. Generic for every business type | Phase 4 |
@@ -142,11 +142,11 @@ type), and write stock only through `inventory_service`.
 | `audit_service` | Writes the insert-only audit log | Phase 3 |
 | `shop_service`, `context_service` | Shop settings and "today"; the current shop/user | Phase 3 |
 | `khata_service` | **The only writer of the customer ledger** | Phase 6 |
-| `purchase_service` | Purchases and purchase returns | Phases 5, 9 |
+| `purchase_service` | Purchases: draft, edit, post, void, correct, list and search, item rows for exports. Writes stock only through `inventory_service` | Phase 5 (returns: Phase 9) |
 | `detailed_sale_service` | Product-wise bills and sales returns | Phases 7, 9 |
 | `quick_sale_service` | Money-only sales. It has **no dependency on `inventory_service`**, by design | Phase 8 |
-| `costing_service` | Moving weighted average cost, cost snapshots for COGS | Phase 5 |
-| `numbering_service` | Document numbers from a sequence table | Phase 7 |
+| `costing_service` | Moving weighted average: the pure arithmetic (no database, no floats) and the replay used to rebuild `avg_cost`. Cost snapshots for COGS join it in Phase 7 | Phase 5 |
+| `numbering_service` | Document numbers (`PUR/2026-27/0001`) from the `document_sequences` table, per shop, type and financial year | Phase 5 (sales reuse it in Phase 7) |
 
 Other services call `inventory_service` and `khata_service`; nothing else touches their tables. For
 example the product list gets stock from `inventory_service.get_stock_map`, and exports get their rows from
@@ -272,8 +272,19 @@ migration `0003`, and the reusable contact-validation helpers. Product screens n
 supplier, and the products export gains a "Default Supplier" column. Purchase history, returns and payments for a
 supplier do not exist yet; the supplier page reserves room for them.
 
-**Not built yet:** purchases, sales, returns, khata, expenses, dashboard analytics, reports,
-authentication, and screens for adjustments. `khata_service` is still a placeholder.
+**Phase 5 (purchases):** supplier → purchase → purchase items → inventory ledger → moving weighted average.
+`purchase_service` runs the DRAFT → POSTED → VOID lifecycle inside the router's single write transaction:
+posting locks the purchase (a second post gets a conflict), locks the products in ascending id order (no
+deadlocks), asks `inventory_service` to add each line and update the average, numbers the document and audits
+it; any failure rolls all of it back. Voiding writes reversals through `inventory_service`, which then rebuilds
+the average by replay. Endpoints under `/api/v1/purchases` (list, create, get, patch header, add/patch/replace
+items, post, void, correct; no DELETE) and `/api/v1/exports/purchases`, `/purchase-items`, `/purchases/{id}`.
+Field errors inside a list use dotted paths (`items.2.quantity`, sent as `["body","items",2,"quantity"]`). The
+UI does line totals with exact integer (BigInt) arithmetic, so what is shown equals what the server computes.
+Migration `0004`.
+
+**Not built yet:** supplier payments and ledger, purchase returns, sales, returns, khata, expenses, dashboard
+analytics, reports, authentication, and screens for adjustments. `khata_service` is still a placeholder.
 
 ## Testing strategy
 

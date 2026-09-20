@@ -61,7 +61,7 @@ def test_migration_state_is_at_head_and_matches_the_models(blank_db_url: str):
     command.upgrade(config, "head")
 
     head = ScriptDirectory.from_config(config).get_current_head()
-    assert head == "0003"
+    assert head == "0004"
     assert current_revision(blank_db_url) == head
 
     # `alembic check` raises if autogenerate would produce any change (models and DB disagree).
@@ -70,7 +70,7 @@ def test_migration_state_is_at_head_and_matches_the_models(blank_db_url: str):
 
 def test_there_is_a_single_migration_head():
     heads = ScriptDirectory.from_config(alembic_config("sqlite:///unused.db")).get_heads()
-    assert heads == ["0003"]
+    assert heads == ["0004"]
 
 
 def test_downgrade_removes_everything_and_upgrade_can_run_again(blank_db_url: str):
@@ -276,7 +276,7 @@ class TestMigration0002PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0003"
+        assert current_revision(blank_db_url) == "0004"
 
 
 class TestMigration0003PreservesData:
@@ -383,4 +383,163 @@ class TestMigration0003PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0003"
+        assert current_revision(blank_db_url) == "0004"
+
+
+class TestMigration0004PreservesData:
+    """0004 turns the purchase tables into a workflow. Purchases that already exist must survive intact."""
+
+    NOW = "'2026-09-01 10:00:00.000000'"
+
+    def seed_revision_0003(self, url: str) -> None:
+        command.upgrade(alembic_config(url), "0003")
+        engine = create_db_engine(url)
+        with engine.begin() as c:
+            c.execute(
+                text(
+                    "INSERT INTO shops (id, name, business_type, phone, address, mrp_validation_mode, created_at, updated_at)"
+                    f" VALUES (7, 'Old Shop', 'BAKERY', '9999999999', '1 Old Road', 'WARN', {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO users (id, shop_id, email, password_hash, full_name, role, is_active, created_at, updated_at)"
+                    f" VALUES (3, 7, 'o@old.local', '!', 'Old Owner', 'OWNER', 1, {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    f"INSERT INTO categories (id, shop_id, name, is_active, created_at, updated_at) VALUES (5, 7, 'Bread', 1, {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    f"INSERT INTO suppliers (id, shop_id, name, is_active, created_at, updated_at) VALUES (9, 7, 'Flour Mill', 1, {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO products (id, shop_id, sku, name, category_id, unit_id, reorder_level, selling_price, is_active, created_at, updated_at)"
+                    f" VALUES (11, 7, 'BREAD', 'Bread', 5, 2, 0, 4000, 1, {self.NOW}, {self.NOW})"
+                )
+            )
+            # A purchase that was already POSTED under the old rules, with one line, and a voided one.
+            c.execute(
+                text(
+                    "INSERT INTO purchases (id, shop_id, supplier_id, supplier_invoice_no, purchase_date, total_amount, amount_paid,"
+                    " created_by, status, created_at, updated_at)"
+                    f" VALUES (21, 7, 9, 'INV-1', '2026-08-30', 10000, 0, 3, 'POSTED', '2026-08-30 09:00:00.000000', {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO purchase_items (id, shop_id, purchase_id, product_id, quantity, unit_cost, line_total, created_at, updated_at)"
+                    f" VALUES (31, 7, 21, 11, 5000, 2000, 10000, {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO purchases (id, shop_id, supplier_id, supplier_invoice_no, purchase_date, total_amount, amount_paid,"
+                    " created_by, status, void_reason, voided_at, created_at, updated_at)"
+                    f" VALUES (22, 7, 9, 'INV-2', '2026-08-31', 500, 0, 3, 'VOID', 'Entered twice', {self.NOW}, {self.NOW}, {self.NOW})"
+                )
+            )
+        engine.dispose()
+
+    def test_existing_purchases_are_numbered_and_lines_get_their_unit(self, blank_db_url: str):
+        self.seed_revision_0003(blank_db_url)
+
+        command.upgrade(alembic_config(blank_db_url), "head")
+
+        engine = create_db_engine(blank_db_url)
+        with engine.connect() as c:
+            posted = c.execute(
+                text(
+                    "SELECT status, purchase_no, posted_at, created_at, total_amount FROM purchases WHERE id = 21"
+                )
+            ).one()
+            assert posted.status == "POSTED" and posted.purchase_no == "PUR/LEGACY/21"
+            assert posted.posted_at == posted.created_at and posted.total_amount == 10000
+            void = c.execute(
+                text("SELECT status, purchase_no, void_reason FROM purchases WHERE id = 22")
+            ).one()
+            assert tuple(void) == ("VOID", None, "Entered twice")
+
+            item = c.execute(
+                text(
+                    "SELECT unit_id, discount, stock_before, avg_cost_before, avg_cost_after, quantity, line_total"
+                    " FROM purchase_items WHERE id = 31"
+                )
+            ).one()
+            assert tuple(item) == (2, 0, None, None, None, 5000, 10000)  # unit copied from the product
+            assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+        engine.dispose()
+        command.check(alembic_config(blank_db_url))  # the migrated schema equals the models
+
+    def test_new_rules_are_enforced_on_the_migrated_database(self, blank_db_url: str):
+        self.seed_revision_0003(blank_db_url)
+        command.upgrade(alembic_config(blank_db_url), "head")
+        insert = (
+            "INSERT INTO purchases (shop_id, supplier_id, supplier_invoice_no, purchase_date, total_amount,"
+            " amount_paid, created_by, status, purchase_no, posted_at, void_reason, created_at, updated_at)"
+            " VALUES (7, 9, :inv, '2026-09-01', 0, 0, 3, :status, :no, :posted_at, :reason,"
+            f" {self.NOW}, {self.NOW})"
+        )
+        engine = create_db_engine(blank_db_url)
+        with engine.connect() as c:
+            draft = {"status": "DRAFT", "no": None, "posted_at": None, "reason": None}
+            # a draft is fine, but a second live purchase with the same supplier invoice number is not
+            c.execute(text(insert), {**draft, "inv": "NEW-1"})
+            with pytest.raises(Exception, match="UNIQUE"):
+                c.execute(text(insert), {**draft, "inv": "NEW-1"})
+            c.rollback()
+            # a VOID one releases its number, so INV-2 (already void) can be used again by a live purchase
+            c.execute(text(insert), {**draft, "inv": "INV-2"})
+            c.rollback()
+            # a draft may not carry a purchase number; a posted purchase must
+            with pytest.raises(Exception, match="CHECK"):
+                c.execute(
+                    text(insert), {**draft, "inv": "X", "no": "PUR/1", "posted_at": self.NOW.strip("'")}
+                )
+            c.rollback()
+            with pytest.raises(Exception, match="CHECK"):
+                c.execute(text(insert), {**draft, "inv": "X", "status": "POSTED"})
+            c.rollback()
+            with pytest.raises(Exception, match="CHECK"):  # VOID needs a reason
+                c.execute(text(insert), {**draft, "inv": "X", "status": "VOID"})
+            c.rollback()
+        engine.dispose()
+
+    def test_downgrade_is_refused_while_drafts_exist_and_works_once_they_are_gone(self, blank_db_url: str):
+        self.seed_revision_0003(blank_db_url)
+        config = alembic_config(blank_db_url)
+        command.upgrade(config, "head")
+        engine = create_db_engine(blank_db_url)
+        with engine.begin() as c:
+            c.execute(
+                text(
+                    "INSERT INTO purchases (id, shop_id, supplier_id, purchase_date, total_amount, amount_paid,"
+                    " created_by, status, created_at, updated_at)"
+                    f" VALUES (40, 7, 9, '2026-09-01', 0, 0, 3, 'DRAFT', {self.NOW}, {self.NOW})"
+                )
+            )
+
+        with pytest.raises(RuntimeError, match="draft purchase"):
+            command.downgrade(config, "0003")
+        assert current_revision(blank_db_url) == "0004"  # untouched
+
+        with engine.begin() as c:
+            c.execute(text("DELETE FROM purchases WHERE id = 40"))
+        command.downgrade(config, "0003")
+
+        with engine.connect() as c:
+            columns = {r[1] for r in c.exec_driver_sql("PRAGMA table_info(purchases)")}
+            assert columns.isdisjoint({"purchase_no", "posted_at", "posted_by"})
+            item_columns = {r[1] for r in c.exec_driver_sql("PRAGMA table_info(purchase_items)")}
+            assert item_columns.isdisjoint({"unit_id", "discount", "stock_before"})
+            assert c.scalar(text("SELECT count(*) FROM purchases")) == 2
+            assert c.scalar(text("SELECT count(*) FROM purchase_items")) == 1
+            assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+        engine.dispose()
+        command.upgrade(config, "head")
+        assert current_revision(blank_db_url) == "0004"

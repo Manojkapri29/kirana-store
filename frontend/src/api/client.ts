@@ -13,12 +13,20 @@ export class ApiError extends Error {
   readonly status: number
   /** Messages keyed by form field name, when the server says which input a problem belongs to. */
   readonly fieldErrors: Record<string, string>
+  /** The same messages keyed by full path, e.g. "items.2.quantity", for problems inside a list. */
+  readonly pathErrors: Record<string, string>
 
-  constructor(message: string, status: number, fieldErrors: Record<string, string> = {}) {
+  constructor(
+    message: string,
+    status: number,
+    fieldErrors: Record<string, string> = {},
+    pathErrors: Record<string, string> = {},
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.fieldErrors = fieldErrors
+    this.pathErrors = pathErrors
   }
 }
 
@@ -34,14 +42,22 @@ async function toApiError(response: Response, path: string): Promise<ApiError> {
 
   if (Array.isArray(detail)) {
     const fieldErrors: Record<string, string> = {}
+    const pathErrors: Record<string, string> = {}
     const messages: string[] = []
     for (const item of detail as ValidationDetail[]) {
       const field = item.loc?.length > 1 ? String(item.loc[item.loc.length - 1]) : undefined
       // Show only the first message per field.
       if (field && !(field in fieldErrors)) fieldErrors[field] = item.msg
+      const path = item.loc?.length > 1 ? item.loc.slice(1).join('.') : undefined
+      if (path && !(path in pathErrors)) pathErrors[path] = item.msg
       messages.push(item.msg)
     }
-    return new ApiError(messages[0] ?? `Request failed (${response.status})`, response.status, fieldErrors)
+    return new ApiError(
+      messages[0] ?? `Request failed (${response.status})`,
+      response.status,
+      fieldErrors,
+      pathErrors,
+    )
   }
 
   return new ApiError(`Request to ${path} failed with status ${response.status}`, response.status)
@@ -76,7 +92,7 @@ export async function apiFetch<T>(
   return (await response.json()) as T
 }
 
-export function apiSend<T>(method: 'POST' | 'PATCH', path: string, body?: unknown): Promise<T> {
+export function apiSend<T>(method: 'POST' | 'PATCH' | 'PUT', path: string, body?: unknown): Promise<T> {
   return apiFetch<T>(path, {
     method,
     headers: { 'Content-Type': 'application/json' },

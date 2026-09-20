@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import OwnerCtx
 from app.api.v1.products import StatusFilter, active_flag
 from app.db.session import get_session
-from app.models.enums import InventoryTxnType
+from app.models.enums import InventoryTxnType, PurchaseStatus
 from app.services import export_datasets
 from app.services.export_service import ExportFile, ExportFormat
 from app.services.inventory_service import StockStatus
@@ -90,3 +90,66 @@ def export_inventory_history(
             date_to=date_to,
         )
     )
+
+
+PurchaseStatuses = Annotated[
+    list[PurchaseStatus] | None, Query(alias="status", description="Repeat to allow several")
+]
+
+
+@router.get("/purchases")
+def export_purchases(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    supplier_id: int | None = None,
+    statuses: PurchaseStatuses = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    return download(
+        export_datasets.export_purchases(
+            session,
+            ctx,
+            fmt,
+            q=q,
+            supplier_id=supplier_id,
+            statuses=statuses,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    )
+
+
+@router.get("/purchase-items")
+def export_purchase_items(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    supplier_id: int | None = None,
+    statuses: PurchaseStatuses = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    return download(
+        export_datasets.export_purchase_items(
+            session,
+            ctx,
+            fmt,
+            q=q,
+            supplier_id=supplier_id,
+            statuses=statuses,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    )
+
+
+@router.get("/purchases/{purchase_id}")
+def export_purchase_details(
+    purchase_id: int, ctx: OwnerCtx, session: ReadSession, fmt: Format = ExportFormat.CSV
+) -> Response:
+    """One purchase with all its lines."""
+    return download(export_datasets.export_purchase_details(session, ctx, fmt, purchase_id))

@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 
 import { getProductHistory } from '@/api/inventory'
 import type { InventoryTransaction, Product } from '@/api/types'
@@ -84,6 +85,11 @@ function HistoryTable({ rows, unitCode }: { rows: InventoryTransaction[]; unitCo
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right text-sm">{formatMoney(row.unit_cost)}</td>
                 <td className="px-4 py-3 text-sm">
+                  {row.purchase_id && (
+                    <Link to={`/purchases/${row.purchase_id}`} className="font-medium text-emerald-800 hover:underline">
+                      {row.purchase_no}
+                    </Link>
+                  )}
                   {row.reason_code && <div className="font-medium">{t(`history.reasons.${row.reason_code}`)}</div>}
                   {row.note && <div className="text-slate-600">{row.note}</div>}
                 </td>

@@ -9,10 +9,11 @@ single-shop app and grow into a multi-shop SaaS.
 > The project folder and a few internal names (`kirana-store/`, the `KIRANA_` environment prefix,
 > `kirana.db`) are the original working name. They are internal only and will be renamed later.
 
-> **Status: Phase 4 of 16 (suppliers).** You choose your type of business, manage suppliers, and can manage
-> products and categories,
-> record opening stock, see current stock (In / Low / Out of stock) and stock history, and export products,
-> inventory and history to CSV or Excel. Purchases, sales, khata and the rest come in later phases.
+> **Status: Phase 5 of 16 (purchases).** You choose your type of business, manage suppliers, products and
+> categories, record opening stock, and **record purchases**: draft a purchase, post it (the stock is added and
+> the average cost updated), void or correct it. You see current stock (In / Low / Out of stock), stock history
+> (each purchase is linked) and the average cost, and can export products, inventory, history and purchases to
+> CSV or Excel. Sales, khata and the rest come in later phases.
 > See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Stack

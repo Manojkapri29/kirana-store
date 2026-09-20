@@ -10,6 +10,7 @@ import { getSupplier, setSupplierActive } from '@/api/suppliers'
 import type { Supplier } from '@/api/types'
 import { Alert, Badge, Button, LinkButton, QueryError, Spinner } from '@/components/ui'
 import { StockStatusBadge } from '@/features/inventory/StockStatusBadge'
+import { SupplierPurchases } from '@/features/purchases/SupplierPurchases'
 import { formatMoney, formatQuantity, NOT_SET } from '@/lib/format'
 
 export function SupplierDetailPage() {
@@ -100,6 +101,7 @@ export function SupplierDetailPage() {
       </div>
 
       <SuppliedProducts supplier={s} />
+      <SupplierPurchases supplierId={s.id} canBuy={s.is_active} />
       <UpcomingSections />
     </div>
   )
@@ -145,7 +147,7 @@ function BusinessCard({ supplier }: { supplier: Supplier }) {
   )
 }
 
-/** Products that name this supplier as their default supplier. Purchases will extend this in a later phase. */
+/** Products that name this supplier as their default supplier. */
 function SuppliedProducts({ supplier }: { supplier: Supplier }) {
   const { t } = useTranslation()
   const products = useQuery({
@@ -199,19 +201,20 @@ function SuppliedProducts({ supplier }: { supplier: Supplier }) {
 function UpcomingSections() {
   const { t } = useTranslation()
   const sections = [
-    { title: t('suppliers.detail.purchaseHistory'), hint: t('suppliers.detail.purchaseHistoryHint'), phase: 5 },
     { title: t('suppliers.detail.purchaseReturns'), hint: t('suppliers.detail.purchaseReturnsHint'), phase: 9 },
-    { title: t('suppliers.detail.payments'), hint: t('suppliers.detail.paymentsHint'), phase: 5 },
+    { title: t('suppliers.detail.payments'), hint: t('suppliers.detail.paymentsHint'), phase: undefined },
   ]
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-semibold text-slate-900">{t('suppliers.detail.upcoming')}</h2>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {sections.map((section) => (
           <div key={section.title} className="rounded-xl border border-dashed border-slate-300 bg-white p-4">
             <p className="font-medium text-slate-800">{section.title}</p>
             <p className="mt-1 text-sm text-slate-500">{section.hint}</p>
-            <p className="mt-3 text-xs font-medium text-slate-400">{t('comingSoon.badge', { phase: section.phase })}</p>
+            <p className="mt-3 text-xs font-medium text-slate-400">
+              {section.phase === undefined ? t('suppliers.detail.notScheduled') : t('comingSoon.badge', { phase: section.phase })}
+            </p>
           </div>
         ))}
       </div>

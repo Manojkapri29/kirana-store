@@ -86,7 +86,11 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
 ## C. Costing and missing cost
 
 - **C1.** Cost method is **moving weighted average**. On a purchase:
-  `new average = (stock × current average + quantity × purchase cost) / (stock + quantity)`.
+  `new average = (stock × current average + value received) / (stock + quantity)`, where **value received is
+  the net cost of the line: `round(quantity × price) − discount`**. A discount therefore lowers the cost of the
+  goods. Averages are whole paise, rounded half up. The example 100 at ₹20 then 50 at ₹30 gives 150 units at
+  ₹23.33. `products.avg_cost` is a cached value: it can always be rebuilt by replaying the ledger (see PU9).
+  When **nothing is on hand** (stock zero or below) the new average is simply the incoming cost.
 - **C2.** Each sale line stores `unit_cost` and `cogs_amount` **at the time of sale**. Later cost changes
   never rewrite past profit.
 - **C3.** **Missing cost stays `NULL`, never `0`.** This applies to `products.purchase_price`,
@@ -94,7 +98,9 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
   opening stock entered without a cost), the sale line's cost is `NULL`, and any profit that depends on it is
   flagged "incomplete: cost missing on N lines". Unknown cost is never treated as free.
 - **C4.** Returns reverse at the original cost, and both sales and purchase returns recompute the
-  average. **(open, Phase 5):** exact handling when known-cost and unknown-cost stock are on hand together.
+  average. **Known cost arriving on top of unknown-cost stock leaves the average unknown** (`NULL`): the old
+  units' cost is not guessed. It stays unknown until the shelf empties, and then the next purchase sets it.
+  (Decided in Phase 5.) Adjustments change stock but never the average.
 - **C5.** Stock value = stock × average cost (not selling price), with the same missing-cost flag.
 - **C6.** Purchases are not expenses. Buying stock does not reduce profit until that stock is sold.
 
@@ -119,8 +125,51 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
   a supplier which later becomes inactive keeps the link and can still be edited.
 - **SP6.** Every create, update, activate and deactivate is written to the audit log with before and after values;
   an update that changes nothing writes nothing.
-- **SP7.** Purchases, purchase returns, supplier payments and a supplier ledger belong to later phases. A
-  supplier's "products" today means products that name it as their default supplier.
+- **SP7.** Purchases arrived in Phase 5 (see PU). Purchase returns and supplier payments and ledger belong to
+  later phases. A supplier's "products" means products that name it as their default supplier; its purchase
+  history lists its purchases.
+
+## PU. Purchases (Phase 5)
+
+- **PU1. Lifecycle: DRAFT, POSTED, VOID.** A **draft** is work in progress: no number, no stock or cost effect,
+  freely editable (header and lines). **Posting** is the only step that changes stock. A **posted** purchase is
+  never edited or deleted. **Void** is the only way out (there is no DELETE): it needs a reason and keeps the
+  record and its number. A draft that is voided is "discarded" (it never had a number or stock effect).
+- **PU2. Posting is atomic and happens once.** In one database transaction: the purchase gets its number, each
+  line adds one positive `PURCHASE` row to the stock ledger, each product's average cost is updated, the
+  stock/cost snapshot is stored on each line, and the audit entry is written. If anything fails nothing is
+  kept (no stock, no number). The purchase row is locked, so two simultaneous posts cannot both succeed; the
+  second gets a conflict. Posting an empty purchase is refused.
+- **PU3. Numbers** look like `PUR/2026-27/0001`: per shop, per document type, per financial year (April to
+  March), gapless (a rolled-back posting gives its number back), assigned at posting from the posting date in
+  the shop's timezone. Drafts have no number. A voided purchase keeps its number, which is never reused.
+- **PU4. Validation.** The supplier must belong to the shop and be active. Each product must belong to the shop
+  and be active. Quantity must be greater than zero (fractions only for units that allow them); price is
+  zero or more (zero allowed for free goods, never negative); a discount is an amount, not more than the line.
+  The date cannot be in the future. The line unit is the product's own unit. Every bad field is reported at
+  once, with the line it belongs to. Amounts travel as strings, never floats.
+- **PU5. Line total** = `round_half_up(quantity × price) − discount`, in whole paise. The purchase total is the
+  sum of the line totals.
+- **PU6. Supplier invoice number** is optional. Among live (draft or posted) purchases it cannot repeat for the
+  same supplier (case-insensitive). A voided purchase **releases** its invoice number, so a corrected copy can
+  reuse it. Enforced by a partial unique index as well as the service.
+- **PU7. Void of a posted purchase** writes a `REVERSAL` ledger row for each line and rebuilds the average cost
+  of each product from its history **without** the voided purchase, so it leaves no trace in the average. It is
+  **refused** if it would take stock below zero (some of that stock was already sold or removed), unless the
+  shop allows negative stock. The check covers every line before anything is changed.
+- **PU8. Correcting a mistake:** void the purchase, then "make a corrected copy": a new draft with the same
+  supplier, invoice number, date, notes and lines, linked through `replaces_id`. A voided purchase can be
+  corrected once.
+- **PU9. The average is rebuildable.** `rebuild_average_cost` replays a product's ledger in the order it was
+  recorded, leaving out movements that were reversed, and must reproduce the stored value; if the replayed
+  stock differs from the ledger stock it stops instead of guessing. Later purchases keep their own historical
+  snapshot (`stock_before`, `avg_cost_before/after`) even if an earlier purchase is voided.
+- **PU10.** Stock is never stored on a product or a purchase. Only `inventory_service` touches the ledger and
+  assigns `avg_cost`; purchase code goes through it (enforced by architecture tests).
+- **PU11.** Supplier payments, the amount paid and the supplier ledger are **not** part of Phase 5. The
+  `amount_paid` columns exist but nothing writes them.
+- **PU12.** Every create, edit, item change, post, void, discard and correction is audited with before and
+  after values.
 
 ## B. Business types (Phase 3 extension)
 
@@ -236,8 +285,10 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
   including negative ones, are not changed. Amounts are written from exact decimals. Money columns use
   `#,##0.00`, quantity columns `#,##0.000`, dates are real Excel date cells shown as `dd/mm/yyyy`; recorded-at
   times are converted to the shop's timezone. CSV dates are ISO. Files are named like `products_2026-09-20.csv`.
-- **X6.** Available now: Products, Inventory (current stock) and Inventory history (the ledger with running
-  balance). The engine is generic; each later module supplies its own columns and rows.
+- **X6.** Available now: Products, Inventory (current stock), Inventory history (the ledger with running
+  balance and the purchase each row came from), and (Phase 5) Purchases (one row per purchase), Purchase items
+  (one row per line, with stock and average-cost snapshots) and a single purchase with its lines. The engine is
+  generic; each later module supplies its own columns and rows.
 
 ## T. Tenancy and security
 

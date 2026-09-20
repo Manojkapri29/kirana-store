@@ -1,7 +1,7 @@
 # Database
 
 > **Status: implemented.** Migration `0001` (Phase 2) created the schema; migration `0002` (Phase 3 extension)
-> added business types; migration `0003` (Phase 4) extended suppliers. 24 tables. Rules are in [BUSINESS_RULES.md](BUSINESS_RULES.md);
+> added business types; migration `0003` (Phase 4) extended suppliers; migration `0004` (Phase 5) turned the purchase tables into a workflow. 24 tables. Rules are in [BUSINESS_RULES.md](BUSINESS_RULES.md);
 > the workflows that fill these tables arrive in Phases 3 to 13.
 
 ## Principles
@@ -124,10 +124,20 @@ Both ledgers, and `audit_log`, are **protected by database triggers** that abort
 never be deleted, tests build a fresh database per test rather than cleaning up.
 
 ### Purchasing
-- **`purchases`**: supplier, supplier_invoice_no? (unique per supplier when present), purchase_date,
-  total_amount, amount_paid (<= total), payment_method?, payment_reference?, notes?, plus the document
-  lifecycle columns below.
-- **`purchase_items`**: purchase, product, quantity > 0, unit_cost, line_total.
+- **`purchases`** *(reshaped by `0004`)*: supplier, supplier_invoice_no?, purchase_date, total_amount (sum of
+  the line totals), amount_paid (<= total; unused until supplier payments), payment_method?,
+  payment_reference?, notes?, `status` (`DRAFT`/`POSTED`/`VOID`, no default: created as `DRAFT`),
+  `purchase_no?` (unique per shop; set at posting), `posted_at?`, `posted_by?`, `void_reason?` (required when
+  `VOID`), `voided_at?`, `replaces_id?` (unique), `created_by`.
+  - `purchase_no` and `posted_at` exist together; a `POSTED` purchase must have a number; a `DRAFT` has none.
+  - The supplier-invoice rule is a **partial unique index** `(shop, supplier, supplier_invoice_no) WHERE
+    status <> 'VOID'`: unique among live purchases, released by a void. (Works on SQLite and PostgreSQL.)
+  - This table no longer uses the shared document-lifecycle columns; `0004` replaced the status check
+    (`'POSTED','VOID'` → `'DRAFT','POSTED','VOID'`) and the void-reason check.
+- **`purchase_items`** *(extended by `0004`)*: purchase, product, `unit_id` (the product's unit), quantity > 0,
+  unit_cost (price before discount), `discount` (>= 0, an amount), line_total (= round(quantity × unit_cost) −
+  discount; what costing uses), and a posting snapshot, `NULL` on drafts: `stock_before`, `avg_cost_before?`,
+  `avg_cost_after?` (`NULL` cost means unknown).
 - **`purchase_returns`**: purchase, return_date, `credit_mode` (`CASH`/`UPI`/`SUPPLIER_CREDIT`), total_amount, reason?.
 - **`purchase_return_items`**: return, the original `purchase_item`, product, quantity > 0, unit_cost, line_total.
 
@@ -191,6 +201,21 @@ no table is rebuilt: existing suppliers keep their data (the new columns are `NU
 valid. Tested against a database that already holds a supplier and a linked product, including downgrade and
 re-upgrade. Format checks (phone, email, GSTIN) are done by the service, not by `CHECK` constraints, because
 adding a `CHECK` to an existing SQLite table means rebuilding it.
+
+## Migration 0004: purchases
+
+Turns `purchases` and `purchase_items` into the Phase 5 workflow (columns above). Steps: add the new columns;
+**backfill** any purchase that already exists as `POSTED` with the number `PUR/LEGACY/<id>` and `posted_at =
+created_at`, and each line's `unit_id` from its product; then tighten the constraints (status now allows
+`DRAFT`, the new number/posted/draft checks, the unique number, the `posted_by` foreign key), replace the
+old unique `(shop, supplier, invoice)` constraint with the partial index, and add the line checks. The table
+rebuilds SQLite needs for this run with foreign keys off, then `PRAGMA foreign_key_check` (as in `0002`); on
+PostgreSQL it is plain `ALTER TABLE`. Because the migration environment re-prefixes check-constraint names,
+every `CHECK` name in the migration is wrapped in `op.f(...)`. The backfill is a single SQL statement, so
+`alembic upgrade --sql` also renders. Tested against a database holding posted and void purchases: rows,
+numbers, units and foreign keys survive, the new rules are enforced, downgrade and re-upgrade work.
+**Downgrade is refused while any `DRAFT` purchase exists** (revision `0003` has no draft status): post or
+discard them first.
 
 ## Always derived, never stored
 

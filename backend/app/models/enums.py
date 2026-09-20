@@ -77,6 +77,15 @@ class DocumentStatus(StrEnum):
     VOID = "VOID"
 
 
+class PurchaseStatus(StrEnum):
+    """A purchase starts as a DRAFT (no effect on stock), becomes POSTED (stock and cost change), and can
+    later be VOIDED (its stock effect is reversed). Only POSTED purchases affect inventory."""
+
+    DRAFT = "DRAFT"
+    POSTED = "POSTED"
+    VOID = "VOID"
+
+
 class PaymentType(StrEnum):
     PAID = "PAID"
     CREDIT = "CREDIT"

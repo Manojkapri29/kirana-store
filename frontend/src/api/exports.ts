@@ -1,7 +1,13 @@
 import { API_V1_PREFIX, apiDownload, type Query } from './client'
 import type { ExportFormat } from './types'
 
-export type ExportKind = 'products' | 'inventory' | 'inventory-history'
+export type ExportKind =
+  | 'products'
+  | 'inventory'
+  | 'inventory-history'
+  | 'purchases'
+  | 'purchase-items'
+  | `purchases/${number}` // one purchase with its lines
 
 /** Fetch an export and hand it to the browser as a file download. */
 export async function downloadExport(
