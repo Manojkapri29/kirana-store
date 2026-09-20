@@ -6,8 +6,8 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 
 | # | Phase | Status |
 |---|---|---|
-| 1 | Project setup and foundation | Done, awaiting review |
-| 2 | Database/models + SQLite + Alembic | Planned |
+| 1 | Project setup and foundation | Done |
+| 2 | Database/models + SQLite + Alembic | Done, awaiting review |
 | 3 | Products + inventory ledger core + export framework | Planned |
 | 4 | Suppliers | Planned |
 | 5 | Purchases + weighted average cost | Planned |
@@ -33,17 +33,20 @@ English/Hindi switching, and an API client layer. Documentation, `.gitignore`, `
 **Done when:** both apps start, `/health` works, the frontend builds and type-checks, tests and lint pass.
 
 ### Phase 2: Database/models + SQLite + Alembic
-Database engine driven by `KIRANA_DATABASE_URL`, SQLite connection settings (foreign keys on, WAL,
-`BEGIN IMMEDIATE` write transactions), the `Money`, `Quantity` and UTC timestamp column types,
-all models from [DATABASE.md](DATABASE.md), the first Alembic migration (batch mode), the document
-sequence table, seed data (units), and a temporary single-shop development context.
-**Done when:** migrations apply and roll back on an empty database; money and quantity values
-round-trip exactly; insert-only ledger protection is tested.
+Database engine driven by `KIRANA_DATABASE_URL` with SQLite settings (foreign keys on, WAL, busy timeout,
+explicit transactions, `BEGIN IMMEDIATE` for writes), `read_session` and `write_transaction`, the `Money`,
+`Quantity` and UTC timestamp types, all 23 tables (including the insert-only stock and customer ledgers and
+the money-only `quick_sales`), composite tenant foreign keys, the first Alembic migration (`0001`), seeded
+units, a development seed script, and the `inventory_service` / `khata_service` placeholders.
+**Done when:** migrations apply and roll back on an empty database and match the models; money and quantity
+values round-trip exactly; ledgers cannot be updated or deleted; a row cannot reference another shop; the
+migration renders valid PostgreSQL DDL. No services, endpoints or screens use the database yet.
 
 ### Phase 3: Products + inventory ledger core + export framework
-Categories and products (including MRP and barcode field), `OPENING` ledger entries,
-`inventory_service` as the only ledger writer, the stock query, and the shared CSV/XLSX exporter with
-Products and Inventory exports.
+The temporary single-shop development context (current shop and user for routes, until Phase 14),
+categories and products (including MRP and barcode field), `OPENING` ledger entries, `inventory_service`
+as the only ledger writer, the stock query, and the shared CSV/XLSX exporter with Products and Inventory
+exports. Decides the default `mrp_validation_mode` for new shops.
 **Done when:** a product created with opening stock 20 reads 20; MRP validation follows the shop setting;
 exports open cleanly in Excel.
 
@@ -108,5 +111,7 @@ Containers, production configuration, backups, and a security review.
 
 ## Explicitly out of MVP scope
 Payment reminders, GST invoicing, UPI/payment-gateway integration, barcode scanner integrations,
-multiple shops per account, subscription billing, WhatsApp notifications, and the AI assistant. The
-architecture leaves room for each (see [ARCHITECTURE.md](ARCHITECTURE.md)).
+multiple shops per account, subscription billing, WhatsApp notifications, **customer online ordering
+(storefront, cart, COD/UPI orders, delivery)**, and the AI assistant. The architecture leaves room for each
+(see [ARCHITECTURE.md](ARCHITECTURE.md) and [DATABASE.md](DATABASE.md#future-online-ordering)). Online
+ordering will reuse the same products, customers, pricing and inventory; it will not get its own inventory.

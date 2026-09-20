@@ -4,8 +4,9 @@ Inventory and business management for small Indian grocery (kirana) shops: stock
 detailed and quick sales, returns, suppliers, customer khata (credit), expenses, reports and exports.
 Built to start as a single-shop app and grow into a multi-shop SaaS.
 
-> **Status: Phase 1 of 16 (project foundation).** The app starts, the API answers `GET /health`,
-> and the UI shell renders. There are no business features yet. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Status: Phase 2 of 16 (database foundation).** The API answers `GET /health`, the UI shell renders,
+> and the SQLite database, models and migration are in place. There are no business features yet:
+> nothing reads or writes the database from the app. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Stack
 
@@ -13,9 +14,9 @@ Built to start as a single-shop app and grow into a multi-shop SaaS.
 |---|---|
 | Frontend | React 19, Vite, TypeScript, Tailwind CSS 4, react-i18next (English/Hindi) |
 | Backend | Python, FastAPI, Pydantic settings |
-| Database | SQLite for the MVP, PostgreSQL later (both introduced from Phase 2; nothing to install now) |
+| Database | SQLAlchemy 2 + Alembic on SQLite for the MVP; PostgreSQL later (nothing to install now) |
 
-SQLAlchemy, Alembic and Recharts are added in the phases that first need them (2 and 12).
+Recharts is added in Phase 12, when the first chart is built.
 
 ## Prerequisites
 
@@ -36,6 +37,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.example .env
+alembic upgrade head        # creates backend/data/kirana.db (git-ignored)
+python -m app.seed          # optional: development shop + owner user
 uvicorn app.main:app --reload
 ```
 
@@ -59,6 +62,7 @@ needs no CORS setup. The header shows a green "Server connected" badge when the 
 ```bash
 # Backend (from backend/, venv active)
 pytest                 # tests
+alembic check          # models and migrations agree
 ruff check .           # lint
 ruff format --check .  # formatting
 
@@ -72,7 +76,7 @@ npm run build          # type-check + production build
 
 ```
 kirana-store/
-├── backend/     FastAPI app (app/), tests (tests/), requirements, .env.example
+├── backend/     FastAPI app (app/), migrations/, tests/, requirements, .env.example
 ├── frontend/    React + Vite + TypeScript app (src/), .env.example
 └── docs/        ARCHITECTURE, DATABASE, BUSINESS_RULES, ROADMAP
 ```

@@ -10,8 +10,9 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
 - **L1.** Stock is derived, never stored as an editable number:
   `Current Stock = Opening + Purchases - Sales + Sales Returns - Purchase Returns ± Adjustments`.
   It equals the sum of `inventory_transactions.qty_delta` for the product.
-- **L2.** `inventory_transactions` is **insert-only**. Nothing updates or deletes its rows.
-  `inventory_service` is the **only** code allowed to write to it.
+- **L2.** `inventory_transactions` is **insert-only**. Nothing updates or deletes its rows (a database
+  trigger aborts any attempt). `inventory_service` is the **only** code allowed to write to it; a test fails
+  if any other module references the table.
 - **L3.** Transaction types and signs: `OPENING` (+), `PURCHASE` (+), `SALE` (-), `SALE_RETURN` (+),
   `PURCHASE_RETURN` (-), `ADJUSTMENT` (±, with a reason code), `REVERSAL` (undoes an earlier entry).
   The database enforces the sign for each type.
@@ -72,8 +73,9 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
   `new average = (stock × current average + quantity × purchase cost) / (stock + quantity)`.
 - **C2.** Each sale line stores `unit_cost` and `cogs_amount` **at the time of sale**. Later cost changes
   never rewrite past profit.
-- **C3.** **Missing cost stays `NULL`, never `0`.** If the average cost is unknown (for example opening
-  stock entered without a cost), the sale line's cost is `NULL`, and any profit that depends on it is
+- **C3.** **Missing cost stays `NULL`, never `0`.** This applies to `products.purchase_price`,
+  `products.avg_cost`, ledger `unit_cost` and sale-line cost. If the average cost is unknown (for example
+  opening stock entered without a cost), the sale line's cost is `NULL`, and any profit that depends on it is
   flagged "incomplete: cost missing on N lines". Unknown cost is never treated as free.
 - **C4.** Returns reverse at the original cost, and both sales and purchase returns recompute the
   average. **(open, Phase 5):** exact handling when known-cost and unknown-cost stock are on hand together.
@@ -87,12 +89,15 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
 - **P2.** MRP validation is **configurable per shop**, not hard-coded: when a selling price (on the product
   or on a sale line) exceeds MRP, the shop setting decides whether to **warn** or **block**. Selling above
   the printed MRP on packaged goods is generally not allowed in India, which is why the check exists.
+  The setting is `shops.mrp_validation_mode` (`WARN` or `BLOCK`). The database does not enforce
+  `selling price <= MRP`, because in `WARN` mode a higher price is allowed.
   **(open, Phase 3):** which mode is the default for a new shop.
 - **P3.** The MRP in force is copied onto each sale line as a snapshot.
 
 ## K. Khata (customer credit)
 
-- **K1.** The customer ledger is **insert-only** and `khata_service` is its only writer. Outstanding balance
+- **K1.** The customer ledger is **insert-only** (enforced by a database trigger) and `khata_service` is
+  its only writer. Outstanding balance
   is the sum of entries (positive = the customer owes the shop); it is never stored.
 - **K2.** Entry types: `OPENING_BALANCE`, `CREDIT_SALE`, `PAYMENT`, `RETURN_CREDIT`, `ADJUSTMENT`, `REVERSAL`.
 - **K3.** A credit sale needs a customer and `amount paid < total`; the unpaid part posts a `CREDIT_SALE`.
@@ -154,3 +159,30 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
 Barcode scanner integrations and UPI/payment gateways: the schema carries a nullable barcode and payment
 reference fields, and the `UPI` payment method exists, but no integrations are built. Also out of scope:
 GST invoicing, payment reminders, multi-shop accounts, subscriptions, WhatsApp notifications, and the AI assistant.
+
+## O. Online ordering (future, not in the MVP)
+
+- **O1.** A future customer storefront, cart, online orders (COD/UPI), delivery and order history must reuse
+  the same products, customers, pricing and inventory as in-store sales.
+- **O2.** There is **no second inventory system**. Stock remains the sum of `inventory_transactions`. An
+  accepted online order is fulfilled by creating a normal Detailed Sale, so stock, cost snapshots, MRP checks,
+  returns and reports all behave exactly as for a shop sale.
+
+## Where each rule is enforced
+
+Some rules are guaranteed by the database itself (they hold even if application code has a bug); others
+need business logic in services, which arrive in later phases.
+
+| Enforced by the database now (Phase 2) | Enforced by services later |
+|---|---|
+| L2 insert-only ledgers (triggers) | L4 no negative stock, and locking |
+| L3 sign matches transaction type | L6 return and void behaviour |
+| A1 adjustments need a reason code; `OTHER` needs a note | R1-R5 return caps, proportional refunds, dates |
+| S2 quick sales have no product or cost columns | S5 warnings shown to the user |
+| K3 PAID/CREDIT shape (customer required for credit, paid < total) | K2-K6 khata entries and balances |
+| C3 cost and COGS are both set or both `NULL` | C1, C2 average cost and cost snapshots |
+| V unique SKU/barcode/invoice/phone, non-negative prices, positive quantities, valid enum values, non-blank required text | V decimal quantities per unit, active parents, dates, idempotency |
+| T1 a row cannot reference another shop's row (composite foreign keys) | T1 every query filters by shop; authorization |
+| E1 void needs a reason; a row is reversed once | E1 edit = void + new document; audit entries |
+| | P2 MRP warn/block |
+| | F1-F4 profit, X1-X4 exports |

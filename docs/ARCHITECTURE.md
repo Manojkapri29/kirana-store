@@ -1,7 +1,7 @@
 # Architecture
 
 > Sections marked **(planned)** describe the target design and are not implemented yet.
-> What exists in Phase 1 is listed under [Current state](#current-state).
+> What exists today is listed under [Current state](#current-state).
 
 ## Overview
 
@@ -33,21 +33,30 @@ it possible to split later if ever needed.
 ## Backend layers
 
 ```
-backend/app/
-├── main.py            application factory and entry point
-├── core/              settings and other cross-cutting setup
-├── api/
-│   ├── routes/        operational routes (health)
-│   └── v1/            versioned business routers, mounted at /api/v1
-└── services/          business rules and transactions
+backend/
+├── app/
+│   ├── main.py            application factory and entry point
+│   ├── seed.py            development seed (one shop + owner); refuses to run in production
+│   ├── core/              settings and other cross-cutting setup
+│   ├── db/                engine, sessions/transactions, Money/Quantity/UTC types
+│   ├── models/            SQLAlchemy models, one module per area
+│   ├── api/
+│   │   ├── routes/        operational routes (health)
+│   │   └── v1/            versioned business routers, mounted at /api/v1
+│   └── services/          business rules and transactions
+├── migrations/            Alembic environment and versions
+└── tests/
 ```
 
 | Layer | Responsibility | Must not |
 |---|---|---|
 | Routers (`api/`) | Parse and validate the request, call a service, shape the response | Contain business rules or touch the database |
-| Services (`services/`) | Enforce rules, run one database transaction per action | Import from `api/` |
-| Models (planned, Phase 2) | Table definitions and column types | Contain workflows |
+| Services (`services/`) | Enforce rules, run one write transaction per action | Import from `api/`; call `commit()` themselves |
+| Models (`models/`) | Table definitions, constraints, column types | Contain workflows; import services or `api/` |
+| DB (`db/`) | Engine, SQLite settings, transactions, column types | Know about models or business rules |
 | Reporting (planned) | Read-only queries | Write anything |
+
+These import rules are enforced by `tests/test_architecture.py`.
 
 ## Service layer and boundaries (planned)
 
@@ -65,7 +74,9 @@ backend/app/
 Other services call `inventory_service` and `khata_service`; nothing else writes their tables. This gives
 one place to test and reason about stock and balances.
 
-## Inventory ledger (planned)
+## Inventory ledger
+
+The table `inventory_transactions` exists (Phase 2); `inventory_service` (Phase 3) will fill it.
 
 Stock is **never stored as an editable number**. Every stock movement is a row in the insert-only
 `inventory_transactions` table with a signed quantity, and current stock is the sum for a product:
@@ -75,17 +86,25 @@ Current Stock = Opening + Purchases - Sales + Sales Returns - Purchase Returns �
               = SUM(inventory_transactions.qty_delta)
 ```
 
-- Rows are only inserted. Corrections are new rows (returns, adjustments, reversals), so the history
-  is complete and auditable.
-- Only Detailed Sales touch the ledger. Quick Sales never do (see [BUSINESS_RULES.md](BUSINESS_RULES.md)).
-- The stock check and the write happen in one database transaction. On SQLite, write transactions are
-  serialized; on PostgreSQL, product rows are locked (`SELECT ... FOR UPDATE`).
+- Rows are only inserted. A database trigger aborts any `UPDATE` or `DELETE`. Corrections are new rows
+  (returns, adjustments, reversals), so the history is complete and auditable.
+- The database also enforces that each type has the right sign, that adjustments carry a reason code, and
+  that a row is reversed at most once.
+- Only Detailed Sales touch the ledger. Quick Sales never do: the `quick_sales` table has no product columns
+  at all (see [BUSINESS_RULES.md](BUSINESS_RULES.md)).
+- **One writer.** `inventory_service` is the only module allowed to reference the table; a test scans the
+  source and fails if any other module does (the future read-only `reporting` package is allowed to read it).
+- The stock check and the write happen in one write transaction. On SQLite that transaction is
+  `BEGIN IMMEDIATE`; on PostgreSQL, product rows are locked with `SELECT ... FOR UPDATE`.
 
-## Customer ledger (planned)
+## Customer ledger
 
-Khata works the same way: an insert-only `customer_ledger` with signed amounts. A customer's outstanding
-balance is the sum of their entries. Entry types: opening balance, credit sale, payment, return credit,
-adjustment, reversal.
+The table `customer_ledger` exists (Phase 2); `khata_service` (Phase 6) will fill it.
+
+Khata works the same way: an insert-only ledger with signed amounts, protected by the same trigger. A
+customer's outstanding balance is the sum of their entries. Entry types: opening balance, credit sale,
+payment, return credit, adjustment, reversal. `khata_service` is the only module allowed to reference the
+table (same source-scanning test).
 
 ## Reporting layer (planned)
 
@@ -101,19 +120,31 @@ into product analytics or profit are enforced.
 
 Not built in the MVP, but the foundations are laid now because they are expensive to retrofit:
 
-- Every business table carries `shop_id`, and every query is scoped by it.
-- The service layer receives the current shop from a single dependency. It is a fixed development shop
-  until authentication (Phase 14) replaces it with the logged-in user's shop.
+- Every business table carries `shop_id`, and **references between shop-owned tables are composite foreign
+  keys `(shop_id, x_id)`**. The database refuses a row in Shop A that points at a row in Shop B, so isolation
+  does not depend on every query remembering a `WHERE shop_id = ...`. Queries must still filter by shop.
+- The service layer will receive the current shop from a single dependency. Until authentication (Phase 14)
+  it is a fixed development shop, added in Phase 3 together with the first routes that need it.
 - Users belong to a shop and have a role (owner/staff).
 - No shop data in global state, files or caches without a shop key.
 - Later: PostgreSQL Row-Level Security as defence in depth, subscription plans and usage limits, an admin
   panel, WhatsApp notifications, scheduled reports and cloud backup.
 
+## Future: online ordering (not built)
+
+A customer storefront, cart, online orders (COD/UPI), delivery address and status, and order history are
+future work. The rule for it is **reuse, never duplicate**: it uses the same `products`, `customers`,
+pricing and inventory. There is no second inventory system; an accepted order becomes a normal Detailed
+Sale created through `detailed_sale_service`, which posts stock through `inventory_service`. Details are in
+[DATABASE.md](DATABASE.md#future-online-ordering).
+
 ## Database strategy
 
-SQLite for the MVP (zero setup, one file), PostgreSQL when hosting many shops. The code is written so the
-switch is a configuration change plus a verification run. Details, and why SQLite is safe for the ledger
-logic, are in [DATABASE.md](DATABASE.md).
+SQLite for the MVP (zero setup, one file), PostgreSQL when hosting many shops. The database is chosen only by
+`KIRANA_DATABASE_URL`, and the code avoids dialect-specific SQL. Sessions and transactions are in
+`app/db/session.py`: reads use a plain transaction, and every change runs in one `write_transaction()`.
+The full design, including why SQLite is safe for the ledger logic and what is still unverified on
+PostgreSQL, is in [DATABASE.md](DATABASE.md).
 
 ## Configuration and security
 
@@ -126,17 +157,30 @@ logic, are in [DATABASE.md](DATABASE.md).
 
 ## Current state
 
-Phase 1 delivers the skeleton only:
-
-- Backend: application factory, settings, `GET /health`, an empty `/api/v1` router, tests.
+**Phase 1 (foundation)**
+- Backend: application factory, settings, `GET /health`, an empty `/api/v1` router.
 - Frontend: routing, responsive shell (sidebar drawer on mobile), dashboard placeholder, "coming soon"
   pages for planned modules, English/Hindi switching, API client, and a live server-status badge.
-- No database, models, authentication, or business features.
+
+**Phase 2 (database foundation)**
+- SQLite engine (foreign keys, WAL, busy timeout, explicit transactions), `read_session` /
+  `write_transaction`, and the `Money`, `Quantity` and `UTCDateTime` types.
+- 23 tables (see [DATABASE.md](DATABASE.md)), created by Alembic migration `0001`, with the shared units
+  seeded and the insert-only triggers installed.
+- A development seed script.
+- **No services, endpoints or screens use the database yet.** `inventory_service` and `khata_service` are
+  documented placeholders.
 
 ## Testing strategy
 
-- Backend: pytest against the FastAPI app. From Phase 2, tests run on a real SQLite database, with
-  service-level tests for every business rule, invariant tests (ledger sum equals reported stock across
-  random sequences), a concurrency test for overselling, and tenant-isolation tests.
+- Database tests run on SQLite files created by the **real Alembic migration** (not `create_all`), so they
+  test the schema that ships. The migration runs once per session; each test gets a private copy.
+- They cover: connection and SQLite settings, write-transaction commit/rollback and the write lock,
+  `Money`/`Quantity` exactness, migration up/down and model-versus-migration drift (`alembic check`),
+  PostgreSQL DDL rendering, uniqueness, foreign keys, cross-shop references, value validity, the ledger rules
+  and insert-only triggers, seed data, and the architecture rules.
+- From Phase 3, each service rule gets tests, plus invariant tests (ledger sum equals reported stock across
+  random sequences) and a concurrency test for overselling.
 - Frontend: TypeScript strict checks, oxlint, and a production build on every change.
 - PostgreSQL: the same suite runs on PostgreSQL at the checkpoint after Phase 10 and again in Phase 15.
+

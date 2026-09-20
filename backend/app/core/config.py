@@ -5,10 +5,15 @@ Nothing secret is hard-coded here; see `.env.example` for the available variable
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+# The backend/ directory. Relative SQLite paths are resolved against it, so the database location
+# does not depend on which directory a command happens to be started from.
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -23,6 +28,11 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: Literal["development", "test", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+
+    # SQLite for the MVP; a PostgreSQL URL (postgresql+psycopg://...) works after the Phase 15 gate.
+    database_url: str = "sqlite:///./data/kirana.db"
+    # How long a SQLite connection waits for another writer before failing with "database is locked".
+    db_busy_timeout_ms: int = 5000
 
     # NoDecode lets us accept a plain comma-separated string instead of JSON.
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
