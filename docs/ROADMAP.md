@@ -8,8 +8,8 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 |---|---|---|
 | 1 | Project setup and foundation | Done |
 | 2 | Database/models + SQLite + Alembic | Done |
-| 3 | Products + inventory ledger core + export framework | Done, awaiting review |
-| 4 | Suppliers | Planned |
+| 3 | Products + inventory ledger core + export framework | Done |
+| 4 | Suppliers | Done, awaiting review |
 | 5 | Purchases + weighted average cost | Planned |
 | 6 | Customers + Khata | Planned |
 | 7 | Detailed Sales | Planned |
@@ -64,8 +64,17 @@ identically for every business type and every unit, two shops can have different
 contains nothing business-specific.
 
 ### Phase 4: Suppliers
-Supplier create/edit/deactivate, search, and export.
-**Done when:** validation and duplicate-handling tests pass.
+Generic supplier management for every business type: add, list, search (name, phone, email, GSTIN), view,
+edit, and activate/deactivate suppliers (never deleted). Optional details: phone, alternate phone, email,
+address, GSTIN, notes. A product may name an optional **default supplier**; one supplier may supply many
+products, and a supplier's screen lists them. Migration `0003` adds the new columns and two indexes. The
+supplier detail page is laid out for the sections that later phases fill in (purchase history, purchase
+returns, payments and outstanding); none of those exist yet.
+**Done when:** suppliers can be created, found, edited and deactivated; products can have or not have a default
+supplier; an inactive supplier cannot be newly chosen but existing links survive; a shop can never see or use
+another shop's suppliers.
+*Not in this phase:* purchases, supplier payments or ledger, and a supplier export (the export engine can
+add one at any time).
 
 ### Phase 5: Purchases + weighted average cost
 Purchase entry with paid/unpaid amounts, void, the `costing` service (moving weighted average), and export.

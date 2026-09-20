@@ -1,7 +1,7 @@
 # Database
 
 > **Status: implemented.** Migration `0001` (Phase 2) created the schema; migration `0002` (Phase 3 extension)
-> added business types. 24 tables. Rules are in [BUSINESS_RULES.md](BUSINESS_RULES.md);
+> added business types; migration `0003` (Phase 4) extended suppliers. 24 tables. Rules are in [BUSINESS_RULES.md](BUSINESS_RULES.md);
 > the workflows that fill these tables arrive in Phases 3 to 13.
 
 ## Principles
@@ -91,7 +91,13 @@ Global tables: `shops` (the tenants) and `units` (shared reference data).
   enforced by services (BUSINESS_RULES P2).
 
 ### Parties
-- **`suppliers`**: shop, name, phone?, address?, gstin?, is_active.
+- **`suppliers`**: shop, name (required, not unique), phone?, alternate_phone?, email?, address?, gstin?, notes?,
+  is_active. *(alternate_phone, email and notes were added by `0003`.)* Phone numbers are stored compactly
+  (`9876543210`, `+919876543210`), email in lower case, GSTIN in upper case. Names, phones and GSTINs are
+  deliberately **not** unique: a likely duplicate is a warning, not an error. Indexed on `(shop_id, name)`.
+  A product refers to its optional default supplier through the composite foreign key
+  `products (shop_id, default_supplier_id) -> suppliers (shop_id, id)`, so a product can never use another
+  shop's supplier, and `(shop_id, default_supplier_id)` is indexed for "products of this supplier".
 - **`customers`**: shop, name, phone? (unique per shop when present), address?, notes?, is_active.
   The khata balance is not stored here.
 
@@ -177,6 +183,14 @@ a second opening entry is refused by the database as well as by the service.
 - Tested against a database that already holds a shop, user, category, product and ledger row: all rows and
   constraints survive, foreign keys stay valid, the ledger trigger survives, downgrade and re-upgrade work.
 - The downgrade removes the four new units and fails loudly if a product already uses one.
+
+## Migration 0003: supplier details
+
+Adds `suppliers.alternate_phone`, `email` and `notes` (all nullable) and two indexes. Nothing else changes and
+no table is rebuilt: existing suppliers keep their data (the new columns are `NULL`) and product links stay
+valid. Tested against a database that already holds a supplier and a linked product, including downgrade and
+re-upgrade. Format checks (phone, email, GSTIN) are done by the service, not by `CHECK` constraints, because
+adding a `CHECK` to an existing SQLite table means rebuilding it.
 
 ## Always derived, never stored
 

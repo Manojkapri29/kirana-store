@@ -13,6 +13,7 @@ const BASE = `${API_V1_PREFIX}/products`
 export interface ProductListParams {
   q?: string
   category_id?: number | null
+  supplier_id?: number | null
   status?: StatusFilter
   limit?: number
   offset?: number

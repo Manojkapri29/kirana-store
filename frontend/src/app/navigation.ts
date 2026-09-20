@@ -68,8 +68,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
     path: '/suppliers',
     icon: ReceiptText,
     labelKey: 'nav.suppliers',
-    descriptionKey: 'modules.suppliers.description',
-    phase: 4,
   },
   {
     id: 'expenses',

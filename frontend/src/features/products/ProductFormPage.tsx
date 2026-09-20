@@ -6,8 +6,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { createCategory, getShop, getShopTemplate, listCategories, listUnits } from '@/api/catalog'
 import { ApiError } from '@/api/client'
 import { getProductHistory } from '@/api/inventory'
+import { listSupplierOptions } from '@/api/suppliers'
 import { createProduct, getProduct, updateProduct } from '@/api/products'
-import type { Category, Product, Shop, ShopTemplate, Unit } from '@/api/types'
+import type { Category, Product, Shop, ShopTemplate, SupplierOption, Unit } from '@/api/types'
 import { SelectField, TextField } from '@/components/fields'
 import { buttonClasses } from '@/components/buttonStyles'
 import { Alert, Button, LinkButton, PageHeader, QueryError, Spinner } from '@/components/ui'
@@ -40,6 +41,8 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'edit' }) {
   const shop = useQuery({ queryKey: ['shop'], queryFn: getShop })
   // Suggestions for this kind of business. If they cannot be loaded, the form works without them.
   const template = useQuery({ queryKey: ['shopTemplate'], queryFn: getShopTemplate })
+  // Active suppliers for the default-supplier picker. Optional: the form works without them.
+  const suppliers = useQuery({ queryKey: ['supplierOptions'], queryFn: listSupplierOptions })
   const product = useQuery({
     queryKey: ['product', productId],
     queryFn: () => getProduct(productId),
@@ -86,6 +89,7 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'edit' }) {
         units={units.data}
         shop={shop.data}
         template={template.data}
+        suppliers={suppliers.data ?? []}
         unitLocked={mode === 'edit' && (history.data?.total ?? 0) > 0}
       />
     </div>
@@ -99,10 +103,20 @@ interface ProductFormProps {
   units: Unit[]
   shop: Shop
   template: ShopTemplate | undefined
+  suppliers: SupplierOption[]
   unitLocked: boolean
 }
 
-function ProductForm({ mode, product, categories, units, shop, template, unitLocked }: ProductFormProps) {
+function ProductForm({
+  mode,
+  product,
+  categories,
+  units,
+  shop,
+  template,
+  suppliers,
+  unitLocked,
+}: ProductFormProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -124,6 +138,13 @@ function ProductForm({ mode, product, categories, units, shop, template, unitLoc
       {candidate.name} ({candidate.code})
     </option>
   )
+  // A product that already uses a since-deactivated supplier keeps it visible and selectable, so editing
+  // other details never silently drops the link. A different inactive supplier cannot be newly chosen.
+  const currentSupplier =
+    product?.default_supplier_id != null && !suppliers.some((s) => s.id === product.default_supplier_id)
+      ? { id: product.default_supplier_id, name: product.default_supplier_name ?? String(product.default_supplier_id) }
+      : null
+  const supplierOptions = currentSupplier ? [currentSupplier, ...suppliers] : suppliers
   const missingSuggestions = (template?.categories ?? []).filter((suggestion) => !suggestion.exists)
   const aboveMrp = sellingAboveMrp(values)
   const blockAboveMrp = aboveMrp && shop.mrp_validation_mode === 'BLOCK'
@@ -342,11 +363,16 @@ function ProductForm({ mode, product, categories, units, shop, template, unitLoc
           label={t('products.form.fields.defaultSupplier')}
           hint={t('products.form.hints.defaultSupplier')}
           optional
-          disabled
-          value=""
-          onChange={() => undefined}
+          value={values.supplierId}
+          onChange={(event) => setField('supplierId', event.target.value)}
+          error={errorFor('supplierId')}
         >
-          <option value="">—</option>
+          <option value="">{t('products.form.noSupplier')}</option>
+          {supplierOptions.map((supplier) => (
+            <option key={supplier.id} value={supplier.id}>
+              {supplier.name}
+            </option>
+          ))}
         </SelectField>
         <TextField
           label={t('products.form.fields.reorderLevel')}

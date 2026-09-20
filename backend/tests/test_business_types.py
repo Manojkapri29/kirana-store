@@ -352,7 +352,8 @@ class TestNoBusinessSpecificCodeInTheCore:
         "services/_filters.py", "services/shop_service.py", "services/errors.py",
         "models/catalog.py", "models/inventory.py", "models/khata.py", "models/purchasing.py",
         "models/sales.py", "models/expenses.py", "models/parties.py", "models/system.py", "models/base.py",
-        "api/v1/products.py", "api/v1/inventory.py", "api/v1/exports.py",
+        "api/v1/products.py", "api/v1/inventory.py", "api/v1/exports.py", "api/v1/suppliers.py",
+        "services/supplier_service.py", "services/contact_validation.py", "schemas/supplier.py",
         "schemas/product.py", "schemas/inventory.py", "schemas/common.py",
     ]  # fmt: skip
     BUSINESS_WORDS = re.compile(

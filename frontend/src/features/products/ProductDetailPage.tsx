@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Pencil, Power } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useParams } from 'react-router-dom'
 
@@ -137,22 +138,32 @@ function StockCard({ product }: { product: Product }) {
 
 function DetailsCard({ product }: { product: Product }) {
   const { t } = useTranslation()
-  const rows: [string, string][] = [
-    [t('products.columns.category'), product.category_name],
-    [t('products.form.fields.brand'), product.brand ?? NOT_SET],
-    [t('products.form.fields.barcode'), product.barcode ?? NOT_SET],
-    [t('products.columns.unit'), `${product.unit_name} (${product.unit_code})`],
-    [t('products.columns.mrp'), formatMoney(product.mrp)],
-    [t('products.columns.sellingPrice'), formatMoney(product.selling_price)],
-    [t('products.columns.purchasePrice'), formatMoney(product.purchase_price)],
-    [`${t('products.detail.avgCost')} (${t('products.detail.avgCostNote').toLowerCase()})`, formatMoney(product.avg_cost)],
-    [t('products.form.fields.defaultSupplier'), NOT_SET],
+  const rows: { label: string; value: ReactNode }[] = [
+    { label: t('products.columns.category'), value: product.category_name },
+    { label: t('products.form.fields.brand'), value: product.brand ?? NOT_SET },
+    { label: t('products.form.fields.barcode'), value: product.barcode ?? NOT_SET },
+    { label: t('products.columns.unit'), value: `${product.unit_name} (${product.unit_code})` },
+    { label: t('products.columns.mrp'), value: formatMoney(product.mrp) },
+    { label: t('products.columns.sellingPrice'), value: formatMoney(product.selling_price) },
+    { label: t('products.columns.purchasePrice'), value: formatMoney(product.purchase_price) },
+    { label: `${t('products.detail.avgCost')} (${t('products.detail.avgCostNote').toLowerCase()})`, value: formatMoney(product.avg_cost) },
+    {
+      label: t('products.form.fields.defaultSupplier'),
+      value:
+        product.default_supplier_id === null ? (
+        NOT_SET
+      ) : (
+        <Link to={`/suppliers/${product.default_supplier_id}`} className="text-emerald-800 hover:underline">
+          {product.default_supplier_name}
+        </Link>
+      ),
+    },
   ]
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{t('products.detail.details')}</h2>
       <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-        {rows.map(([label, value]) => (
+        {rows.map(({ label, value }) => (
           <div key={label}>
             <dt className="text-sm text-slate-500">{label}</dt>
             <dd className="font-medium text-slate-900">{value}</dd>

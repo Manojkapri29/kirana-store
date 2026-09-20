@@ -55,6 +55,7 @@ export interface Product {
   unit_name: string
   unit_allows_decimal: boolean
   default_supplier_id: number | null
+  default_supplier_name: string | null
   reorder_level: string
   mrp: string | null
   selling_price: string
@@ -86,6 +87,7 @@ export interface ProductPayload {
   brand: string | null
   category_id: number
   unit_id: number
+  default_supplier_id: number | null
   reorder_level: string
   mrp: string | null
   selling_price: string
@@ -164,6 +166,43 @@ export interface OpeningStockResult {
     current_stock: string
     status: StockStatus
   }
+}
+
+export interface Supplier {
+  id: number
+  name: string
+  phone: string | null
+  alternate_phone: string | null
+  email: string | null
+  address: string | null
+  gstin: string | null
+  notes: string | null
+  is_active: boolean
+  /** Products that name this supplier as their default supplier. */
+  product_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface SupplierSaved {
+  supplier: Supplier
+  warnings: string[]
+}
+
+/** The editable details of a supplier. Blank optional fields are sent as null. */
+export interface SupplierPayload {
+  name: string
+  phone: string | null
+  alternate_phone: string | null
+  email: string | null
+  address: string | null
+  gstin: string | null
+  notes: string | null
+}
+
+export interface SupplierOption {
+  id: number
+  name: string
 }
 
 export type ExportFormat = 'csv' | 'xlsx'

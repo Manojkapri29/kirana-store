@@ -70,6 +70,7 @@ class ProductOut(BaseModel):
     unit_name: str
     unit_allows_decimal: bool
     default_supplier_id: int | None
+    default_supplier_name: str | None
     reorder_level: Decimal
     mrp: Decimal | None
     selling_price: Decimal
@@ -97,6 +98,7 @@ class ProductOut(BaseModel):
             unit_name=view.unit.name,
             unit_allows_decimal=view.unit.allows_decimal,
             default_supplier_id=p.default_supplier_id,
+            default_supplier_name=view.supplier_name,
             reorder_level=p.reorder_level,
             mrp=p.mrp,
             selling_price=p.selling_price,

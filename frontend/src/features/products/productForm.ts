@@ -15,6 +15,7 @@ export interface FormValues {
   brand: string
   categoryId: string
   unitId: string
+  supplierId: string // '' = no default supplier
   reorderLevel: string
   mrp: string
   sellingPrice: string
@@ -44,6 +45,7 @@ export const emptyValues = (): FormValues => ({
   brand: '',
   categoryId: '',
   unitId: '',
+  supplierId: '',
   reorderLevel: '0',
   mrp: '',
   sellingPrice: '',
@@ -62,6 +64,7 @@ export const valuesFromProduct = (product: Product): FormValues => ({
   brand: product.brand ?? '',
   categoryId: String(product.category_id),
   unitId: String(product.unit_id),
+  supplierId: product.default_supplier_id === null ? '' : String(product.default_supplier_id),
   reorderLevel: trimZeros(product.reorder_level),
   mrp: product.mrp ?? '',
   sellingPrice: product.selling_price,
@@ -134,6 +137,7 @@ function basePayload(values: FormValues): ProductPayload {
     brand: orNull(values.brand),
     category_id: Number(values.categoryId),
     unit_id: Number(values.unitId),
+    default_supplier_id: values.supplierId ? Number(values.supplierId) : null,
     reorder_level: values.reorderLevel.trim(),
     mrp: orNull(values.mrp),
     selling_price: values.sellingPrice.trim(),
@@ -167,6 +171,9 @@ export function buildUpdatePayload(values: FormValues, original: Product): Parti
   if (next.brand !== original.brand) changes.brand = next.brand
   if (next.category_id !== original.category_id) changes.category_id = next.category_id
   if (next.unit_id !== original.unit_id) changes.unit_id = next.unit_id
+  if (next.default_supplier_id !== original.default_supplier_id) {
+    changes.default_supplier_id = next.default_supplier_id
+  }
   if (!sameAmount(next.reorder_level, original.reorder_level)) changes.reorder_level = next.reorder_level
   if (!sameAmount(next.mrp, original.mrp)) changes.mrp = next.mrp
   if (!sameAmount(next.selling_price, original.selling_price)) changes.selling_price = next.selling_price
@@ -182,6 +189,7 @@ export const API_FIELD_TO_FORM_FIELD: Record<string, FieldName> = {
   brand: 'brand',
   category_id: 'categoryId',
   unit_id: 'unitId',
+  default_supplier_id: 'supplierId',
   reorder_level: 'reorderLevel',
   mrp: 'mrp',
   selling_price: 'sellingPrice',

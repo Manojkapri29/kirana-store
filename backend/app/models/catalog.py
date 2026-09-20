@@ -64,6 +64,7 @@ class Product(TimestampMixin, Base):
         tenant_fk("default_supplier_id", "suppliers"),
         Index("ix_products_shop_id_name", "shop_id", "name"),
         Index("ix_products_shop_id_category_id", "shop_id", "category_id"),
+        Index("ix_products_shop_id_default_supplier_id", "shop_id", "default_supplier_id"),
         not_blank("sku"),
         not_blank("name"),
         not_blank("barcode"),  # NULL passes; an empty string does not

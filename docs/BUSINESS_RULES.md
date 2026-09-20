@@ -98,6 +98,30 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
 - **C5.** Stock value = stock × average cost (not selling price), with the same missing-cost flag.
 - **C6.** Purchases are not expenses. Buying stock does not reduce profit until that stock is sold.
 
+## SP. Suppliers (Phase 4)
+
+- **SP1.** A supplier belongs to one shop and is the same for every business type. Only the **name** is
+  required. Phone, alternate phone, email, address, GSTIN and notes are optional.
+- **SP2. Lenient validation, consistent storage.** Phone numbers may be typed any way (spaces, dashes, brackets,
+  `+91`, Devanagari digits) and are stored compactly; 6 to 15 digits are accepted. Email must look like an
+  address and is stored lower-case. GSTIN must have the 15-character structure and is stored upper-case; its
+  check character is deliberately **not** verified, so a genuine number is never rejected. Every invalid field
+  is reported at once. Names are not restricted: any script, punctuation and digits are fine.
+- **SP3. Duplicates warn, they never block.** Two real suppliers can share a name, a phone or even a GSTIN
+  (branches). A likely duplicate (same name ignoring case, same phone, same GSTIN, within the shop) is saved
+  with a warning. On edit only the details that changed are re-checked. Other shops are never consulted.
+  Known limit: `9876543210` and `+919876543210` are stored differently and are not recognised as the same phone.
+- **SP4.** Suppliers are **never deleted**, only deactivated. An inactive supplier is hidden from default lists
+  and pickers, cannot be newly chosen as a product's default supplier, keeps its products and history, can
+  still be edited, and can be reactivated. Repeating activate or deactivate is harmless.
+- **SP5.** A product may have **no** default supplier or one, and one supplier may supply many products. The
+  supplier must belong to the same shop (enforced by the database and the service). A product that already uses
+  a supplier which later becomes inactive keeps the link and can still be edited.
+- **SP6.** Every create, update, activate and deactivate is written to the audit log with before and after values;
+  an update that changes nothing writes nothing.
+- **SP7.** Purchases, purchase returns, supplier payments and a supplier ledger belong to later phases. A
+  supplier's "products" today means products that name it as their default supplier.
+
 ## B. Business types (Phase 3 extension)
 
 - **B1.** The product is a **multi-business small-shop platform**. Grocery / Kirana is one business type. Types:

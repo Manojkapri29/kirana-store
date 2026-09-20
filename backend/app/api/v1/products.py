@@ -33,6 +33,9 @@ def list_products(
     barcode: Annotated[str | None, Query(max_length=50, description="Exact barcode match")] = None,
     category_id: int | None = None,
     unit_id: int | None = None,
+    supplier_id: Annotated[
+        int | None, Query(description="Products whose default supplier is this one")
+    ] = None,
     status: StatusFilter = StatusFilter.ACTIVE,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -44,6 +47,7 @@ def list_products(
         barcode=barcode,
         category_id=category_id,
         unit_id=unit_id,
+        supplier_id=supplier_id,
         active=active_flag(status),
         limit=limit,
         offset=offset,

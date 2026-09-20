@@ -134,6 +134,8 @@ type), and write stock only through `inventory_service`.
 | `inventory_service` | **The only reader and writer of the stock ledger.** Opening stock, adjustments, stock queries, inventory list, history, stock status | Phase 3 (purchases, sales, returns join it later) |
 | `product_service` | Products: create, update, search, activate/deactivate; MRP setting; derives stock through `inventory_service` | Phase 3 |
 | `catalog_service` | Units and categories | Phase 3 |
+| `supplier_service` | Suppliers: create, update, search, activate/deactivate; duplicate warnings; the count of products per supplier. Generic for every business type | Phase 4 |
+| `contact_validation` | Lenient validation and normalisation of phone, email and GSTIN. Reusable (customers will use it) | Phase 4 |
 | `business_type_service` | Business types, the shop's type, and the suggested categories/units. The only module that knows what a type suggests | Phase 3 |
 | `export_service` | Format engine: CSV/XLSX rendering, formula-injection protection. Knows nothing about products | Phase 3 |
 | `export_datasets` | What each export contains (columns and rows), built from the domain services | Phase 3 |
@@ -265,7 +267,12 @@ English/Hindi switching, API client layer, live server-status badge.
 migration `0002`, four more units (metre, pair, bottle, tray), suggested categories and units per type, a
 Settings screen, and generic wording in the UI (the app is "Shop Manager" and shows the business's own name).
 
-**Not built yet:** suppliers, purchases, sales, returns, khata, expenses, dashboard analytics, reports,
+**Phase 4 (suppliers):** generic supplier management (API and screens) with a default-supplier link from products,
+migration `0003`, and the reusable contact-validation helpers. Product screens now show and pick the default
+supplier, and the products export gains a "Default Supplier" column. Purchase history, returns and payments for a
+supplier do not exist yet; the supplier page reserves room for them.
+
+**Not built yet:** purchases, sales, returns, khata, expenses, dashboard analytics, reports,
 authentication, and screens for adjustments. `khata_service` is still a placeholder.
 
 ## Testing strategy

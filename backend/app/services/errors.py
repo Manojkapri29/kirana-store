@@ -20,4 +20,14 @@ class ConflictError(DomainError):
 
 
 class InvalidInputError(DomainError):
-    """The input breaks a business rule (unknown category, price above MRP in block mode, ...)."""
+    """The input breaks a business rule (unknown category, price above MRP in block mode, ...).
+
+    Usually one problem. When several fields are wrong at once, `errors` lists all of them as
+    `(field, message)` pairs so a form can mark every field in one go.
+    """
+
+    def __init__(
+        self, message: str, *, field: str | None = None, errors: list[tuple[str | None, str]] | None = None
+    ) -> None:
+        super().__init__(message, field=field)
+        self.errors: list[tuple[str | None, str]] = errors or [(field, message)]

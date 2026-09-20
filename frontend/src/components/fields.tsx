@@ -1,4 +1,10 @@
-import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
+import {
+  useId,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 
 const CONTROL =
@@ -88,6 +94,25 @@ export function SelectField({ label, error, hint, optional, className, children,
       >
         {children}
       </select>
+    </FieldFrame>
+  )
+}
+
+interface TextAreaFieldProps extends FieldChrome, Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'id'> {}
+
+export function TextAreaField({ label, error, hint, optional, className, ...textarea }: TextAreaFieldProps) {
+  const id = useId()
+  const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined
+  return (
+    <FieldFrame id={id} label={label} error={error} hint={hint} optional={optional}>
+      <textarea
+        rows={3}
+        {...textarea}
+        id={id}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        className={`${CONTROL} min-h-24 py-2 ${error ? 'border-red-500' : 'border-slate-300'} ${className ?? ''}`}
+      />
     </FieldFrame>
   )
 }

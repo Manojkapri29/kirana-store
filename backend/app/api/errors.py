@@ -11,9 +11,12 @@ from fastapi.responses import JSONResponse
 from app.services.errors import ConflictError, DomainError, InvalidInputError, NotFoundError
 
 
-def _field_error(exc: DomainError, kind: str) -> list[dict[str, object]]:
-    location = ["body", exc.field] if exc.field else ["body"]
-    return [{"loc": location, "msg": exc.message, "type": kind}]
+def _field_errors(exc: DomainError, kind: str) -> list[dict[str, object]]:
+    pairs = getattr(exc, "errors", None) or [(exc.field, exc.message)]
+    return [
+        {"loc": ["body", field] if field else ["body"], "msg": message, "type": kind}
+        for field, message in pairs
+    ]
 
 
 def register_error_handlers(app: FastAPI) -> None:
@@ -23,8 +26,8 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ConflictError)
     async def conflict(_: Request, exc: ConflictError) -> JSONResponse:
-        return JSONResponse(status_code=409, content={"detail": _field_error(exc, "conflict")})
+        return JSONResponse(status_code=409, content={"detail": _field_errors(exc, "conflict")})
 
     @app.exception_handler(InvalidInputError)
     async def invalid(_: Request, exc: InvalidInputError) -> JSONResponse:
-        return JSONResponse(status_code=422, content={"detail": _field_error(exc, "business_rule")})
+        return JSONResponse(status_code=422, content={"detail": _field_errors(exc, "business_rule")})

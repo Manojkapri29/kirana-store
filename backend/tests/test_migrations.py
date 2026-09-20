@@ -61,7 +61,7 @@ def test_migration_state_is_at_head_and_matches_the_models(blank_db_url: str):
     command.upgrade(config, "head")
 
     head = ScriptDirectory.from_config(config).get_current_head()
-    assert head == "0002"
+    assert head == "0003"
     assert current_revision(blank_db_url) == head
 
     # `alembic check` raises if autogenerate would produce any change (models and DB disagree).
@@ -70,7 +70,7 @@ def test_migration_state_is_at_head_and_matches_the_models(blank_db_url: str):
 
 def test_there_is_a_single_migration_head():
     heads = ScriptDirectory.from_config(alembic_config("sqlite:///unused.db")).get_heads()
-    assert heads == ["0002"]
+    assert heads == ["0003"]
 
 
 def test_downgrade_removes_everything_and_upgrade_can_run_again(blank_db_url: str):
@@ -276,4 +276,111 @@ class TestMigration0002PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0002"
+        assert current_revision(blank_db_url) == "0003"
+
+
+class TestMigration0003PreservesData:
+    """0003 adds optional supplier columns and two indexes. Existing suppliers and product links must survive."""
+
+    NOW = "'2026-09-01 10:00:00.000000'"
+
+    def seed_revision_0002(self, url: str) -> None:
+        command.upgrade(alembic_config(url), "0002")
+        engine = create_db_engine(url)
+        with engine.begin() as c:
+            c.execute(
+                text(
+                    "INSERT INTO shops (id, name, business_type, phone, address, mrp_validation_mode, created_at, updated_at)"
+                    f" VALUES (7, 'Old Shop', 'BAKERY', '9999999999', '1 Old Road', 'WARN', {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO users (id, shop_id, email, password_hash, full_name, role, is_active, created_at, updated_at)"
+                    f" VALUES (3, 7, 'o@old.local', '!', 'Old Owner', 'OWNER', 1, {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    f"INSERT INTO categories (id, shop_id, name, is_active, created_at, updated_at) VALUES (5, 7, 'Bread', 1, {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO suppliers (id, shop_id, name, phone, address, gstin, is_active, created_at, updated_at)"
+                    f" VALUES (9, 7, 'Flour Mill', '9876543210', 'Mill Road', '27AAPFU0939F1ZV', 0, {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO products (id, shop_id, sku, name, category_id, unit_id, default_supplier_id, reorder_level, selling_price, is_active, created_at, updated_at)"
+                    f" VALUES (11, 7, 'BREAD', 'Bread', 5, 1, 9, 0, 4000, 1, {self.NOW}, {self.NOW})"
+                )
+            )
+        engine.dispose()
+
+    def test_existing_suppliers_and_product_links_survive(self, blank_db_url: str):
+        self.seed_revision_0002(blank_db_url)
+
+        command.upgrade(alembic_config(blank_db_url), "head")
+
+        engine = create_db_engine(blank_db_url)
+        with engine.connect() as c:
+            row = c.execute(
+                text(
+                    "SELECT name, phone, address, gstin, is_active, alternate_phone, email, notes FROM suppliers WHERE id = 9"
+                )
+            ).one()
+            assert tuple(row) == (
+                "Flour Mill",
+                "9876543210",
+                "Mill Road",
+                "27AAPFU0939F1ZV",
+                0,
+                None,
+                None,
+                None,
+            )
+            assert c.scalar(text("SELECT default_supplier_id FROM products WHERE id = 11")) == 9
+            indexes = {r[1] for r in c.exec_driver_sql("PRAGMA index_list(suppliers)")} | {
+                r[1] for r in c.exec_driver_sql("PRAGMA index_list(products)")
+            }
+            assert {"ix_suppliers_shop_id_name", "ix_products_shop_id_default_supplier_id"} <= indexes
+            assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+            # the tenant rule still bites: another shop's supplier cannot be attached to this shop's product
+            c.execute(
+                text(
+                    f"INSERT INTO shops (id, name, business_type, phone, address, mrp_validation_mode, created_at, updated_at) VALUES (8, 'Other', 'OTHER', '1', 'x', 'WARN', {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    f"INSERT INTO suppliers (id, shop_id, name, is_active, created_at, updated_at) VALUES (20, 8, 'Theirs', 1, {self.NOW}, {self.NOW})"
+                )
+            )
+            with pytest.raises(Exception, match="FOREIGN KEY"):
+                c.execute(text("UPDATE products SET default_supplier_id = 20 WHERE id = 11"))
+            c.rollback()
+        engine.dispose()
+        command.check(alembic_config(blank_db_url))
+
+    def test_downgrade_keeps_the_original_columns_and_upgrade_works_again(self, blank_db_url: str):
+        self.seed_revision_0002(blank_db_url)
+        config = alembic_config(blank_db_url)
+        command.upgrade(config, "head")
+
+        command.downgrade(config, "0002")
+
+        engine = create_db_engine(blank_db_url)
+        with engine.connect() as c:
+            columns = {r[1] for r in c.exec_driver_sql("PRAGMA table_info(suppliers)")}
+            assert (
+                columns.isdisjoint({"alternate_phone", "email", "notes"})
+                and {"name", "phone", "gstin"} <= columns
+            )
+            assert c.scalar(text("SELECT name FROM suppliers WHERE id = 9")) == "Flour Mill"
+            assert c.scalar(text("SELECT default_supplier_id FROM products WHERE id = 11")) == 9
+            assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+        engine.dispose()
+        command.upgrade(config, "head")
+        assert current_revision(blank_db_url) == "0003"

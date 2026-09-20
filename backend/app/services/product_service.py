@@ -55,6 +55,7 @@ class ProductView:
     unit: Unit
     current_stock: Decimal
     stock_status: StockStatus
+    supplier_name: str | None = None  # the default supplier, if any
 
 
 @dataclass
@@ -72,9 +73,13 @@ def _snapshot(product: Product) -> dict[str, Any]:
 
 def _select_with_names(shop_id: int) -> Any:
     return (
-        select(Product, Category.name, Unit)
+        select(Product, Category.name, Unit, Supplier.name)
         .join(Category, and_(Category.shop_id == Product.shop_id, Category.id == Product.category_id))
         .join(Unit, Unit.id == Product.unit_id)
+        # A product need not have a supplier, so this join is optional. It matches on shop as well as id.
+        .outerjoin(
+            Supplier, and_(Supplier.shop_id == Product.shop_id, Supplier.id == Product.default_supplier_id)
+        )
         .where(Product.shop_id == shop_id)
         # Reload from the database, so an object changed in this transaction shows exactly what is
         # stored (for example money as "0.00", not the "0" that was typed).
@@ -91,8 +96,9 @@ def _to_views(session: Session, shop_id: int, rows: list[Any]) -> list[ProductVi
             unit=unit,
             current_stock=stock[product.id],
             stock_status=stock_status(stock[product.id], product.reorder_level),
+            supplier_name=supplier_name,
         )
-        for product, category_name, unit in rows
+        for product, category_name, unit, supplier_name in rows
     ]
 
 
@@ -111,6 +117,7 @@ def list_products(
     barcode: str | None = None,
     category_id: int | None = None,
     unit_id: int | None = None,
+    supplier_id: int | None = None,
     active: bool | None = True,
     limit: int | None = 50,
     offset: int = 0,
@@ -124,6 +131,8 @@ def list_products(
         conditions.append(Product.category_id == category_id)
     if unit_id is not None:
         conditions.append(Product.unit_id == unit_id)
+    if supplier_id is not None:
+        conditions.append(Product.default_supplier_id == supplier_id)
     if active is not None:
         conditions.append(Product.is_active.is_(active))
 
@@ -176,10 +185,14 @@ def _require_unit(session: Session, unit_id: int) -> Unit:
     return unit
 
 
-def _require_supplier(session: Session, shop_id: int, supplier_id: int) -> None:
-    found = session.scalar(select(Supplier.id).where(Supplier.shop_id == shop_id, Supplier.id == supplier_id))
-    if found is None:
+def _require_supplier(session: Session, shop_id: int, supplier_id: int, *, keep: int | None = None) -> None:
+    """The default supplier must belong to this shop and be active. An inactive supplier that the product
+    already uses may stay (`keep`), so editing other details of such a product is never blocked."""
+    supplier = session.scalar(select(Supplier).where(Supplier.shop_id == shop_id, Supplier.id == supplier_id))
+    if supplier is None:
         raise InvalidInputError("Choose an existing supplier.", field="default_supplier_id")
+    if not supplier.is_active and supplier_id != keep:
+        raise InvalidInputError("This supplier is inactive.", field="default_supplier_id")
 
 
 def _ensure_unique(
@@ -286,7 +299,9 @@ def update_product(
                     "The unit cannot be changed after the product has stock movements.", field="unit_id"
                 )
         if changes.get("default_supplier_id") is not None:
-            _require_supplier(session, ctx.shop_id, changes["default_supplier_id"])
+            _require_supplier(
+                session, ctx.shop_id, changes["default_supplier_id"], keep=product.default_supplier_id
+            )
         if "reorder_level" in changes or "unit_id" in changes:
             inventory_service.validate_quantity_for_unit(
                 changes.get("reorder_level", product.reorder_level), unit, field="reorder_level"
