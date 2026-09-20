@@ -1,0 +1,6 @@
+-r requirements.txt
+
+# Testing and linting
+pytest==9.1.1
+httpx2==2.13.0  # required by FastAPI/Starlette TestClient
+ruff==0.16.8

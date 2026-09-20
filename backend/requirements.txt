@@ -1,0 +1,5 @@
+# Runtime dependencies (Phase 1).
+# SQLAlchemy and Alembic are added in Phase 2, when the database is introduced.
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+pydantic-settings==2.15.0

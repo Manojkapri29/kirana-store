@@ -1,0 +1,14 @@
+@import 'tailwindcss';
+
+@theme {
+  /* System fonts only (no external font requests). The Devanagari entries keep Hindi text crisp. */
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans Devanagari',
+    'Devanagari Sangam MN', 'Nirmala UI', sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+}
