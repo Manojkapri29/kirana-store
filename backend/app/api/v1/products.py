@@ -8,8 +8,15 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import Ctx
 from app.db.session import get_session, write_transaction
-from app.schemas.product import ProductCreate, ProductListOut, ProductOut, ProductSaved, ProductUpdate
-from app.services import product_service
+from app.schemas.product import (
+    LookupOut,
+    ProductCreate,
+    ProductListOut,
+    ProductOut,
+    ProductSaved,
+    ProductUpdate,
+)
+from app.services import product_lookup_service, product_service
 
 router = APIRouter(prefix="/products", tags=["products"])
 ReadSession = Annotated[Session, Depends(get_session)]
@@ -62,6 +69,20 @@ def create_product(payload: ProductCreate, ctx: Ctx) -> ProductSaved:
     with write_transaction() as session:
         result = product_service.create_product(session, ctx, payload.model_dump())
         return ProductSaved.from_result(result)
+
+
+@router.get("/lookup", response_model=LookupOut)
+def lookup_product(
+    ctx: Ctx,
+    session: ReadSession,
+    code: Annotated[
+        str, Query(min_length=1, max_length=120, description="Scanned or typed barcode, SKU or name")
+    ],
+    limit: Annotated[int, Query(ge=1, le=25)] = 10,
+) -> LookupOut:
+    """Find a product from a scan or typed text: exact barcode, exact SKU, exact name, then search. Never
+    creates a product: an unknown code answers "Barcode not found". Needs the plan's barcode feature."""
+    return LookupOut.from_result(product_lookup_service.lookup(session, ctx.shop_id, code, limit=limit))
 
 
 @router.get("/{product_id}", response_model=ProductOut)

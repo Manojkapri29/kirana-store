@@ -18,8 +18,9 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.dev import DEV_SHOP_BUSINESS_TYPE, DEV_SHOP_NAME, DEV_USER_EMAIL, UNUSABLE_PASSWORD_HASH
 from app.db.session import write_transaction
-from app.models import Shop, User
+from app.models import Shop, ShopSubscription, User
 from app.models.enums import UserRole
+from app.services import entitlement_service
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,15 @@ def seed_development_data(session: Session) -> SeedResult:
         )
         session.add(user)
         session.flush()
+        created = True
+
+    # The development shop is on the top plan so every feature can be tried. (Any other shop is on the Free
+    # plan until an operator assigns one: `python -m app.subscription_admin assign`.)
+    if (
+        session.scalar(select(ShopSubscription.id).where(ShopSubscription.shop_id == shop.id).limit(1))
+        is None
+    ):
+        entitlement_service.assign_plan(session, shop.id, "pro", notes="Development seed")
         created = True
 
     return SeedResult(shop_id=shop.id, user_id=user.id, created=created)

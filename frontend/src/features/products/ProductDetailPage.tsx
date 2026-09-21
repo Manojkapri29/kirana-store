@@ -13,6 +13,7 @@ import { StockStatusBadge } from '@/features/inventory/StockStatusBadge'
 import { formatMoney, formatQuantity, NOT_SET } from '@/lib/format'
 
 import { OpeningStockForm } from './OpeningStockForm'
+import { PriceCheckPanel } from './PriceCheckPanel'
 import { StockHistory } from './StockHistory'
 
 export function ProductDetailPage() {
@@ -112,6 +113,7 @@ export function ProductDetailPage() {
       </div>
 
       {hasNoHistory && p.is_active && <OpeningStockForm product={p} />}
+      <PriceCheckPanel product={p} />
       <StockHistory product={p} />
     </div>
   )

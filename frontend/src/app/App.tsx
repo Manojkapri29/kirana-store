@@ -7,6 +7,14 @@ import { InventoryPage } from '@/features/inventory/InventoryPage'
 import { ProductDetailPage } from '@/features/products/ProductDetailPage'
 import { ProductFormPage } from '@/features/products/ProductFormPage'
 import { ProductsPage } from '@/features/products/ProductsPage'
+import { PromotionDetailPage } from '@/features/promotions/PromotionDetailPage'
+import { PromotionFormPage } from '@/features/promotions/PromotionFormPage'
+import { PromotionsPage } from '@/features/promotions/PromotionsPage'
+import { SalesReportPage } from '@/features/reports/SalesReportPage'
+import { QuickSaleDetailPage } from '@/features/quickSales/QuickSaleDetailPage'
+import { QuickSaleFormPage } from '@/features/quickSales/QuickSaleFormPage'
+import { QuickSalesPage } from '@/features/quickSales/QuickSalesPage'
+import { SubscriptionPage } from '@/features/subscription/SubscriptionPage'
 import { SaleDetailPage } from '@/features/sales/SaleDetailPage'
 import { SaleFormPage } from '@/features/sales/SaleFormPage'
 import { SalesPage } from '@/features/sales/SalesPage'
@@ -42,6 +50,16 @@ export function App() {
         <Route path="sales/new" element={<SaleFormPage mode="create" />} />
         <Route path="sales/:id" element={<SaleDetailPage />} />
         <Route path="sales/:id/edit" element={<SaleFormPage mode="edit" />} />
+        <Route path="quick-sales" element={<QuickSalesPage />} />
+        <Route path="quick-sales/new" element={<QuickSaleFormPage mode="create" />} />
+        <Route path="quick-sales/:id" element={<QuickSaleDetailPage />} />
+        <Route path="quick-sales/:id/edit" element={<QuickSaleFormPage mode="edit" />} />
+        <Route path="promotions" element={<PromotionsPage />} />
+        <Route path="promotions/new" element={<PromotionFormPage mode="create" />} />
+        <Route path="promotions/:id" element={<PromotionDetailPage />} />
+        <Route path="promotions/:id/edit" element={<PromotionFormPage mode="edit" />} />
+        <Route path="reports" element={<SalesReportPage />} />
+        <Route path="plan" element={<SubscriptionPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/new" element={<CustomerFormPage mode="create" />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />

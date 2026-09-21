@@ -29,6 +29,17 @@ class ConflictError(DomainError):
         self.errors: list[tuple[str | None, str]] = errors or [(field, message)]
 
 
+class EntitlementError(DomainError):
+    """The shop's plan does not include this feature, or the plan's limit has been reached (HTTP 403).
+
+    `feature` names the plan feature or limit that stopped the request, so a screen can offer an upgrade.
+    """
+
+    def __init__(self, message: str, *, feature: str) -> None:
+        super().__init__(message)
+        self.feature = feature
+
+
 class InvalidInputError(DomainError):
     """The input breaks a business rule (unknown category, price above MRP in block mode, ...).
 

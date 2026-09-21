@@ -2,6 +2,9 @@ import type { ParseKeys } from 'i18next'
 import {
   BarChart3,
   Boxes,
+  CreditCard,
+  Tag,
+  Zap,
   LayoutDashboard,
   PackageSearch,
   ReceiptText,
@@ -52,6 +55,18 @@ export const NAV_ITEMS: readonly NavItem[] = [
     labelKey: 'nav.sales',
   },
   {
+    id: 'quick-sales',
+    path: '/quick-sales',
+    icon: Zap,
+    labelKey: 'nav.quickSales',
+  },
+  {
+    id: 'promotions',
+    path: '/promotions',
+    icon: Tag,
+    labelKey: 'nav.offers',
+  },
+  {
     id: 'customers',
     path: '/customers',
     icon: Users,
@@ -71,13 +86,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     descriptionKey: 'modules.expenses.description',
     phase: 11,
   },
-  {
-    id: 'reports',
-    path: '/reports',
-    icon: BarChart3,
-    labelKey: 'nav.reports',
-    descriptionKey: 'modules.reports.description',
-    phase: 13,
-  },
+  { id: 'reports', path: '/reports', icon: BarChart3, labelKey: 'nav.reports' },
+  { id: 'plan', path: '/plan', icon: CreditCard, labelKey: 'nav.plan' },
   { id: 'settings', path: '/settings', icon: Settings, labelKey: 'nav.settings' },
 ]

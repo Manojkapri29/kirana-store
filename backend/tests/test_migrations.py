@@ -18,9 +18,12 @@ from tests.conftest import alembic_config, sqlite_url
 EXPECTED_TABLES = {
     "audit_log", "business_types", "categories", "customer_ledger", "customers", "document_sequences",
     "expense_categories", "expenses", "idempotency_keys", "inventory_transactions", "products",
-    "purchase_items", "purchase_return_items", "purchase_returns", "purchases", "quick_sales",
-    "sale_items", "sales", "sales_return_items", "sales_returns", "shops", "suppliers", "units", "users",
+    "plan_features", "plans", "price_observations", "promotions", "purchase_items", "purchase_return_items", "purchase_returns", "purchases", "quick_sales",
+    "sale_items", "sale_promotions", "sales", "sales_return_items", "sales_returns", "shop_subscriptions", "shops",
+    "subscription_usage", "suppliers", "units", "users",
 }  # fmt: skip
+
+HEAD = "0010"  # the newest revision: the one place to change when a migration is added
 
 MIGRATION_FILES = sorted((BACKEND_DIR / "migrations" / "versions").glob("*.py"))
 
@@ -61,7 +64,7 @@ def test_migration_state_is_at_head_and_matches_the_models(blank_db_url: str):
     command.upgrade(config, "head")
 
     head = ScriptDirectory.from_config(config).get_current_head()
-    assert head == "0006"
+    assert head == HEAD
     assert current_revision(blank_db_url) == head
 
     # `alembic check` raises if autogenerate would produce any change (models and DB disagree).
@@ -70,7 +73,7 @@ def test_migration_state_is_at_head_and_matches_the_models(blank_db_url: str):
 
 def test_there_is_a_single_migration_head():
     heads = ScriptDirectory.from_config(alembic_config("sqlite:///unused.db")).get_heads()
-    assert heads == ["0006"]
+    assert heads == [HEAD]
 
 
 def test_downgrade_removes_everything_and_upgrade_can_run_again(blank_db_url: str):
@@ -276,7 +279,7 @@ class TestMigration0002PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0006"
+        assert current_revision(blank_db_url) == HEAD
 
 
 class TestMigration0003PreservesData:
@@ -383,7 +386,7 @@ class TestMigration0003PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0006"
+        assert current_revision(blank_db_url) == HEAD
 
 
 class TestMigration0004PreservesData:
@@ -542,7 +545,7 @@ class TestMigration0004PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0006"
+        assert current_revision(blank_db_url) == HEAD
 
 
 class TestMigration0005PreservesData:
@@ -635,7 +638,7 @@ class TestMigration0005PreservesData:
             c.rollback()
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0006"
+        assert current_revision(blank_db_url) == HEAD
 
 
 class TestMigration0006PreservesData:
@@ -760,9 +763,14 @@ class TestMigration0006PreservesData:
             c.rollback()
             for override, message in (
                 ({"sub": 100, "disc": 10, "total": 100}, "total_is_subtotal_less_discount"),
-                ({"no": "INV/9", "posted": self.NOW.strip("'"), "status": "DRAFT"}, "draft_has_no_number"),
+                # this row breaks two rules (a draft with a number, and a numbered sale with no payment);
+                # SQLite reports whichever it evaluates first, and a table rebuild can reorder them
+                (
+                    {"no": "INV/9", "posted": self.NOW.strip("'"), "status": "DRAFT"},
+                    "draft_has_no_number|posted_has_payment",
+                ),
                 ({"status": "POSTED"}, "posted_needs_number"),
-                ({"no": "INV/9", "status": "POSTED"}, "number_and_posted_at_together"),
+                ({"no": "INV/9", "status": "POSTED"}, "number_and_posted_at_together|posted_has_payment"),
                 ({"no": "INV/9", "status": "POSTED", "posted": self.NOW.strip("'")}, "posted_has_payment"),
                 ({"status": "VOID"}, "void_needs_reason"),
                 (
@@ -817,4 +825,80 @@ class TestMigration0006PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0006"
+        assert current_revision(blank_db_url) == HEAD
+
+
+def test_check_constraint_names_in_the_migrated_database_match_the_models(blank_db_url: str):
+    """`alembic check` does not compare CHECK constraints, so a migration can drift from the model unnoticed
+    (a misspelled name means a later migration cannot drop it). Compare every table's CHECK names directly."""
+    command.upgrade(alembic_config(blank_db_url), "head")
+    engine = create_db_engine(blank_db_url)
+    problems = {}
+    with engine.connect() as c:
+        for name, table in Base.metadata.tables.items():
+            ddl = c.exec_driver_sql(f"SELECT sql FROM sqlite_master WHERE name = '{name}'").scalar()
+            in_db = set(re.findall(r"CONSTRAINT (ck_\w+) CHECK", ddl))
+            in_model = {con.name for con in table.constraints if con.__class__.__name__ == "CheckConstraint"}
+            if in_db != in_model:
+                problems[name] = {
+                    "only_in_db": sorted(in_db - in_model),
+                    "only_in_model": sorted(in_model - in_db),
+                }
+    engine.dispose()
+
+    assert problems == {}
+
+
+class TestMigration0007Subscriptions:
+    """0007 adds the plan tables and seeds three example plans. Existing shops are untouched."""
+
+    NOW = "'2026-09-01 10:00:00.000000'"
+
+    def test_existing_shops_are_untouched_and_the_example_plans_are_seeded(self, blank_db_url: str):
+        command.upgrade(alembic_config(blank_db_url), "0006")
+        engine = create_db_engine(blank_db_url)
+        with engine.begin() as c:
+            c.execute(
+                text(
+                    "INSERT INTO shops (id, name, business_type, phone, address, mrp_validation_mode, created_at, updated_at)"
+                    f" VALUES (7, 'Old Shop', 'BAKERY', '9999999999', '1 Old Road', 'WARN', {self.NOW}, {self.NOW})"
+                )
+            )
+        engine.dispose()
+
+        command.upgrade(alembic_config(blank_db_url), "head")
+
+        engine = create_db_engine(blank_db_url)
+        with engine.connect() as c:
+            assert c.scalar(text("SELECT name FROM shops WHERE id = 7")) == "Old Shop"
+            assert (
+                c.scalar(text("SELECT count(*) FROM shop_subscriptions")) == 0
+            )  # no shop is silently subscribed
+            assert [r[0] for r in c.execute(text("SELECT code FROM plans ORDER BY sort_order"))] == [
+                "free",
+                "basic",
+                "pro",
+            ]
+            assert (
+                c.scalar(text("SELECT count(*) FROM plan_features")) == 27
+            )  # 3 plans x (5 features + 4 limits)
+            assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+        engine.dispose()
+        command.check(alembic_config(blank_db_url))
+
+    def test_downgrade_removes_the_plan_tables_and_upgrade_restores_the_seed(self, blank_db_url: str):
+        config = alembic_config(blank_db_url)
+        command.upgrade(config, "head")
+
+        command.downgrade(config, "0006")
+        engine = create_db_engine(blank_db_url)
+        with engine.connect() as c:
+            tables = {r[0] for r in c.execute(text("SELECT name FROM sqlite_master WHERE type = 'table'"))}
+        engine.dispose()
+        assert tables.isdisjoint({"plans", "plan_features", "shop_subscriptions", "subscription_usage"})
+
+        command.upgrade(config, "head")
+        engine = create_db_engine(blank_db_url)
+        with engine.connect() as c:
+            assert c.scalar(text("SELECT count(*) FROM plans")) == 3
+        engine.dispose()

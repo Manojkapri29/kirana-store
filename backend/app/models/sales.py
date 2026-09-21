@@ -49,7 +49,9 @@ class Sale(TimestampMixin, Base):
     A posted sale is never edited or deleted: correct it by voiding it and entering a corrected copy.
 
     Money: `subtotal` is the sum of the line totals (each net of its own discount); `discount` is an optional
-    amount off the whole bill; `total_amount = subtotal - discount`. Payment fields are NULL on a draft.
+    amount the cashier takes off the whole bill; `promotion_discount` is what promotions and coupons took off
+    (worked out by `promotion_service`, never typed in); `total_amount = subtotal - discount -
+    promotion_discount`. Payment fields are NULL on a draft.
     """
 
     __tablename__ = "sales"
@@ -67,7 +69,10 @@ class Sale(TimestampMixin, Base):
         *payment_rules(),
         non_negative("subtotal"),
         non_negative("discount"),
-        CheckConstraint("total_amount = subtotal - discount", name="total_is_subtotal_less_discount"),
+        non_negative("promotion_discount"),
+        CheckConstraint(
+            "total_amount = subtotal - discount - promotion_discount", name="total_is_subtotal_less_discounts"
+        ),
         CheckConstraint("status <> 'VOID' OR void_reason IS NOT NULL", name="void_needs_reason"),
         # A number and its posting time exist together, and every posted sale has them; a draft has neither.
         CheckConstraint(
@@ -93,6 +98,8 @@ class Sale(TimestampMixin, Base):
     customer_id: Mapped[int | None] = mapped_column(IdType)
     subtotal: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"), server_default="0")
     discount: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"), server_default="0")
+    promotion_discount: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"), server_default="0")
+    coupon_code: Mapped[str | None] = mapped_column(String(40))  # the code the customer gave, if any
     total_amount: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
     payment_type: Mapped[PaymentType | None] = mapped_column(enum_type(PaymentType, "payment_type"))
     amount_paid: Mapped[Decimal | None] = mapped_column(Money)
@@ -110,7 +117,9 @@ class Sale(TimestampMixin, Base):
 class SaleItem(TimestampMixin, Base):
     """One product line of a Detailed Sale. Price, MRP and cost are snapshots taken at sale time.
 
-    `line_total` = round(quantity x unit_price) - discount: the net revenue of the line. `unit_cost` and
+    `line_total` = round(quantity x unit_price) - discount: what the line comes to after the cashier's own
+    discount. `promotion_discount` is this line's share of what promotions took off the bill, so the line's
+    net revenue is `line_total - promotion_discount`. `unit_cost` and
     `cogs_amount` are NULL on a draft and whenever the product's cost was unknown at posting (never 0).
     """
 
@@ -126,6 +135,8 @@ class SaleItem(TimestampMixin, Base):
         non_negative("mrp"),
         non_negative("discount"),
         non_negative("line_total"),  # gross - discount; also stops a discount above the gross
+        non_negative("promotion_discount"),
+        CheckConstraint("promotion_discount <= line_total", name="promotion_within_line"),
         non_negative("unit_cost"),
         non_negative("cogs_amount"),
         # Cost is known (both set) or unknown (both NULL). Unknown is never stored as 0 (C3).
@@ -142,6 +153,7 @@ class SaleItem(TimestampMixin, Base):
     mrp: Mapped[Decimal | None] = mapped_column(Money)
     discount: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
     line_total: Mapped[Decimal] = mapped_column(Money)
+    promotion_discount: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"), server_default="0")
     unit_cost: Mapped[Decimal | None] = mapped_column(Money)
     cogs_amount: Mapped[Decimal | None] = mapped_column(Money)
 
@@ -201,34 +213,62 @@ class SalesReturnItem(TimestampMixin, Base):
     cogs_amount: Mapped[Decimal | None] = mapped_column(Money)
 
 
-class QuickSale(DocumentLifecycleMixin, TimestampMixin, Base):
+class QuickSale(TimestampMixin, Base):
     """A Quick/Daily Sale: money only.
 
-    There are intentionally no product, quantity, cost or COGS columns. A quick sale never touches
-    stock, and its profit is "Not Available" (BUSINESS_RULES S2, F2).
+    There are intentionally no product, quantity, cost or COGS columns. A quick sale never touches stock, and
+    its profit is "Not Available" (BUSINESS_RULES S2, F2). Same lifecycle as a detailed sale: DRAFT (an entry
+    being prepared: no number, no payment, no effect), POSTED (numbered, payment settled, unpaid part on the
+    customer's khata) and VOID. `gross_amount` is what was taken before an optional transaction-level
+    `discount`; `total_amount = gross_amount - discount`. The discount is one amount for the whole entry:
+    there are no product lines, so no product-level discount exists.
     """
 
     __tablename__ = "quick_sales"
     __table_args__ = (
         UniqueConstraint("shop_id", "id"),
+        UniqueConstraint("shop_id", "quick_no"),  # NULL for drafts; NULLs never collide
         UniqueConstraint("replaces_id"),
         tenant_fk("customer_id", "customers"),
         tenant_fk("replaces_id", "quick_sales"),
         tenant_fk("created_by", "users"),
+        tenant_fk("posted_by", "users"),
         Index("ix_quick_sales_shop_date", "shop_id", "sale_date"),
+        not_blank("quick_no"),
         *payment_rules(total_must_be_positive=True),
-        void_requires_reason(),
+        positive("gross_amount"),
+        non_negative("discount"),
+        CheckConstraint("total_amount = gross_amount - discount", name="total_is_gross_less_discount"),
+        CheckConstraint("status <> 'VOID' OR void_reason IS NOT NULL", name="void_needs_reason"),
+        CheckConstraint(
+            "(quick_no IS NULL AND posted_at IS NULL) OR (quick_no IS NOT NULL AND posted_at IS NOT NULL)",
+            name="number_and_posted_at_together",
+        ),
+        CheckConstraint("status <> 'POSTED' OR quick_no IS NOT NULL", name="posted_needs_number"),
+        CheckConstraint("status <> 'DRAFT' OR quick_no IS NULL", name="draft_has_no_number"),
+        CheckConstraint(
+            "quick_no IS NULL OR (payment_type IS NOT NULL AND amount_paid IS NOT NULL)",
+            name="posted_has_payment",
+        ),
     )
 
     id: Mapped[int] = id_column()
     shop_id: Mapped[int] = shop_id_column()
+    quick_no: Mapped[str | None] = mapped_column(String(30))  # e.g. QS/2026-27/0001, set when posted
+    status: Mapped[SaleStatus] = mapped_column(enum_type(SaleStatus, "status"), default=SaleStatus.DRAFT)
     sale_date: Mapped[date] = mapped_column(Date)
+    gross_amount: Mapped[Decimal] = mapped_column(Money)
+    discount: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"), server_default="0")
     total_amount: Mapped[Decimal] = mapped_column(Money)
     customer_id: Mapped[int | None] = mapped_column(IdType)  # for quick sales on credit
-    payment_type: Mapped[PaymentType] = mapped_column(enum_type(PaymentType, "payment_type"))
-    amount_paid: Mapped[Decimal] = mapped_column(Money)
+    payment_type: Mapped[PaymentType | None] = mapped_column(enum_type(PaymentType, "payment_type"))
+    amount_paid: Mapped[Decimal | None] = mapped_column(Money)
     payment_method: Mapped[PaymentMethod | None] = mapped_column(enum_type(PaymentMethod, "payment_method"))
     payment_reference: Mapped[str | None] = mapped_column(String(100))
     note: Mapped[str | None] = mapped_column(Text)
+    posted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    posted_by: Mapped[int | None] = mapped_column(IdType)
+    void_reason: Mapped[str | None] = mapped_column(Text)
+    voided_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     replaces_id: Mapped[int | None] = mapped_column(IdType)
     created_by: Mapped[int] = mapped_column(IdType)

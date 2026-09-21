@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # The backend/ directory. Relative SQLite paths are resolved against it, so the database location
@@ -42,6 +42,29 @@ class Settings(BaseSettings):
     def _split_origins(cls, value: object) -> object:
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    # --- External price/product providers. Backend only: none of these ever reaches the browser. ---
+    # Master switch. Off means no outgoing request is ever made; every price check reports "disabled".
+    external_lookups_enabled: bool = True
+    # Seconds to wait for a provider before giving up on it (a slow provider never slows a bill down).
+    external_timeout_seconds: float = Field(default=4.0, gt=0, le=30)
+    # A price seen within this many hours is served from the shop's own saved copy without asking again.
+    price_cache_ttl_hours: int = Field(default=24, ge=0, le=24 * 30)
+    # Open Food Facts asks every app to identify itself: AppName/Version (contact).
+    off_user_agent: str = "ShopManager/0.1 (contact: not-set)"
+    # UPCitemdb key. Read from UPCITEMDB_API_KEY (or KIRANA_UPCITEMDB_API_KEY) in the backend environment
+    # or `.env` only. A SecretStr never appears in a repr or a log line. Unset means "not configured".
+    upcitemdb_api_key: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("UPCITEMDB_API_KEY", "KIRANA_UPCITEMDB_API_KEY")
+    )
+
+    @field_validator("upcitemdb_api_key", mode="before")
+    @classmethod
+    def _blank_key_is_unset(cls, value: object) -> object:
+        """`UPCITEMDB_API_KEY=` or the .env.example placeholder means "no key"."""
+        if isinstance(value, str) and value.strip() in ("", "your_api_key_here"):
+            return None
         return value
 
     @property

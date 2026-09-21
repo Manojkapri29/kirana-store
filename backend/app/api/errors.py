@@ -8,7 +8,7 @@ show them next to the right input. A missing thing is a plain `{"detail": "messa
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.services.errors import ConflictError, DomainError, InvalidInputError, NotFoundError
+from app.services.errors import ConflictError, DomainError, EntitlementError, InvalidInputError, NotFoundError
 
 
 def _location(field: str | None) -> list[str | int]:
@@ -31,6 +31,11 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ConflictError)
     async def conflict(_: Request, exc: ConflictError) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": _field_errors(exc, "conflict")})
+
+    @app.exception_handler(EntitlementError)
+    async def not_in_plan(_: Request, exc: EntitlementError) -> JSONResponse:
+        detail = [{"loc": ["body"], "msg": exc.message, "type": "plan_limit", "feature": exc.feature}]
+        return JSONResponse(status_code=403, content={"detail": detail})
 
     @app.exception_handler(InvalidInputError)
     async def invalid(_: Request, exc: InvalidInputError) -> JSONResponse:

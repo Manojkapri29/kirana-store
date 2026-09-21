@@ -1,5 +1,6 @@
 import { API_V1_PREFIX, apiFetch, apiSend, type Query } from './client'
 import type {
+  LookupResult,
   Page,
   Product,
   ProductCreatePayload,
@@ -32,3 +33,10 @@ export const updateProduct = (id: number, changes: Partial<ProductPayload>) =>
 
 export const setProductActive = (id: number, active: boolean) =>
   apiSend<Product>('POST', `${BASE}/${id}/${active ? 'activate' : 'deactivate'}`)
+
+/**
+ * Find a product from a scan or typed text: exact barcode, exact SKU, exact name, then search. Never creates a
+ * product: an unknown code answers "Barcode not found". Needs the plan's barcode feature (403 otherwise).
+ */
+export const lookupProduct = (code: string) =>
+  apiFetch<LookupResult>(`${BASE}/lookup`, { query: { code } })

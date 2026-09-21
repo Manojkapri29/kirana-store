@@ -77,6 +77,21 @@ class DocumentStatus(StrEnum):
     VOID = "VOID"
 
 
+class BillingInterval(StrEnum):
+    MONTHLY = "MONTHLY"
+    YEARLY = "YEARLY"
+
+
+class SubscriptionStatus(StrEnum):
+    """TRIAL and ACTIVE are "current": they give the shop its plan while they last. CANCELLED and EXPIRED are
+    history. A current subscription past its end date counts as expired without needing a status change."""
+
+    TRIAL = "TRIAL"
+    ACTIVE = "ACTIVE"
+    CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
+
+
 class SaleStatus(StrEnum):
     """A sale starts as a DRAFT (a cart: no effect on stock, khata or revenue), becomes POSTED (stock goes
     out, credit is charged to the customer's khata), and can later be VOIDED (both are reversed)."""
@@ -120,3 +135,38 @@ class SupplierCreditMode(StrEnum):
     CASH = "CASH"
     UPI = "UPI"
     SUPPLIER_CREDIT = "SUPPLIER_CREDIT"
+
+
+class PromotionType(StrEnum):
+    """What a promotion gives. Coupons, first-order and customer-specific offers are not types: they are the
+    same benefit reached through `coupon_code` or `audience`, so there is one discount system, not several."""
+
+    PERCENT = "PERCENT"  # a percentage off the eligible amount
+    AMOUNT = "AMOUNT"  # a fixed amount off the eligible amount
+    OFFER_PRICE = "OFFER_PRICE"  # a promotional price per unit for the chosen products
+    BUY_X_GET_Y = (
+        "BUY_X_GET_Y"  # buy X units, get Y units of the chosen products free (or at a percentage off)
+    )
+
+
+class PromotionScope(StrEnum):
+    """Which part of the cart a promotion looks at."""
+
+    CART = "CART"  # the whole bill
+    PRODUCTS = "PRODUCTS"  # only the chosen products
+    CATEGORIES = "CATEGORIES"  # only products in the chosen categories
+
+
+class PromotionStatus(StrEnum):
+    """DRAFT (being set up) -> ACTIVE <-> PAUSED -> EXPIRED. A promotion is never deleted."""
+
+    DRAFT = "DRAFT"
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    EXPIRED = "EXPIRED"
+
+
+class PromotionAudience(StrEnum):
+    ALL = "ALL"
+    NEW_CUSTOMER = "NEW_CUSTOMER"  # a customer with no earlier posted sale (from the shop's own history)
+    CUSTOMERS = "CUSTOMERS"  # only the listed customers

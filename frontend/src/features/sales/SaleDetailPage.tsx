@@ -67,6 +67,7 @@ export function SaleDetailPage() {
         </Alert>
       ))}
       {s.status === 'DRAFT' && <Alert tone="info">{t('sales.detail.draftNotice')}</Alert>}
+      {s.status === 'DRAFT' && s.promotions_out_of_date && <Alert tone="warning">{t('billing.outOfDate')}</Alert>}
       {s.status === 'VOID' && (
         <Alert tone="warning">
           <p className="font-medium">{s.invoice_no ? t('sales.detail.voidNotice') : t('sales.detail.discardedNotice')}</p>
@@ -215,7 +216,10 @@ function PostPanel({ sale, onDone }: { sale: Sale; onDone: () => void }) {
   const [payment, setPayment] = useState<PaymentValue>(emptyPayment())
   const [error, setError] = useState<string | null>(null)
   const [fields, setFields] = useState<Record<string, string>>({})
-  const preview = useSalePreview(sale.items.map((item) => itemPayload(itemToLine(item))), sale.discount === '0.00' ? null : sale.discount, amountPaidFor(payment))
+  const preview = useSalePreview(sale.items.map((item) => itemPayload(itemToLine(item))), sale.discount === '0.00' ? null : sale.discount, amountPaidFor(payment), {
+    customerId: sale.customer_id,
+    couponCode: sale.coupon_code,
+  })
   const needsCustomer = preview.data !== undefined && !/^0+(\.0+)?$/.test(preview.data.credit) && sale.customer_id === null
 
   const post = useMutation({
@@ -332,6 +336,8 @@ function VoidForm({ sale, onDone }: { sale: Sale; onDone: () => void }) {
 function ItemsSection({ sale }: { sale: Sale }) {
   const { t } = useTranslation()
   const posted = sale.invoice_no !== null
+  const hasOffers = sale.promotions.length > 0
+  const extra = (posted ? 2 : 0) + (hasOffers ? 1 : 0)
   const heading = 'whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500'
 
   return (
@@ -350,6 +356,7 @@ function ItemsSection({ sale }: { sale: Sale }) {
                 <th className={`${heading} text-right`}>{t('sales.form.fields.price')}</th>
                 <th className={`${heading} text-right`}>{t('sales.form.fields.discount')}</th>
                 <th className={`${heading} text-right`}>{t('sales.form.fields.lineTotal')}</th>
+                {hasOffers && <th className={`${heading} text-right`}>{t('billing.offers')}</th>}
                 {posted && <th className={`${heading} text-right`}>{t('sales.detail.cost')}</th>}
                 {posted && <th className={`${heading} text-right`}>{t('sales.detail.profit')}</th>}
               </tr>
@@ -369,6 +376,11 @@ function ItemsSection({ sale }: { sale: Sale }) {
                   <td className="whitespace-nowrap px-4 py-3 text-right">{formatMoney(item.unit_price)}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">{formatMoney(item.discount)}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{formatMoney(item.line_total)}</td>
+                  {hasOffers && (
+                    <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-emerald-800">
+                      {item.promotion_discount === '0.00' ? '—' : `− ${formatMoney(item.promotion_discount)}`}
+                    </td>
+                  )}
                   {posted && <td className="whitespace-nowrap px-4 py-3 text-right text-sm">{item.cogs_amount ? formatMoney(item.cogs_amount) : t('sales.detail.notAvailable')}</td>}
                   {posted && (
                     <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
@@ -380,17 +392,27 @@ function ItemsSection({ sale }: { sale: Sale }) {
             </tbody>
             <tfoot className="bg-slate-50 text-right">
               <tr>
-                <td colSpan={posted ? 6 : 4} className="px-4 py-2 text-slate-700">{t('sales.form.subtotal')}</td>
+                <td colSpan={4 + extra} className="px-4 py-2 text-slate-700">{t('billing.subtotal')}</td>
                 <td className="whitespace-nowrap px-4 py-2 font-medium">{formatMoney(sale.subtotal)}</td>
               </tr>
               {sale.discount !== '0.00' && (
                 <tr>
-                  <td colSpan={posted ? 6 : 4} className="px-4 py-2 text-slate-700">{t('sales.form.billDiscountLine')}</td>
+                  <td colSpan={4 + extra} className="px-4 py-2 text-slate-700">{t('billing.billDiscount')}</td>
                   <td className="whitespace-nowrap px-4 py-2 font-medium">− {formatMoney(sale.discount)}</td>
                 </tr>
               )}
+              {sale.promotions.map((offer) => (
+                <tr key={offer.promotion_id}>
+                  <td colSpan={4 + extra} className="px-4 py-2 text-emerald-900">
+                    <span className="font-medium">{t('billing.offerLine', { name: offer.name, terms: offer.terms })}</span>
+                    {offer.coupon_code && <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-xs">{offer.coupon_code}</span>}
+                    <span className="block text-xs text-slate-500">{t('billing.whyApplied', { basis: offer.basis })}</span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-2 font-medium text-emerald-900">− {formatMoney(offer.amount)}</td>
+                </tr>
+              ))}
               <tr>
-                <td colSpan={posted ? 6 : 4} className="px-4 py-3 font-semibold text-slate-900">{t('sales.form.total')}</td>
+                <td colSpan={4 + extra} className="px-4 py-3 font-semibold text-slate-900">{t('billing.total')}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-lg font-bold">{formatMoney(sale.total_amount)}</td>
               </tr>
             </tfoot>

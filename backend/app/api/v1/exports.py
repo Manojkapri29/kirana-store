@@ -13,6 +13,8 @@ from app.models.enums import (
     CustomerLedgerEntryType,
     InventoryTxnType,
     PaymentType,
+    PromotionStatus,
+    PromotionType,
     PurchaseStatus,
     SaleStatus,
 )
@@ -273,3 +275,115 @@ def export_sale_details(
 ) -> Response:
     """One sale with all its lines."""
     return download(export_datasets.export_sale_details(session, ctx, fmt, sale_id))
+
+
+@router.get("/quick-sales")
+def export_quick_sales(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    customer_id: int | None = None,
+    statuses: SaleStatuses = None,
+    payment_type: PaymentType | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    """One row per quick sale. The profit column always says "Not Available"."""
+    return download(
+        export_datasets.export_quick_sales(
+            session,
+            ctx,
+            fmt,
+            q=q,
+            customer_id=customer_id,
+            statuses=statuses,
+            payment_type=payment_type,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    )
+
+
+@router.get("/promotions")
+def export_promotions(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    status: Annotated[list[PromotionStatus] | None, Query()] = None,
+    promo_type: PromotionType | None = None,
+    coupon_only: bool | None = None,
+) -> Response:
+    """One row per offer, with how many sales used it and what it gave away."""
+    return download(
+        export_datasets.export_promotions(
+            session, ctx, fmt, q=q, statuses=status, promo_type=promo_type, coupon_only=coupon_only
+        )
+    )
+
+
+@router.get("/promotion-usage")
+def export_promotion_usage(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    promotion_id: int | None = None,
+    coupon_only: bool = False,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    """One row per use of an offer on a sale. `coupon_only=true` gives the coupon usage report."""
+    return download(
+        export_datasets.export_promotion_usage(
+            session,
+            ctx,
+            fmt,
+            promotion_id=promotion_id,
+            coupon_only=coupon_only,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    )
+
+
+@router.get("/price-history")
+def export_price_history(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    barcode: Annotated[str | None, Query(max_length=50)] = None,
+    provider: Annotated[str | None, Query(max_length=30)] = None,
+) -> Response:
+    """One row per outside price saved by a price check (needs the plan's price intelligence)."""
+    return download(
+        export_datasets.export_price_history(session, ctx, fmt, barcode=barcode, provider=provider)
+    )
+
+
+@router.get("/sales-summary")
+def export_sales_summary(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    """One row per day with Detailed, Quick and Combined gross, discount and net sales."""
+    return download(
+        export_datasets.export_sales_summary(session, ctx, fmt, date_from=date_from, date_to=date_to)
+    )
+
+
+@router.get("/discount-report")
+def export_discount_report(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    """Discount given by offer and coupon over a period (needs the plan's advanced reports)."""
+    return download(
+        export_datasets.export_discount_report(session, ctx, fmt, date_from=date_from, date_to=date_to)
+    )

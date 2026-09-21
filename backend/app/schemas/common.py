@@ -53,8 +53,16 @@ def _quantity(value: Any) -> Decimal:
     return _parse_decimal(value, places=QUANTITY_PLACES, label="quantity")
 
 
+def _percent(value: Any) -> Decimal:
+    number = _parse_decimal(value, places=2, label="percentage")
+    if not 0 < number <= 100:
+        raise PydanticCustomError("percent_range", "Enter a percentage above 0 and up to 100.")
+    return number
+
+
 MoneyIn = Annotated[Decimal, BeforeValidator(_money)]
 QuantityIn = Annotated[Decimal, BeforeValidator(_quantity)]
+PercentIn = Annotated[Decimal, BeforeValidator(_percent)]  # 12.5 means 12.5%, at most 2 decimals
 
 
 class Page(BaseModel):

@@ -11,6 +11,7 @@ import { createSale, getSale, postSale, replaceSaleItems, updateSale } from '@/a
 import type { Product, Sale, SaleHeaderPayload } from '@/api/types'
 import { TextAreaField, TextField } from '@/components/fields'
 import { Alert, Button, LinkButton, PageHeader, QueryError, Spinner } from '@/components/ui'
+import { useEntitlements } from '@/features/subscription/useEntitlements'
 import { CURRENCY_SYMBOL, formatMoney, formatQuantity } from '@/lib/format'
 
 import { CustomerPicker, type PickedCustomer } from './CustomerPicker'
@@ -79,6 +80,7 @@ function Billing({ sale }: { sale: Sale | undefined }) {
   const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
   const shop = useQuery({ queryKey: ['shop'], queryFn: getShop })
+  const { allows } = useEntitlements()
 
   const [draftId, setDraftId] = useState<number | undefined>(sale?.id)
   const [lines, setLines] = useState<CartLine[]>(() => (sale ? linesFromSale(sale) : []))
@@ -89,6 +91,9 @@ function Billing({ sale }: { sale: Sale | undefined }) {
   const [saleDate, setSaleDate] = useState(sale?.sale_date ?? todayText())
   const [notes, setNotes] = useState(sale?.notes ?? '')
   const [billDiscount, setBillDiscount] = useState(sale && sale.discount !== '0.00' ? sale.discount : '')
+  // The coupon being typed, and the one that is applied to the bill (the server checks it on every price).
+  const [couponText, setCouponText] = useState(sale?.coupon_code ?? '')
+  const [coupon, setCoupon] = useState<string | null>(sale?.coupon_code ?? null)
   const [payment, setPayment] = useState<PaymentValue>(emptyPayment())
   const [lineErrors, setLineErrors] = useState<Record<string, LineErrors>>({})
   const [serverLines, setServerLines] = useState<Record<number, Partial<Record<LineField | 'product_id', string>>>>({})
@@ -111,6 +116,7 @@ function Billing({ sale }: { sale: Sale | undefined }) {
     sendable.map(({ line }) => itemPayload(line)),
     discountText,
     amountPaidFor(payment),
+    { customerId: customer?.id ?? null, couponCode: coupon },
   )
   const priced = preview.data
   const previewFor = (index: number) => {
@@ -171,6 +177,7 @@ function Billing({ sale }: { sale: Sale | undefined }) {
         sale_date: saleDate,
         notes: notes.trim() === '' ? null : notes.trim(),
         discount: discountText,
+        coupon_code: coupon,
       }
       const items = lines.map(itemPayload)
       let saved: Sale
@@ -223,6 +230,7 @@ function Billing({ sale }: { sale: Sale | undefined }) {
     >
       <div className="space-y-6 lg:col-span-2">
         {formError && <Alert tone="error">{formError}</Alert>}
+        {sale?.promotions_out_of_date && <Alert tone="warning">{t('billing.outOfDate')}</Alert>}
         {priced?.warnings.map((warning) => (
           <Alert key={warning} tone="warning">
             {warning}
@@ -231,7 +239,7 @@ function Billing({ sale }: { sale: Sale | undefined }) {
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">{t('sales.form.itemsHeading')}</h2>
-          <ProductSearchBox onPick={addProduct} autoFocus />
+          <ProductSearchBox onPick={addProduct} autoFocus scanner={allows('barcode_lookup')} />
 
           {lines.length === 0 && <p className="mt-6 text-center text-slate-500">{t('sales.form.emptyCart')}</p>}
 
@@ -292,6 +300,9 @@ function Billing({ sale }: { sale: Sale | undefined }) {
                           : t('sales.form.inStock', { stock: formatQuantity(p.available), unit: line.product.unit_code }))}
                     </span>
                     <span className="text-slate-700">
+                      {p?.promotion_discount && p.promotion_discount !== '0.00' && (
+                        <span className="mr-3 text-sm font-medium text-emerald-800">{t('billing.lineOffer', { amount: formatMoney(p.promotion_discount) })}</span>
+                      )}
                       {t('sales.form.fields.lineTotal')}:{' '}
                       <span className="text-lg font-bold text-slate-900">{p?.line_total ? formatMoney(p.line_total) : '—'}</span>
                     </span>
@@ -340,22 +351,83 @@ function Billing({ sale }: { sale: Sale | undefined }) {
             prefix={CURRENCY_SYMBOL}
             optional
           />
+          {allows('promotions') !== false && (
+            <div className="space-y-2">
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <TextField
+                    label={t('billing.couponLabel')}
+                    value={couponText}
+                    onChange={(event) => setCouponText(event.target.value.toUpperCase())}
+                    placeholder={t('billing.couponPlaceholder')}
+                    error={serverFields.coupon_code}
+                    maxLength={40}
+                    optional
+                  />
+                </div>
+                {coupon === null ? (
+                  <Button variant="secondary" disabled={couponText.trim() === ''} onClick={() => setCoupon(couponText.trim())}>
+                    {t('billing.couponApply')}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setCoupon(null)
+                      setCouponText('')
+                    }}
+                  >
+                    {t('billing.couponRemove')}
+                  </Button>
+                )}
+              </div>
+              {coupon !== null && priced?.coupon && (
+                <p role="status" className={`text-sm font-medium ${priced.coupon.applied ? 'text-emerald-800' : 'text-red-700'}`}>
+                  {priced.coupon.message}
+                </p>
+              )}
+            </div>
+          )}
           <dl className="space-y-1.5">
             <div className="flex justify-between text-slate-700">
-              <dt>{t('sales.form.subtotal')}</dt>
+              <dt>{t('billing.subtotal')}</dt>
               <dd>{priced ? formatMoney(priced.subtotal) : '—'}</dd>
             </div>
             {priced && priced.discount !== '0.00' && (
               <div className="flex justify-between text-slate-700">
-                <dt>{t('sales.form.billDiscountLine')}</dt>
+                <dt>{t('billing.billDiscount')}</dt>
                 <dd>− {formatMoney(priced.discount)}</dd>
               </div>
             )}
+            {priced?.promotions.map((offer) => (
+              <div key={offer.promotion_id} className="text-slate-700">
+                <div className="flex justify-between">
+                  <dt className="font-medium text-emerald-900">{t('billing.offerLine', { name: offer.name, terms: offer.terms })}</dt>
+                  <dd className="text-emerald-900">− {formatMoney(offer.amount)}</dd>
+                </div>
+                <p className="text-xs text-slate-500">{t('billing.whyApplied', { basis: offer.basis })}</p>
+              </div>
+            ))}
             <div className="flex items-baseline justify-between border-t border-slate-200 pt-2">
-              <dt className="text-lg font-semibold text-slate-900">{t('sales.form.total')}</dt>
+              <dt className="text-lg font-semibold text-slate-900">{t('billing.total')}</dt>
               <dd className="text-3xl font-bold text-slate-900">{priced ? formatMoney(priced.total) : '—'}</dd>
             </div>
+            {priced && priced.promotion_discount !== '0.00' && (
+              <p className="text-right text-sm font-medium text-emerald-800">{t('billing.saved', { amount: formatMoney(priced.promotion_discount) })}</p>
+            )}
           </dl>
+          {priced && priced.not_applied.length > 0 && (
+            <details className="text-sm text-slate-600">
+              <summary className="cursor-pointer font-medium">{t('billing.notApplied')}</summary>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                {priced.not_applied.map((entry, index) => (
+                  <li key={`${entry.promotion_id}-${index}`}>
+                    <span className="font-medium">{entry.name}:</span> {entry.reason}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

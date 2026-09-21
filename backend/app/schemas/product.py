@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from app.schemas.common import MoneyIn, Page, QuantityIn
 from app.services.inventory_service import StockStatus
+from app.services.product_lookup_service import LookupResult, MatchType
 from app.services.product_service import ProductView, SaveResult
 
 Sku = Annotated[str, StringConstraints(strip_whitespace=True, max_length=50)]
@@ -123,3 +124,51 @@ class ProductSaved(BaseModel):
 
 class ProductListOut(Page):
     items: list[ProductOut]
+
+
+class ProductOfferOut(BaseModel):
+    """A promotional price the product has right now. Shown beside the MRP and selling price; the selling
+    price itself is never changed by an offer."""
+
+    promotion_id: int
+    name: str
+    offer_price: Decimal
+
+
+class LookupProductOut(ProductOut):
+    offer: ProductOfferOut | None = None
+
+
+class LookupOut(BaseModel):
+    """What a scan or a typed code found. `match_type` says how: BARCODE, SKU and NAME are exact matches (one
+    product, or several sharing a name); SEARCH is a best guess the person must pick from."""
+
+    code: str
+    found: bool
+    match_type: MatchType
+    message: str | None  # "Barcode not found" when nothing matched
+    products: list[LookupProductOut]
+
+    @classmethod
+    def from_result(cls, result: LookupResult) -> "LookupOut":
+        products = []
+        for view in result.products:
+            base = ProductOut.from_view(view).model_dump()
+            offer = result.offers.get(view.product.id)
+            products.append(
+                LookupProductOut(
+                    **base,
+                    offer=None
+                    if offer is None
+                    else ProductOfferOut(
+                        promotion_id=offer.promotion_id, name=offer.name, offer_price=offer.offer_price
+                    ),
+                )
+            )
+        return cls(
+            code=result.code,
+            found=result.found,
+            match_type=result.match_type,
+            message=result.message,
+            products=products,
+        )

@@ -200,3 +200,15 @@ def set_shop(session_factory: sessionmaker[Session]):
 
 def context_for(tenant: Tenant, role: UserRole = UserRole.OWNER) -> RequestContext:
     return RequestContext(shop_id=tenant.shop.id, user_id=tenant.user.id, role=role)
+
+
+@pytest.fixture
+def give_plan(session_factory: sessionmaker[Session]):
+    """Put a shop on a plan: give_plan(tenant, "pro"). Shops with no subscription are on the Free plan."""
+    from app.services import entitlement_service
+
+    def _give(tenant: Tenant, code: str, **kwargs: object) -> None:
+        with session_factory() as new_session, new_session.begin():
+            entitlement_service.assign_plan(new_session, tenant.shop.id, code, **kwargs)
+
+    return _give

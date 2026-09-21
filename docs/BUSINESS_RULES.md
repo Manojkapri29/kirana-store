@@ -58,6 +58,7 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
     displayed stock may be higher than the shelf because some sales were not entered product-wise.
   - The Stock Count feature is the way to reconcile.
 - **S6.** A Quick Sale can be voided but not returned in the MVP (void it and enter a corrected one).
+  Phase 8 implements the workflow: see section QS.
 - **S7.** Exact stock is reliable **only** for products whose movements were recorded at product level.
 
 ## SL. Detailed Sales (Phase 7, implemented)
@@ -454,3 +455,87 @@ need business logic in services, which arrive in later phases.
   conflict such as a duplicate SKU or a second opening stock; **422** for invalid input or a broken rule.
   Field problems name the field.
 - Every query is scoped to the caller's shop. There is no endpoint that changes or deletes a ledger row.
+
+## QS. Quick Sales (Phase 8, implemented)
+
+- **QS1.** A Quick Sale is a money-only entry: a positive amount, an optional transaction-level discount
+  (`total = gross - discount`, always above zero), a date that is not in the future, an optional customer and a
+  note. It has no product, quantity, cost or per-product discount, and no offer or coupon.
+- **QS2.** Lifecycle: DRAFT (no number, no payment, no effect), POSTED (numbered `QS/<fiscal year>/<n>`, payment
+  settled), VOID (reversed; the entry and its number stay). Nothing is ever deleted. A posted entry cannot be
+  edited; void it and enter a new one. Discarding a draft uses no number.
+- **QS3.** Payment is chosen when posting. Paid in full needs a method. Paying less is a credit sale: a customer is
+  required and the unpaid part is charged to their khata through `khata_service` (reference `QUICK_SALE`). Paying
+  more than the total is refused. Voiding reverses the khata charge.
+- **QS4.** A Quick Sale never touches the stock ledger and never has a cost. Its profit is **"Not Available"**, and
+  it is excluded from every cost and profit figure.
+- **QS5.** Posting counts against the plan's monthly bill allowance, in the same transaction.
+
+## BC. Barcode and product lookup (Phase 8, implemented)
+
+- **BC1.** One lookup, first hit wins: exact barcode (a 12-digit UPC-A and its 13-digit EAN-13 twin are the same),
+  exact SKU, exact name (ignoring case, punctuation and repeated spaces), then search.
+- **BC2.** Shop-scoped. An exact match may be an inactive product (the screen says so); a search never returns one.
+- **BC3.** An unknown code answers "Barcode not found". Lookup never creates or changes a product.
+- **BC4.** Scanning on the billing screen adds a product only if it is active and has stock; a repeat scan adds one
+  more of a whole-unit product. Needs the plan's barcode feature; ordinary product search does not.
+- **BC5.** The product card shows the offer price next to MRP and selling price, never in place of them.
+
+## PI. Price intelligence (Phase 8, implemented)
+
+- **PI1.** Outside prices are information for a person. They **never** change MRP, selling price, purchase price or
+  average cost, and a price check can never block or slow billing.
+- **PI2.** Matching: exact barcode, exact SKU, exact normalised name + brand + pack size are **EXACT MATCH**; a
+  similar name (same pack size when both are known) is **POSSIBLE MATCH** with a lower confidence; a different
+  pack size is never a match.
+- **PI3.** Location is a typed city, state or market. No GPS. It is never sent to a provider. It either lists
+  matching prices first, or the answer says plainly that location was not applied. Without a location it still works.
+- **PI4.** A price is shown in the currency the source reported. It is never converted, and no difference to our
+  price is shown across currencies.
+- **PI5.** A provider that is not configured, switched off, slow, limited or broken shows its status. The shop's last
+  saved prices are shown as stale when a provider is down. A saved copy fresher than the cache time is used
+  without asking again.
+- **PI6.** A check that asked a provider counts against the plan's monthly price-check limit; a cached one is free.
+- **PI7.** Provider keys stay in the backend. The API reports only whether a provider is configured.
+
+## PM. Offers, discounts and coupons (Phase 8, implemented)
+
+- **PM1.** One discount system for Detailed Sales now and online orders, campaigns and coupons later. Kinds:
+  percentage, amount, offer price, buy X get Y. Scope: the whole bill, chosen products, or chosen categories.
+  Audience: everyone, first-time customers (from the shop's own posted sales and quick sales), or chosen customers.
+  A coupon is the same offer with a code; a code is unique per shop and is compared without case.
+- **PM2.** An offer applies only if the plan includes offers, it is ACTIVE, inside its dates, its audience and
+  minimum bill or quantity fit, and its usage limits are not reached (usage counts posted sales; a void gives the
+  use back). Draft, paused, expired and future offers never apply.
+- **PM3.** Order of application: offers on products or categories first, then whole-bill offers; higher priority
+  first, a tie to the older offer; each is worked out on what is left after the earlier ones. An offer that is not
+  stackable applies only if nothing applied before it and stops any after it. At most three apply to one bill. The
+  total discount can never take the bill below zero after the cashier's own bill discount.
+- **PM4.** An offer never changes MRP, selling price or cost. The discount is its own amount on the bill; the bill
+  shows Subtotal, discounts, offers with their reason, and Grand total. A line's share of the discount is kept so
+  its net revenue is `line_total - promotion_discount`.
+- **PM5.** The server is authoritative: the billing screen displays `/sales/calculate`, and posting works the
+  offers out again under a lock. A coupon that was entered but no longer applies stops the sale with a reason; it is
+  never dropped silently. A bill whose total reaches zero cannot be posted.
+- **PM6.** What each posted sale got (offer id, name, terms, amount, reason, coupon) is frozen in `sale_promotions`.
+  Editing, pausing or ending an offer never changes a past invoice or report. Offers are never deleted.
+- **PM7.** Only the owner creates, changes, activates, pauses or ends an offer.
+
+## PL. Plans and entitlements (Phase 8, implemented)
+
+- **PL1.** Plans, their features and limits are data, not code. Free, Basic and Pro are only examples. A shop's plan
+  is its current TRIAL or ACTIVE subscription, else the default. No payment is processed and no payment record is
+  ever created; changing a plan is an administrator's action.
+- **PL2.** The backend enforces every feature (barcode lookup, offers, price intelligence, advanced reports, online
+  store later) and limit (products, users, bills a month, price checks a month). The frontend only hides or disables.
+- **PL3.** Monthly counters are per shop, per calendar month in the shop's timezone, and are counted in the same
+  transaction as the thing counted.
+
+## RP. Sales reports (Phase 8, implemented)
+
+- **RP1.** Only POSTED sales count. Gross sales = quantity x price before any discount (Quick: the amount).
+  Discount = item discounts + bill discounts + offers and coupons. Net = Gross - Discount = the sum of sale totals.
+- **RP2.** Detailed, Quick and Combined are always shown apart. Profit exists only for Detailed Sales whose every
+  cost is known; Combined has no profit and says "Not Available".
+- **RP3.** Offer analytics read the frozen snapshots, so history never changes. Discount analysis needs the plan's
+  advanced reports.

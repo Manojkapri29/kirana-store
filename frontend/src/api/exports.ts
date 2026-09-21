@@ -11,6 +11,12 @@ export type ExportKind =
   | 'customers'
   | 'sales'
   | 'sale-items'
+  | 'quick-sales'
+  | 'promotions'
+  | 'promotion-usage'
+  | 'price-history'
+  | 'sales-summary'
+  | 'discount-report'
   | `sales/${number}` // one sale with its lines
   | `customers/${number}/ledger` // one customer's khata
 

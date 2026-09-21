@@ -7,9 +7,12 @@ from app.models.expenses import Expense, ExpenseCategory
 from app.models.inventory import InventoryTransaction
 from app.models.khata import CustomerLedgerEntry
 from app.models.parties import Customer, Supplier
+from app.models.pricing import PriceObservation
+from app.models.promotion import Promotion, SalePromotion
 from app.models.purchasing import Purchase, PurchaseItem, PurchaseReturn, PurchaseReturnItem
 from app.models.sales import QuickSale, Sale, SaleItem, SalesReturn, SalesReturnItem
 from app.models.shop import BusinessType, Shop, User
+from app.models.subscription import Plan, PlanFeature, ShopSubscription, SubscriptionUsage
 from app.models.system import AuditLog, DocumentSequence, IdempotencyKey
 
 __all__ = [
@@ -24,7 +27,11 @@ __all__ = [
     "ExpenseCategory",
     "IdempotencyKey",
     "InventoryTransaction",
+    "Plan",
+    "PlanFeature",
+    "PriceObservation",
     "Product",
+    "Promotion",
     "Purchase",
     "PurchaseItem",
     "PurchaseReturn",
@@ -32,9 +39,12 @@ __all__ = [
     "QuickSale",
     "Sale",
     "SaleItem",
+    "SalePromotion",
     "SalesReturn",
     "SalesReturnItem",
     "Shop",
+    "ShopSubscription",
+    "SubscriptionUsage",
     "Supplier",
     "Unit",
     "User",

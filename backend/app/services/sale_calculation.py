@@ -6,9 +6,12 @@ The frontend never repeats this arithmetic; it shows what `/sales/calculate` ret
     line gross   = round(quantity x unit price)                  whole paise, half up
     line total   = line gross - line discount                     the net revenue of the line
     subtotal     = sum of the line totals
-    bill total   = subtotal - bill discount                       what the customer pays
+    bill total   = subtotal - bill discount - promotion discount   what the customer pays
     line COGS    = round(quantity x unit cost)                    None when the cost is unknown
     gross profit = bill total - sum of line COGS                  None unless EVERY line's cost is known
+
+The bill discount is the cashier's own; the promotion discount is what `promotion_service` worked out. They
+are two separate amounts on the bill, never hidden inside a price.
 
 Tax is not part of the model (nothing in the schema supports it yet), so there is none here.
 
@@ -47,13 +50,18 @@ class BillTotals:
     subtotal: Decimal
     discount: Decimal
     total: Decimal
+    promotion_discount: Decimal = ZERO
 
 
-def bill_totals(line_totals: Sequence[Decimal], bill_discount: Decimal = ZERO) -> BillTotals:
+def bill_totals(
+    line_totals: Sequence[Decimal], bill_discount: Decimal = ZERO, promotion_discount: Decimal = ZERO
+) -> BillTotals:
     subtotal = sum(line_totals, ZERO)
-    if bill_discount > subtotal:
+    if bill_discount + promotion_discount > subtotal:
         raise DiscountTooLargeError("discount above bill amount")
-    return BillTotals(subtotal, bill_discount, subtotal - bill_discount)
+    return BillTotals(
+        subtotal, bill_discount, subtotal - bill_discount - promotion_discount, promotion_discount
+    )
 
 
 def line_profit(net: Decimal, cogs: Decimal | None) -> Decimal | None:

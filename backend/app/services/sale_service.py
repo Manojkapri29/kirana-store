@@ -18,6 +18,12 @@ Money and cost: all arithmetic is in `sale_calculation`. The cost of goods sold 
 times the product's average cost when the sale is posted. An unknown cost stays unknown (never 0), and then
 so does the profit. The bill discount reduces the sale's profit but is not spread over the lines.
 
+Offers: promotions and coupons are worked out by `promotion_service` (never here, never in the frontend). A
+draft shows what its offers are worth as of its last edit; POSTING works them out again, freezes what each one
+gave in `sale_promotions`, and refuses the sale if a coupon that was entered no longer applies. The
+discount is its own amount on the bill (`promotion_discount`), shared over the lines so each line reports
+its net revenue.
+
 Payment: chosen when posting. Paid in full needs a payment method (cash, UPI or other). Paying less leaves a
 credit sale: a customer is required and the unpaid part goes on their khata. Paying more than the bill is
 refused: extra money is an advance, recorded as a payment on the customer's khata.
@@ -47,7 +53,14 @@ from app.models.enums import (
     SaleStatus,
     StockReferenceType,
 )
-from app.services import inventory_service, khata_service, numbering_service
+from app.services import (
+    entitlement_service,
+    inventory_service,
+    khata_service,
+    numbering_service,
+    payment_service,
+    promotion_service,
+)
 from app.services import sale_calculation as calc
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
@@ -62,7 +75,7 @@ CENT = Decimal("0.01")
 ItemInput = dict[
     str, Any
 ]  # product_id, quantity, and optionally unit_price (default: the product's price), discount
-HEADER_FIELDS = ("sale_date", "customer_id", "notes", "discount")
+HEADER_FIELDS = ("sale_date", "customer_id", "notes", "discount", "coupon_code")
 
 
 @dataclass(frozen=True)
@@ -77,7 +90,7 @@ class SaleItemView:
 
     @property
     def profit(self) -> Decimal | None:
-        return calc.line_profit(self.item.line_total, self.item.cogs_amount)
+        return calc.line_profit(self.item.line_total - self.item.promotion_discount, self.item.cogs_amount)
 
 
 @dataclass(frozen=True)
@@ -89,6 +102,10 @@ class SaleView:
     items: list[SaleItemView]
     replaced_by_id: int | None  # the corrected copy of this (voided) sale, if one was made
     warnings: list[str]  # for example a price above the MRP, when the shop only warns
+    promotions: list[promotion_service.AppliedPromotion] = field(default_factory=list)
+    promotions_out_of_date: bool = (
+        False  # a draft whose offers are worth something else now than when last saved
+    )
 
     @property
     def credit_amount(self) -> Decimal:
@@ -162,6 +179,7 @@ class PreviewLine:
     discount: Decimal
     gross: Decimal | None
     line_total: Decimal | None
+    promotion_discount: Decimal  # this line's share of the offers
     available: Decimal | None  # stock on hand now
     short: bool  # more requested (across all lines of that product) than is on hand
     errors: list[tuple[str, str]]  # (field, message) for this line
@@ -171,8 +189,12 @@ class PreviewLine:
 class Preview:
     lines: list[PreviewLine]
     subtotal: Decimal
-    discount: Decimal
+    discount: Decimal  # the cashier's own bill discount
+    promotion_discount: Decimal  # what offers and coupons take off
     total: Decimal
+    applied_promotions: list[promotion_service.AppliedPromotion]
+    not_applied_promotions: list[promotion_service.NotApplied]
+    coupon: promotion_service.CouponOutcome | None
     payment_type: PaymentType  # PAID or CREDIT, for the amount paid that was asked about (default: in full)
     paid: Decimal
     credit: Decimal  # the part that would go on the customer's khata
@@ -199,6 +221,11 @@ def _items_of(session: Session, shop_id: int, sale_id: int) -> list[SaleItem]:
             .order_by(SaleItem.id)
         )
     )
+
+
+def _cart_of(items: Sequence[SaleItem]) -> list[promotion_service.CartInput]:
+    """The lines as `promotion_service` reads them: the line after the cashier's own discount is its base."""
+    return [promotion_service.CartInput(i.product_id, i.quantity, i.unit_price, i.line_total) for i in items]
 
 
 def _mrp_message(name: str, price: Decimal, mrp: Decimal) -> str:
@@ -249,7 +276,24 @@ def get_sale_view(session: Session, shop_id: int, sale_id: int) -> SaleView:
         select(Sale.id).where(Sale.shop_id == shop_id, Sale.replaces_id == sale_id)
     )
     warnings = _mrp_warnings([(line[2], line[0]) for line in lines])
-    return SaleView(sale, customer_name, created_by_name, posted_by_name, items, replaced_by_id, warnings)
+    promotions: list[promotion_service.AppliedPromotion] = []
+    out_of_date = False
+    if sale.status is SaleStatus.DRAFT:
+        live = promotion_service.evaluate(
+            session,
+            shop_id,
+            _cart_of([line[0] for line in lines]),
+            customer_id=sale.customer_id,
+            coupon_code=sale.coupon_code,
+            manual_discount=sale.discount,
+        )
+        promotions, out_of_date = live.applied, live.total != sale.promotion_discount
+    else:
+        promotions = promotion_service.applied_for_sale(session, shop_id, sale.id)
+    return SaleView(
+        sale, customer_name, created_by_name, posted_by_name, items, replaced_by_id, warnings,
+        promotions, out_of_date,
+    )  # fmt: skip
 
 
 def _search_clause(text: str) -> ColumnElement[bool]:
@@ -404,19 +448,6 @@ def _clean_text(value: str | None) -> str | None:
     return value.strip() or None
 
 
-def _money(value: Any, *, field_name: str) -> Decimal:
-    """A non-negative amount with at most two decimals (the API already checks; services are used directly
-    too)."""
-    if isinstance(value, bool) or isinstance(value, float) or not isinstance(value, Decimal | int):
-        raise InvalidInputError("Enter the amount as a number, for example 250.50.", field=field_name)
-    amount = Decimal(value)
-    if not amount.is_finite() or amount < 0:
-        raise InvalidInputError("The amount cannot be negative.", field=field_name)
-    if amount != amount.quantize(CENT):
-        raise InvalidInputError("Use at most 2 decimal places.", field=field_name)
-    return amount.quantize(CENT)
-
-
 @dataclass(frozen=True)
 class _Line:
     product: Product
@@ -534,9 +565,15 @@ def _clean_header(session: Session, shop_id: int, values: dict[str, Any], *, par
         out["customer_id"] = values["customer_id"]
     if "notes" in values:
         out["notes"] = _clean_text(values["notes"])
+    if "coupon_code" in values:
+        guard(
+            lambda: out.__setitem__(
+                "coupon_code", promotion_service.require_known_coupon(session, shop_id, values["coupon_code"])
+            )
+        )
     if "discount" in values:
         try:
-            out["discount"] = _money(
+            out["discount"] = payment_service.money(
                 values["discount"] if values["discount"] is not None else ZERO, field_name="discount"
             )
         except InvalidInputError as exc:
@@ -555,6 +592,8 @@ def calculate_preview(
     raw_items: Sequence[ItemInput],
     discount: Decimal | None = None,
     amount_paid: Decimal | None = None,
+    customer_id: int | None = None,
+    coupon_code: str | None = None,
 ) -> Preview:
     """Price a cart without saving anything: the numbers the billing screen shows.
 
@@ -576,6 +615,7 @@ def calculate_preview(
                 discount=raw.get("discount") or ZERO,
                 gross=None if line is None else line.gross,
                 line_total=None if line is None else line.total,
+                promotion_discount=ZERO,
                 available=None,
                 short=False,
                 errors=[(p.rsplit(".", 1)[-1], m) for p, m in problems],
@@ -602,19 +642,41 @@ def calculate_preview(
     errors: list[tuple[str, str]] = []
     bill_discount = ZERO
     try:
-        bill_discount = _money(discount if discount is not None else ZERO, field_name="discount")
+        bill_discount = payment_service.money(
+            discount if discount is not None else ZERO, field_name="discount"
+        )
     except InvalidInputError as exc:
         errors.append(("discount", exc.message))
-    good_totals = [line.total for line in cleaned if line is not None]
-    try:
-        totals = calc.bill_totals(good_totals, bill_discount)
-    except calc.DiscountTooLargeError:
+    good = [(index, line) for index, line in enumerate(cleaned) if line is not None]
+    good_totals = [line.total for _, line in good]
+    if customer_id is not None:
+        try:
+            _check_customer(session, shop_id, customer_id)
+        except InvalidInputError as exc:
+            errors.append(("customer_id", exc.message))
+            customer_id = None
+    if bill_discount > sum(good_totals, ZERO):
         errors.append(("discount", "The bill discount is more than the items total."))
-        totals = calc.bill_totals(good_totals)
+        bill_discount = ZERO
+    evaluation = promotion_service.evaluate(
+        session,
+        shop_id,
+        [
+            promotion_service.CartInput(line.product.id, line.quantity, line.unit_price, line.total)
+            for _, line in good
+        ],
+        customer_id=customer_id,
+        coupon_code=coupon_code,
+        manual_discount=bill_discount,
+    )
+    for position, (index, _) in enumerate(good):
+        share = evaluation.per_line.get(position, ZERO)
+        lines[index] = PreviewLine(**{**lines[index].__dict__, "promotion_discount": share})
+    totals = calc.bill_totals(good_totals, bill_discount, evaluation.total)
     split = calc.split_payment(totals.total, None)
     if amount_paid is not None:
         try:
-            paid = _money(amount_paid, field_name="amount_paid")
+            paid = payment_service.money(amount_paid, field_name="amount_paid")
             if paid > totals.total:
                 errors.append(("amount_paid", "The amount paid is more than the bill total."))
             else:
@@ -625,7 +687,11 @@ def calculate_preview(
         lines=lines,
         subtotal=totals.subtotal,
         discount=totals.discount,
+        promotion_discount=totals.promotion_discount,
         total=totals.total,
+        applied_promotions=evaluation.applied,
+        not_applied_promotions=evaluation.not_applied,
+        coupon=evaluation.coupon,
         payment_type=split.payment_type,
         paid=split.paid,
         credit=split.credit,
@@ -649,6 +715,8 @@ def _snapshot(sale: Sale, items: Sequence[SaleItem] | None = None) -> dict[str, 
         "sale_date": sale.sale_date,
         "subtotal": sale.subtotal,
         "discount": sale.discount,
+        "promotion_discount": sale.promotion_discount,
+        "coupon_code": sale.coupon_code,
         "total_amount": sale.total_amount,
         "amount_paid": sale.amount_paid,
         "payment_type": sale.payment_type,
@@ -663,6 +731,7 @@ def _snapshot(sale: Sale, items: Sequence[SaleItem] | None = None) -> dict[str, 
                 "unit_price": i.unit_price,
                 "discount": i.discount,
                 "line_total": i.line_total,
+                "promotion_discount": i.promotion_discount,
                 "unit_cost": i.unit_cost,
                 "cogs_amount": i.cogs_amount,
             }
@@ -700,15 +769,29 @@ def _write_items(session: Session, ctx: RequestContext, sale: Sale, lines: Seque
 
 
 def _retotal(session: Session, sale: Sale, *, discount: Decimal | None = None) -> None:
-    """Set subtotal, discount and total together, from the lines (the database requires
-    `total = subtotal - discount` at every flush, so they can only change as one)."""
-    totals = [i.line_total for i in _items_of(session, sale.shop_id, sale.id)]  # read first: it autoflushes
+    """Set subtotal, discounts and total together, from the lines (the database requires
+    `total = subtotal - discount - promotion_discount` at every flush, so they can only change as one).
+    A draft's offers are worked out here from its lines, its customer and its coupon code; posting works them
+    out again, so an offer that lapses in between is never given."""
+    items = _items_of(session, sale.shop_id, sale.id)  # read first: it autoflushes
+    totals = [i.line_total for i in items]
     new_discount = sale.discount if discount is None else discount
+    evaluation = promotion_service.evaluate(
+        session,
+        sale.shop_id,
+        _cart_of(items),
+        customer_id=sale.customer_id,
+        coupon_code=sale.coupon_code,
+        manual_discount=new_discount,
+    )
     try:
-        bill = calc.bill_totals(totals, new_discount)
+        bill = calc.bill_totals(totals, new_discount, evaluation.total)
     except calc.DiscountTooLargeError:
         raise InvalidInputError("The bill discount is more than the items total.", field="discount") from None
+    for position, item in enumerate(items):
+        item.promotion_discount = evaluation.per_line.get(position, ZERO)
     sale.subtotal, sale.discount, sale.total_amount = bill.subtotal, bill.discount, bill.total
+    sale.promotion_discount = bill.promotion_discount
     session.flush()
 
 
@@ -810,45 +893,6 @@ def replace_items(
 # --- Writing: posting ----------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class _Payment:
-    split: calc.PaymentSplit
-    method: PaymentMethod | None
-    reference: str | None
-
-
-def _resolve_payment(
-    total: Decimal,
-    customer_id: int | None,
-    amount_paid: Decimal | None,
-    method: PaymentMethod | None,
-    reference: str | None,
-) -> _Payment:
-    if total <= 0:
-        raise InvalidInputError("The bill total must be greater than zero.", field="items")
-    paid = None if amount_paid is None else _money(amount_paid, field_name="amount_paid")
-    if paid is not None and paid > total:
-        raise InvalidInputError(
-            f"The amount paid is more than the bill total ({total:.2f}). To keep extra money as an advance, "
-            "take a payment on the customer's khata instead.",
-            field="amount_paid",
-        )
-    split = calc.split_payment(total, paid)
-    if split.paid > 0 and method is None:
-        raise InvalidInputError("Choose how the customer paid (cash, UPI or other).", field="payment_method")
-    if split.credit > 0 and customer_id is None:
-        raise InvalidInputError(
-            "Choose the customer: paying less than the total leaves an amount on their khata.",
-            field="customer_id",
-        )
-    clean_reference = _clean_text(reference)
-    if clean_reference is not None and len(clean_reference) > 100:
-        raise InvalidInputError(
-            "The payment reference is too long (100 characters at most).", field="payment_reference"
-        )
-    return _Payment(split, method if split.paid > 0 else None, clean_reference)
-
-
 def post_sale(
     session: Session,
     ctx: RequestContext,
@@ -909,8 +953,25 @@ def post_sale(
     if problems:
         raise InvalidInputError(problems[0][1], field=problems[0][0], errors=problems)
 
-    totals = calc.bill_totals([line.total for line in lines], sale.discount)
-    payment = _resolve_payment(totals.total, sale.customer_id, amount_paid, payment_method, payment_reference)
+    # Offers are worked out afresh, under a lock on any promotion with a usage limit. A coupon that was
+    # entered but no longer applies stops the sale: the customer expects the discount, so it is never
+    # dropped silently.
+    evaluation = promotion_service.evaluate(
+        session,
+        ctx.shop_id,
+        [promotion_service.CartInput(x.product.id, x.quantity, x.unit_price, x.total) for x in lines],
+        customer_id=sale.customer_id,
+        coupon_code=sale.coupon_code,
+        manual_discount=sale.discount,
+        lock=True,
+    )
+    if sale.coupon_code and (evaluation.coupon is None or not evaluation.coupon.applied):
+        message = evaluation.coupon.message if evaluation.coupon else "Coupon code not found."
+        raise InvalidInputError(f"{message} Remove the coupon or fix the bill.", field="coupon_code")
+    totals = calc.bill_totals([line.total for line in lines], sale.discount, evaluation.total)
+    payment = payment_service.resolve_payment(
+        totals.total, sale.customer_id, amount_paid, payment_method, payment_reference
+    )
 
     before = _snapshot(sale, items)
     products = inventory_service.lock_products(session, ctx.shop_id, [i.product_id for i in items])
@@ -938,11 +999,17 @@ def post_sale(
         )
         item.unit_cost = issue.unit_cost
         item.cogs_amount = issue.cogs
+    for position, item in enumerate(items):
+        item.promotion_discount = evaluation.per_line.get(position, ZERO)
+
+    # Counts against the plan's monthly invoice allowance, in this same transaction (403 when over).
+    entitlement_service.use_metered(session, ctx.shop_id, entitlement_service.METRIC_INVOICES)
 
     fiscal_year = numbering_service.fiscal_year_label(today)
     number = numbering_service.next_number(session, ctx.shop_id, DOC_TYPE, fiscal_year)
     sale.invoice_no = numbering_service.format_document_number(NUMBER_PREFIX, fiscal_year, number)
     sale.subtotal, sale.total_amount = totals.subtotal, totals.total
+    sale.promotion_discount = totals.promotion_discount
     sale.payment_type = payment.split.payment_type
     sale.amount_paid = payment.split.paid
     sale.payment_method = payment.method
@@ -951,6 +1018,7 @@ def post_sale(
     sale.posted_at = utc_now()
     sale.posted_by = ctx.user_id
     session.flush()
+    promotion_service.record_applied(session, ctx.shop_id, sale.id, evaluation.applied)
 
     if payment.split.credit > 0:
         khata_service.record_credit_sale(
@@ -1050,6 +1118,7 @@ def correct_sale(session: Session, ctx: RequestContext, sale_id: int) -> SaleVie
         customer_id=source.customer_id,
         sale_date=min(source.sale_date, shop_today(shop)),
         notes=source.notes,
+        coupon_code=source.coupon_code,
         subtotal=ZERO,
         discount=ZERO,
         total_amount=ZERO,

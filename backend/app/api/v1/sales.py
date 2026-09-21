@@ -70,7 +70,15 @@ def calculate(payload: CalculateIn, ctx: Ctx, session: ReadSession) -> PreviewOu
     """Price a cart without saving anything. The billing screen shows exactly these numbers."""
     items = [item.model_dump() for item in payload.items]
     return PreviewOut.from_preview(
-        sale_service.calculate_preview(session, ctx.shop_id, items, payload.discount, payload.amount_paid)
+        sale_service.calculate_preview(
+            session,
+            ctx.shop_id,
+            items,
+            payload.discount,
+            payload.amount_paid,
+            customer_id=payload.customer_id,
+            coupon_code=payload.coupon_code,
+        )
     )
 
 

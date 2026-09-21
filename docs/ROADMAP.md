@@ -12,8 +12,8 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 | 4 | Suppliers | Done |
 | 5 | Purchases + weighted average cost | Done |
 | 6 | Customers + Khata | Done |
-| 7 | Detailed Sales | Done, awaiting review |
-| 8 | Quick/Daily Sales | Planned |
+| 7 | Detailed Sales | Done |
+| 8 | Quick Sales, barcode scanning, price intelligence, offers and coupons, plans | Done, awaiting review |
 | 9 | Returns | Planned |
 | 10 | Inventory views + adjustments + stock count + reliability indicators | Planned |
 | ✔ | **PostgreSQL checkpoint** (after Phase 10) | Planned |
@@ -115,14 +115,71 @@ a failed posting leaves no stock, number or khata entry behind; unknown cost nev
 *Not in this phase:* Quick Sales (Phase 8), Sales Returns (Phase 9, the void guard for returns is already in
 place), tax or GST invoicing (nothing in the schema supports it), overpayment on a bill, and a printed invoice.
 
-### Phase 8: Quick/Daily Sales
-Money-only entries (paid or credit) with a clear "stock is not reduced" notice, and export.
-**Done when:** creating a quick sale never changes stock; exports show the sale mode.
+### Phase 8: Quick Sales, scanning, price intelligence, offers, plans
+Seven pieces, all on the existing architecture (routers, services, ledgers, idempotent-safe transactions):
+
+* **Quick/Daily Sales.** Money-only entries with the same Draft, Posted, Void lifecycle as a bill, an optional
+  customer, payment method, part payment and credit (through `khata_service`), one transaction-level discount,
+  numbering `QS/2026-27/0001`, and CSV/XLSX export. No product, no stock movement, no cost: profit is
+  "Not Available". Migration `0008`.
+* **Barcode / product lookup.** One reusable lookup: exact barcode (UPC-A and EAN-13 twins), exact SKU, exact
+  normalised name, then search. Shop-scoped, never creates a product, "Barcode not found" for an unknown code.
+  The billing screen uses it for scanning (USB and Bluetooth scanners type like keyboards), with stock and
+  active checks and a product card. Service `product_lookup_service`.
+* **Price intelligence.** Outside prices as information only, through a provider interface (Open Food Facts for
+  identity, Open Prices for crowd-sourced shelf prices, UPCitemdb when a key is configured). EXACT vs POSSIBLE
+  matches with a confidence, a typed city/state/market (no GPS) that is either applied or plainly reported as not
+  applied, a per-shop cache with stale fallback, a monthly plan limit, and a saved history. It never changes a
+  price or a cost and never blocks billing. Migration `0010`. Services `price_providers`, `price_comparison_service`.
+* **Offers, discounts and coupons.** One generic engine (`promotion_service`, `promotion_calculation`): percentage,
+  amount, offer price and buy-X-get-Y, on the whole bill, chosen products or categories, with minimums, a maximum,
+  usage limits, coupon codes, first-order and customer-specific audiences, priority and explicit stacking. The
+  server is authoritative; what each sale got is frozen in `sale_promotions`. Migration `0009`.
+* **Plans and limits.** `plans`, `plan_features`, `shop_subscriptions`, `subscription_usage`; an entitlement
+  service the backend enforces (the frontend only hides); a read-only plan screen with "Contact admin". No
+  payments. Migration `0007`.
+* **Reports.** Detailed, Quick and Combined; Gross, Discount and Net; discount analytics by offer, coupon and day.
+* **Exports.** Quick sales, offers, offer and coupon usage, price history, sales summary, discount report.
+
+**Done when:** a quick sale never touches stock; a scanned unknown code adds nothing; an outside price never
+changes a price; editing or ending an offer never changes a posted invoice; a usage limit of one cannot be used
+twice by simultaneous sales; a plan without a feature is refused by the server; every outside failure leaves
+billing untouched. *Not in this phase:* online ordering, a payment gateway, real subscription billing, loyalty,
+AI agents, deployment.
 
 ### Phase 9: Returns
 Sales returns and purchase returns that reference the original line, refund/credit modes, and cost
-handling. Unbilled returns use adjustments (Phase 10).
+handling. Unbilled returns use adjustments (Phase 10). A sales return refunds a line's net revenue (line total
+less its share of any offer, `sale_items.promotion_discount`), so an offer is never refunded twice.
 **Done when:** return quantity caps, proportional refunds, void rules, and history preservation are tested.
+
+**Added requirements for Phase 9 (planned, not built).**
+
+*1. Smart error recovery.* Normal users never see a traceback, SQL or database text, an internal path, a key or a
+server detail. Every unexpected failure is captured and logged internally with a safe reference id (for example
+`ERR-20260921-A82F`), and the user sees a plain message, the reference, and the recovery that fits (Try again,
+Save as draft, Go back, Refresh, Continue). One reusable backend error format
+(`success`, `error_code`, `message`, `reference_id`, `retryable`) built on the existing exception handlers, not
+repeated per route. Categories: validation, network, external API, timeout, database, inventory conflict,
+insufficient stock, duplicate, authentication, authorization, image upload, offer calculation, checkout. Auto-retry
+only for safe reads (search, price lookup, image metadata); never for posting a sale, deducting stock, an order, a
+payment or a khata entry unless the existing idempotency keys make the repeat harmless. Forms keep what was typed
+when a non-fatal error happens; no duplicate orders; "Success" is shown only after the backend transaction has
+committed. React error boundaries show "This section couldn't be loaded" with Retry, Go to Dashboard and Reload.
+A logging foundation records reference id, time, endpoint, method, shop, user, category, exception type, sanitised
+details and a correlation id, never passwords, keys, tokens or payment secrets. No public error-log screen.
+
+*2. Smart photo capture (image intelligence foundation).* An optional layer, never required. Take, upload or
+choose a photo; the backend validates type, size and dimensions; a provider abstraction (OCR and image analysis)
+is integrated only if a provider is safely configured, otherwise "Image analysis is not configured yet." Results
+are labelled Detected or Suggested, never confirmed; the flow is Photo, Analysis, Suggestions, Review, Confirm,
+Save. Duplicate check before creating a product from an image (barcode, SKU, normalised name, brand, pack size).
+A barcode found in an image goes through the existing Phase 8 lookup, not a second barcode system. Keys stay in
+the backend; images go to an external provider only when the user explicitly triggers analysis; images are private
+to the shop. Later: supplier invoice photo to purchase draft, handwritten stock list to adjustment draft, shelf
+photo, damaged or expired product to a suggested adjustment reason. An image never changes stock, prices, orders,
+khata or money by itself. Priority: Data Integrity > User Safety > Security > Correctness > Recovery >
+Intelligence > Convenience.
 
 ### Phase 10: Inventory views + adjustments + stock count + reliability indicators
 Inventory table (opening, purchased, sold, returns, adjustments, current), adjustments with reason

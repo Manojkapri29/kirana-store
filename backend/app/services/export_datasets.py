@@ -17,6 +17,8 @@ from app.models.enums import (
     CustomerLedgerEntryType,
     InventoryTxnType,
     PaymentType,
+    PromotionStatus,
+    PromotionType,
     PurchaseStatus,
     SaleStatus,
 )
@@ -24,9 +26,14 @@ from app.services import (
     customer_service,
     inventory_service,
     khata_service,
+    price_comparison_service,
     product_service,
+    promotion_calculation,
+    promotion_service,
     purchase_service,
+    quick_sale_service,
     sale_service,
+    sales_report_service,
 )
 from app.services.export_service import Column, ExportFile, ExportFormat, Kind, render
 from app.services.inventory_service import StockStatus
@@ -192,6 +199,96 @@ SALE_ITEM_COLUMNS = [
     Column("cogs", "Cost of Goods", Kind.MONEY),
     Column("profit", "Line Profit", Kind.MONEY),
     Column("sale_total", "Sale Total", Kind.MONEY),
+]
+
+QUICK_SALE_COLUMNS = [
+    Column("quick_no", "Quick Sale No"),
+    Column("sale_date", "Date", Kind.DATE),
+    Column("customer", "Customer"),
+    Column("status", "Status"),
+    Column("payment_type", "Payment"),
+    Column("payment_method", "Payment Method"),
+    Column("payment_reference", "Payment Reference"),
+    Column("gross", "Amount", Kind.MONEY),
+    Column("discount", "Discount", Kind.MONEY),
+    Column("total", "Total", Kind.MONEY),
+    Column("amount_paid", "Amount Paid", Kind.MONEY),
+    Column("on_khata", "On Khata (Credit)", Kind.MONEY),
+    Column("profit", "Profit"),
+    Column("note", "Note"),
+    Column("created_by", "Created By"),
+    Column("posted_at", "Posted At", Kind.DATETIME),
+    Column("void_reason", "Void Reason"),
+]
+
+PROMOTION_COLUMNS = [
+    Column("name", "Offer"),
+    Column("terms", "What It Gives"),
+    Column("promo_type", "Type"),
+    Column("scope", "Applies To"),
+    Column("status", "Status"),
+    Column("coupon_code", "Coupon Code"),
+    Column("audience", "For"),
+    Column("priority", "Priority", Kind.INTEGER),
+    Column("stackable", "Can Combine"),
+    Column("starts_at", "Starts", Kind.DATETIME),
+    Column("ends_at", "Ends", Kind.DATETIME),
+    Column("min_cart_value", "Minimum Bill", Kind.MONEY),
+    Column("min_quantity", "Minimum Quantity", Kind.QUANTITY),
+    Column("max_discount", "Maximum Discount", Kind.MONEY),
+    Column("usage_limit", "Usage Limit", Kind.INTEGER),
+    Column("per_customer_limit", "Limit Per Customer", Kind.INTEGER),
+    Column("used_count", "Times Used", Kind.INTEGER),
+    Column("discount_given", "Discount Given", Kind.MONEY),
+    Column("created_by", "Created By"),
+    Column("description", "Description"),
+]
+
+PROMOTION_USAGE_COLUMNS = [
+    Column("sale_date", "Date", Kind.DATE),
+    Column("invoice_no", "Invoice No"),
+    Column("sale_status", "Sale Status"),
+    Column("customer", "Customer"),
+    Column("name", "Offer"),
+    Column("terms", "What It Gave"),
+    Column("coupon_code", "Coupon Code"),
+    Column("discount_amount", "Discount", Kind.MONEY),
+    Column("basis", "Why It Applied"),
+]
+
+PRICE_HISTORY_COLUMNS = [
+    Column("checked_at", "Checked At", Kind.DATETIME),
+    Column("barcode", "Barcode"),
+    Column("provider", "Source"),
+    Column("product_name", "Product Name (Source)"),
+    Column("brand", "Brand (Source)"),
+    Column("price", "Price", Kind.MONEY),
+    Column("currency", "Currency"),
+    Column("location", "Location"),
+    Column("observed_on", "Price Seen On", Kind.DATE),
+    Column("source_url", "Source Link"),
+]
+
+SALES_SUMMARY_COLUMNS = [
+    Column("day", "Date", Kind.DATE),
+    Column("detailed_sales", "Detailed Sales", Kind.INTEGER),
+    Column("detailed_gross", "Detailed Gross", Kind.MONEY),
+    Column("detailed_discount", "Detailed Discount", Kind.MONEY),
+    Column("detailed_net", "Detailed Net", Kind.MONEY),
+    Column("quick_sales", "Quick Sales", Kind.INTEGER),
+    Column("quick_gross", "Quick Gross", Kind.MONEY),
+    Column("quick_discount", "Quick Discount", Kind.MONEY),
+    Column("quick_net", "Quick Net", Kind.MONEY),
+    Column("gross", "Combined Gross", Kind.MONEY),
+    Column("discount", "Combined Discount", Kind.MONEY),
+    Column("net", "Combined Net", Kind.MONEY),
+]
+
+DISCOUNT_REPORT_COLUMNS = [
+    Column("promotion", "Offer"),
+    Column("coupon_code", "Coupon Code"),
+    Column("uses", "Times Used", Kind.INTEGER),
+    Column("discount", "Discount Given", Kind.MONEY),
 ]
 
 BALANCE_LABELS = {
@@ -411,6 +508,146 @@ def _sale_items(
     return _Dataset(name, SALE_ITEM_COLUMNS, rows)
 
 
+def _quick_sales(session: Session, ctx: RequestContext, **filters: Any) -> _Dataset:
+    shop = get_shop(session, ctx.shop_id)
+    items, _ = quick_sale_service.list_quick_sales(session, ctx.shop_id, limit=None, **filters)
+    rows = []
+    for r in items:
+        s = r.sale
+        rows.append(
+            {
+                "quick_no": s.quick_no,
+                "sale_date": s.sale_date,
+                "customer": r.customer_name,
+                "status": s.status.value.title(),
+                "payment_type": None if s.payment_type is None else s.payment_type.value.title(),
+                "payment_method": None if s.payment_method is None else s.payment_method.value,
+                "payment_reference": s.payment_reference,
+                "gross": s.gross_amount,
+                "discount": s.discount,
+                "total": s.total_amount,
+                "amount_paid": s.amount_paid,
+                "on_khata": None
+                if s.amount_paid is None
+                else max(s.total_amount - s.amount_paid, Decimal("0.00")),
+                "profit": quick_sale_service.NOT_AVAILABLE,  # money only: there is no cost, so no profit
+                "note": s.note,
+                "created_by": r.created_by_name,
+                "posted_at": None if s.posted_at is None else _local(s.posted_at, shop.timezone),
+                "void_reason": s.void_reason,
+            }
+        )
+    return _Dataset("quick_sales", QUICK_SALE_COLUMNS, rows)
+
+
+def _promotions(session: Session, ctx: RequestContext, **filters: Any) -> _Dataset:
+    shop = get_shop(session, ctx.shop_id)
+    views, _ = promotion_service.list_promotions(session, ctx.shop_id, limit=None, **filters)
+    rows = []
+    for v in views:
+        p = v.promotion
+        rows.append(
+            {
+                "name": p.name,
+                "terms": promotion_calculation.describe_terms(promotion_service.rule_of(p)),
+                "promo_type": p.promo_type.value.replace("_", " ").title(),
+                "scope": p.scope.value.title(),
+                "status": v.effective_status.value.title(),
+                "coupon_code": p.coupon_code,
+                "audience": p.audience.value.replace("_", " ").title(),
+                "priority": p.priority,
+                "stackable": "Yes" if p.stackable else "No",
+                "starts_at": _local(p.starts_at, shop.timezone) if p.starts_at else None,
+                "ends_at": _local(p.ends_at, shop.timezone) if p.ends_at else None,
+                "min_cart_value": p.min_cart_value,
+                "min_quantity": p.min_quantity,
+                "max_discount": p.max_discount,
+                "usage_limit": p.usage_limit,
+                "per_customer_limit": p.per_customer_limit,
+                "used_count": v.used_count,
+                "discount_given": v.discount_given,
+                "created_by": v.created_by_name,
+                "description": p.description,
+            }
+        )
+    return _Dataset("promotions", PROMOTION_COLUMNS, rows)
+
+
+def _promotion_usage(session: Session, ctx: RequestContext, **filters: Any) -> _Dataset:
+    rows = [
+        {
+            "sale_date": r.sale.sale_date,
+            "invoice_no": r.sale.invoice_no,
+            "sale_status": r.sale.status.value.title(),
+            "customer": r.customer_name,
+            "name": r.use.name,
+            "terms": r.use.terms,
+            "coupon_code": r.use.coupon_code,
+            "discount_amount": r.use.discount_amount,
+            "basis": r.use.basis,
+        }
+        for r in promotion_service.list_usage(session, ctx.shop_id, **filters)
+    ]
+    return _Dataset("promotion_usage", PROMOTION_USAGE_COLUMNS, rows)
+
+
+def _price_history(session: Session, ctx: RequestContext, **filters: Any) -> _Dataset:
+    shop = get_shop(session, ctx.shop_id)
+    observations, _ = price_comparison_service.list_history(session, ctx.shop_id, limit=None, **filters)
+    rows = [
+        {
+            "checked_at": _local(o.checked_at, shop.timezone),
+            "barcode": o.barcode,
+            "provider": o.provider,
+            "product_name": o.product_name,
+            "brand": o.brand,
+            "price": o.price,
+            "currency": o.currency,
+            "location": o.location_text,
+            "observed_on": o.observed_on,
+            "source_url": o.source_url,
+        }
+        for o in observations
+    ]
+    return _Dataset("price_history", PRICE_HISTORY_COLUMNS, rows)
+
+
+def _sales_summary(session: Session, ctx: RequestContext, **filters: Any) -> _Dataset:
+    summary = sales_report_service.sales_summary(session, ctx.shop_id, **filters)
+    rows = [
+        {
+            "day": d.day,
+            "detailed_sales": d.detailed.sales_count,
+            "detailed_gross": d.detailed.gross,
+            "detailed_discount": d.detailed.discount,
+            "detailed_net": d.detailed.net,
+            "quick_sales": d.quick.sales_count,
+            "quick_gross": d.quick.gross,
+            "quick_discount": d.quick.discount,
+            "quick_net": d.quick.net,
+            "gross": d.combined.gross,
+            "discount": d.combined.discount,
+            "net": d.combined.net,
+        }
+        for d in summary.days
+    ]
+    return _Dataset("sales_summary", SALES_SUMMARY_COLUMNS, rows)
+
+
+def _discount_report(session: Session, ctx: RequestContext, **filters: Any) -> _Dataset:
+    report = sales_report_service.discount_report(session, ctx.shop_id, **filters)
+    coupons = {c.code: c for c in report.by_coupon}
+    rows = [
+        {"promotion": p.name, "coupon_code": None, "uses": p.uses, "discount": p.discount}
+        for p in report.by_promotion
+    ]
+    rows += [
+        {"promotion": "Coupon", "coupon_code": c.code, "uses": c.uses, "discount": c.discount}
+        for c in coupons.values()
+    ]
+    return _Dataset("discount_report", DISCOUNT_REPORT_COLUMNS, rows)
+
+
 def _customers(session: Session, ctx: RequestContext, *, active: bool | None, **filters: Any) -> _Dataset:
     shop = get_shop(session, ctx.shop_id)
     accounts, _ = khata_service.list_accounts(session, ctx.shop_id, active=active, limit=None, **filters)
@@ -622,4 +859,105 @@ def export_sale_details(session: Session, ctx: RequestContext, fmt: ExportFormat
     """One sale with all its lines: the header fields repeat on every row, as spreadsheets prefer."""
     sale_service.get_sale_view(session, ctx.shop_id, sale_id)  # 404 for another shop's sale
     dataset = _sale_items(session, ctx, name=f"sale_{sale_id}", sale_id=sale_id)
+    return _file(session, ctx, dataset, fmt)
+
+
+def export_quick_sales(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    q: str | None = None,
+    customer_id: int | None = None,
+    statuses: list[SaleStatus] | None = None,
+    payment_type: PaymentType | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> ExportFile:
+    dataset = _quick_sales(
+        session,
+        ctx,
+        q=q,
+        customer_id=customer_id,
+        statuses=statuses,
+        payment_type=payment_type,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    return _file(session, ctx, dataset, fmt)
+
+
+def export_promotions(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    q: str | None = None,
+    statuses: list[PromotionStatus] | None = None,
+    promo_type: PromotionType | None = None,
+    coupon_only: bool | None = None,
+) -> ExportFile:
+    dataset = _promotions(
+        session, ctx, q=q, statuses=statuses, promo_type=promo_type, coupon_only=coupon_only
+    )
+    return _file(session, ctx, dataset, fmt)
+
+
+def export_promotion_usage(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    promotion_id: int | None = None,
+    coupon_only: bool = False,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> ExportFile:
+    """Every use of an offer on a sale, from the frozen snapshots (a voided sale shows as Void)."""
+    dataset = _promotion_usage(
+        session,
+        ctx,
+        promotion_id=promotion_id,
+        coupon_only=coupon_only,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    return _file(session, ctx, dataset, fmt)
+
+
+def export_price_history(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    barcode: str | None = None,
+    provider: str | None = None,
+) -> ExportFile:
+    """Every outside price this shop has saved from price checks. Information, not the shop's own prices."""
+    return _file(session, ctx, _price_history(session, ctx, barcode=barcode, provider=provider), fmt)
+
+
+def export_sales_summary(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> ExportFile:
+    """One row per day: Detailed, Quick and Combined gross, discount and net."""
+    dataset = _sales_summary(session, ctx, date_from=date_from, date_to=date_to)
+    return _file(session, ctx, dataset, fmt)
+
+
+def export_discount_report(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> ExportFile:
+    """Discount given by offer and by coupon (needs the plan's advanced reports)."""
+    dataset = _discount_report(session, ctx, date_from=date_from, date_to=date_to)
     return _file(session, ctx, dataset, fmt)

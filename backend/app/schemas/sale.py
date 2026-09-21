@@ -6,11 +6,13 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.models.enums import InventoryTxnType, PaymentMethod, PaymentType, SaleStatus
 from app.schemas.common import MoneyIn, Page, QuantityIn
+from app.schemas.promotion import AppliedPromotionOut, CouponOut, NotAppliedOut
 from app.services.sale_service import Preview, SaleItemView, SaleRow, SaleView
 
 Notes = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]
 Reference = Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)]
 Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+CouponCode = Annotated[str, StringConstraints(strip_whitespace=True, max_length=40)]
 
 
 class SaleItemIn(BaseModel):
@@ -31,6 +33,7 @@ class SaleCreate(BaseModel):
     sale_date: date | None = None  # defaults to today in the shop's timezone
     notes: Notes | None = None
     discount: MoneyIn | None = None  # an amount off the whole bill
+    coupon_code: CouponCode | None = None  # offers are worked out by the server, never sent
     items: Annotated[list[SaleItemIn], Field(max_length=200)] = []
 
 
@@ -43,6 +46,7 @@ class SaleUpdate(BaseModel):
     sale_date: date | None = None
     notes: Notes | None = None
     discount: MoneyIn | None = None
+    coupon_code: CouponCode | None = None  # send null (or "") to remove the coupon
 
 
 class SaleItemsReplace(BaseModel):
@@ -73,6 +77,8 @@ class CalculateIn(BaseModel):
 
     discount: MoneyIn | None = None
     amount_paid: MoneyIn | None = None  # to preview how much of the bill would go on the khata
+    customer_id: int | None = None  # some offers depend on the customer
+    coupon_code: CouponCode | None = None
     items: Annotated[list[SaleItemIn], Field(max_length=200)] = []
 
 
@@ -99,7 +105,9 @@ class SaleItemOut(BaseModel):
     mrp: Decimal | None
     discount: Decimal
     gross: Decimal  # quantity x price, before the discount
-    line_total: Decimal  # net revenue of the line
+    line_total: Decimal  # the line after the cashier's own discount
+    promotion_discount: Decimal  # this line's share of what offers took off the bill
+    net_total: Decimal  # line_total less promotion_discount: what the line really earned
     # Cost snapshot at posting. Null means unknown (never 0), and then the profit is unknown too.
     unit_cost: Decimal | None
     cogs_amount: Decimal | None
@@ -124,6 +132,8 @@ class SaleItemOut(BaseModel):
             discount=i.discount,
             gross=i.line_total + i.discount,
             line_total=i.line_total,
+            promotion_discount=i.promotion_discount,
+            net_total=i.line_total - i.promotion_discount,
             unit_cost=i.unit_cost,
             cogs_amount=i.cogs_amount,
             profit=view.profit,
@@ -143,7 +153,9 @@ class SaleOut(BaseModel):
     sale_date: date
     notes: str | None
     subtotal: Decimal
-    discount: Decimal
+    discount: Decimal  # the cashier's own bill discount
+    promotion_discount: Decimal  # what offers and coupons took off (see `promotions`)
+    coupon_code: str | None
     total_amount: Decimal
     payment_type: PaymentType | None
     amount_paid: Decimal | None
@@ -165,6 +177,9 @@ class SaleOut(BaseModel):
     gross_profit: Decimal | None
     lines_without_cost: int
     warnings: list[str]
+    # Which offers the bill got: the frozen snapshot once posted, the current worth while a draft.
+    promotions: list[AppliedPromotionOut]
+    promotions_out_of_date: bool  # a draft whose offers are worth something else now than when last saved
     items: list[SaleItemOut]
 
     @classmethod
@@ -180,6 +195,8 @@ class SaleOut(BaseModel):
             notes=s.notes,
             subtotal=s.subtotal,
             discount=s.discount,
+            promotion_discount=s.promotion_discount,
+            coupon_code=s.coupon_code,
             total_amount=s.total_amount,
             payment_type=s.payment_type,
             amount_paid=s.amount_paid,
@@ -200,6 +217,8 @@ class SaleOut(BaseModel):
             gross_profit=view.gross_profit,
             lines_without_cost=view.lines_without_cost,
             warnings=view.warnings,
+            promotions=[AppliedPromotionOut.from_applied(a) for a in view.promotions],
+            promotions_out_of_date=view.promotions_out_of_date,
             items=[SaleItemOut.from_view(i) for i in view.items],
         )
 
@@ -257,6 +276,7 @@ class PreviewLineOut(BaseModel):
     discount: Decimal
     gross: Decimal | None
     line_total: Decimal | None
+    promotion_discount: Decimal  # this line's share of the offers
     available: Decimal | None  # stock on hand right now
     short: bool  # more is wanted than is on hand: fine for a draft, but it cannot be posted
     errors: list[FieldProblem]
@@ -267,8 +287,12 @@ class PreviewOut(BaseModel):
 
     lines: list[PreviewLineOut]
     subtotal: Decimal
-    discount: Decimal
+    discount: Decimal  # the cashier's own bill discount
+    promotion_discount: Decimal  # what offers and coupons take off
     total: Decimal
+    promotions: list[AppliedPromotionOut]  # the offers applied, with the reason
+    not_applied: list[NotAppliedOut]  # offers that were considered but do not apply, with the reason
+    coupon: CouponOut | None  # what happened to the coupon code that was entered
     payment_type: PaymentType
     paid: Decimal
     credit: Decimal
@@ -286,7 +310,16 @@ class PreviewOut(BaseModel):
             ],
             subtotal=p.subtotal,
             discount=p.discount,
+            promotion_discount=p.promotion_discount,
             total=p.total,
+            promotions=[AppliedPromotionOut.from_applied(a) for a in p.applied_promotions],
+            not_applied=[
+                NotAppliedOut(promotion_id=n.promotion_id, name=n.name, reason=n.reason)
+                for n in p.not_applied_promotions
+            ],
+            coupon=None
+            if p.coupon is None
+            else CouponOut(code=p.coupon.code, applied=p.coupon.applied, message=p.coupon.message),
             payment_type=p.payment_type,
             paid=p.paid,
             credit=p.credit,

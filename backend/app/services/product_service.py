@@ -15,6 +15,7 @@ counted in kilograms, a T-shirt counted in pieces or cloth counted in metres. Th
 suggests defaults elsewhere (see the business-type module) and never limits what can be created.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
@@ -27,7 +28,7 @@ from app.core.context import RequestContext
 from app.core.locale import CURRENCY_SYMBOL
 from app.models import Category, Product, Supplier, Unit
 from app.models.enums import MrpValidationMode
-from app.services import inventory_service
+from app.services import entitlement_service, inventory_service
 from app.services._filters import product_search_clause
 from app.services.audit_service import record_audit
 from app.services.catalog_service import clean_name
@@ -107,6 +108,17 @@ def get_product_view(session: Session, shop_id: int, product_id: int) -> Product
     if row is None:
         raise NotFoundError("Product not found")  # also the answer for another shop's product
     return _to_views(session, shop_id, [tuple(row)])[0]
+
+
+def views_where(
+    session: Session, shop_id: int, conditions: Sequence[ColumnElement[bool]], *, limit: int | None = None
+) -> list[ProductView]:
+    """Products matching `conditions` (already limited to the shop), with names and derived stock. The one
+    place other services (lookup, scanning) read products through, so stock is always derived the same way."""
+    query = _select_with_names(shop_id).where(*conditions).order_by(func.lower(Product.name), Product.id)
+    if limit is not None:
+        query = query.limit(limit)
+    return _to_views(session, shop_id, [tuple(row) for row in session.execute(query)])
 
 
 def list_products(
@@ -238,6 +250,7 @@ def _flush_or_conflict(session: Session) -> None:
 def create_product(session: Session, ctx: RequestContext, data: dict[str, Any]) -> SaveResult:
     """Create a product, optionally with its opening stock, in the caller's single transaction."""
     data = _normalize(data)
+    entitlement_service.check_product_limit(session, ctx.shop_id)  # the plan's product limit
     shop = get_shop(session, ctx.shop_id)
     opening_stock: Decimal | None = data.pop("opening_stock", None)
     opening_cost: Decimal | None = data.pop("opening_stock_cost", None)
@@ -343,6 +356,10 @@ def set_product_active(
     if product is None:
         raise NotFoundError("Product not found")
     if product.is_active != active:
+        if active:
+            entitlement_service.check_product_limit(
+                session, ctx.shop_id
+            )  # reactivating adds an active product
         product.is_active = active
         session.flush()
         record_audit(

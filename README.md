@@ -113,3 +113,37 @@ All configuration comes from environment variables; nothing secret is committed.
 - [Database](docs/DATABASE.md): planned schema and SQLite to PostgreSQL strategy
 - [Business rules](docs/BUSINESS_RULES.md): the approved rules every phase must follow
 - [Roadmap](docs/ROADMAP.md): Phases 1 to 16
+
+## What Phase 8 added
+
+Quick Sales (money only), barcode scanning on the billing screen, outside price checks (information only), offers,
+discounts and coupons, plans with limits (no payments), and Detailed/Quick/Combined sales reports. Outside
+lookups are optional: the app works fully with none of them configured.
+
+### Optional external lookups (backend only)
+
+Set these in `backend/.env` (see `backend/.env.example`; the file is git-ignored). They are never sent to the
+browser, never stored in the database and never put in a `VITE_*` variable.
+
+| Variable | Meaning |
+|---|---|
+| `UPCITEMDB_API_KEY` | UPCitemdb key. Leave the placeholder or empty and the provider shows "not configured". |
+| `KIRANA_EXTERNAL_LOOKUPS_ENABLED` | `false` stops every outside request. |
+| `KIRANA_EXTERNAL_TIMEOUT_SECONDS` | How long to wait for a provider (default 4). |
+| `KIRANA_PRICE_CACHE_TTL_HOURS` | How long a saved outside price is reused (default 24). |
+| `KIRANA_OFF_USER_AGENT` | The name and contact Open Food Facts asks apps to send. |
+
+Open Food Facts (product identity) and Open Prices (crowd-sourced shelf prices) need no key; their coverage in India
+is limited, and a barcode API does not promise a price. Prices found are information only and never change your own.
+
+### Plans
+
+Plans, features and limits are data. In development, from `backend/`:
+
+```bash
+python -m app.subscription_admin plans
+python -m app.subscription_admin assign --shop 1 --plan pro
+python -m app.subscription_admin show --shop 1
+```
+
+There is no payment processing anywhere; the plan screen says "Contact admin".

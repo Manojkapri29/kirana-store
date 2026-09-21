@@ -40,7 +40,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
 from app.core.context import RequestContext
-from app.models import Customer, CustomerLedgerEntry, Sale, User
+from app.models import Customer, CustomerLedgerEntry, QuickSale, Sale, User
 from app.models.enums import CustomerLedgerEntryType, KhataReferenceType, PaymentMethod
 from app.services import customer_service
 from app.services.audit_service import record_audit
@@ -269,7 +269,7 @@ def get_customer_ledger(
             row.payment_reference,
             row.reference_type,
             row.reference_id,
-            Sale.invoice_no.label("reference_no"),
+            func.coalesce(Sale.invoice_no, QuickSale.quick_no).label("reference_no"),
             row.reverses_entry_id,
             reversal.id.label("reversed_by_entry_id"),
             row.note,
@@ -284,6 +284,14 @@ def get_customer_ledger(
                 row.reference_type == KhataReferenceType.SALE,
                 Sale.shop_id == row.shop_id,
                 Sale.id == row.reference_id,
+            ),
+        )
+        .outerjoin(
+            QuickSale,
+            and_(
+                row.reference_type == KhataReferenceType.QUICK_SALE,
+                QuickSale.shop_id == row.shop_id,
+                QuickSale.id == row.reference_id,
             ),
         )
         .where(row.shop_id == shop_id, row.customer_id == customer_id)

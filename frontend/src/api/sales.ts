@@ -34,6 +34,8 @@ export const calculateSale = (payload: {
   items: SaleItemPayload[]
   discount: string | null
   amount_paid?: string | null
+  customer_id?: number | null
+  coupon_code?: string | null
 }) => apiSend<SalePreview>('POST', `${BASE}/calculate`, payload)
 
 /** Create a draft (a cart). Nothing is posted and no stock moves. */

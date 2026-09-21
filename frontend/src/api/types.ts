@@ -406,8 +406,12 @@ export interface SaleItem {
   discount: string
   /** Quantity x price, before the line discount. */
   gross: string
-  /** Net revenue of the line. */
+  /** The line after the cashier's own discount. */
   line_total: string
+  /** This line's share of what offers took off the bill. */
+  promotion_discount: string
+  /** line_total less promotion_discount: what the line really earned. */
+  net_total: string
   /** Cost snapshot at posting. Null = unknown (never 0), and then the profit is unknown too. */
   unit_cost: string | null
   cogs_amount: string | null
@@ -425,8 +429,11 @@ export interface Sale {
   sale_date: string
   notes: string | null
   subtotal: string
-  /** An amount off the whole bill. */
+  /** The cashier's own amount off the whole bill. */
   discount: string
+  /** What offers and coupons took off (see `promotions`). */
+  promotion_discount: string
+  coupon_code: string | null
   total_amount: string
   payment_type: PaymentType | null
   amount_paid: string | null
@@ -449,6 +456,10 @@ export interface Sale {
   gross_profit: string | null
   lines_without_cost: number
   warnings: string[]
+  /** The offers the bill got: the frozen snapshot once posted, the current worth while a draft. */
+  promotions: AppliedPromotion[]
+  /** A draft whose offers are worth something else now than when last saved. */
+  promotions_out_of_date: boolean
   items: SaleItem[]
 }
 
@@ -481,6 +492,7 @@ export interface SaleHeaderPayload {
   sale_date: string
   notes: string | null
   discount: string | null
+  coupon_code: string | null
 }
 
 export interface SalePaymentPayload {
@@ -502,6 +514,7 @@ export interface SalePreviewLine {
   discount: string
   gross: string | null
   line_total: string | null
+  promotion_discount: string
   /** Stock on hand right now. */
   available: string | null
   /** More is wanted (across all lines of that product) than is on hand: fine for a draft, not for posting. */
@@ -513,11 +526,286 @@ export interface SalePreviewLine {
 export interface SalePreview {
   lines: SalePreviewLine[]
   subtotal: string
+  /** The cashier's own bill discount. */
   discount: string
+  /** What offers and coupons take off. */
+  promotion_discount: string
   total: string
+  promotions: AppliedPromotion[]
+  /** Offers considered but not applied, each with the reason. */
+  not_applied: { promotion_id: number | null; name: string; reason: string }[]
+  coupon: CouponResult | null
   payment_type: PaymentType
   paid: string
   credit: string
   errors: FieldProblem[]
   warnings: string[]
+}
+
+// --- Phase 8: offers, Quick Sales, plans, price checks, reports -----------------------------------------------
+
+export type PromotionType = 'PERCENT' | 'AMOUNT' | 'OFFER_PRICE' | 'BUY_X_GET_Y'
+export type PromotionScope = 'CART' | 'PRODUCTS' | 'CATEGORIES'
+export type PromotionStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'EXPIRED'
+export type PromotionAudience = 'ALL' | 'NEW_CUSTOMER' | 'CUSTOMERS'
+
+/** What one offer gave a bill. On a posted sale this is a frozen snapshot, so it never changes. */
+export interface AppliedPromotion {
+  promotion_id: number
+  name: string
+  promo_type: PromotionType
+  /** The offer in a few words, e.g. "10% off". */
+  terms: string
+  coupon_code: string | null
+  amount: string
+  /** Why it applied. */
+  basis: string
+}
+
+export interface CouponResult {
+  code: string
+  applied: boolean
+  message: string
+}
+
+export interface Promotion {
+  id: number
+  name: string
+  description: string | null
+  promo_type: PromotionType
+  scope: PromotionScope
+  status: PromotionStatus
+  effective_status: PromotionStatus
+  /** Active and inside its dates: the only state in which it can apply. */
+  is_live: boolean
+  terms: string
+  priority: number
+  stackable: boolean
+  starts_at: string | null
+  ends_at: string | null
+  coupon_code: string | null
+  audience: PromotionAudience
+  percent: string | null
+  amount: string | null
+  offer_price: string | null
+  buy_quantity: number | null
+  get_quantity: number | null
+  get_percent: string | null
+  min_cart_value: string | null
+  min_quantity: string | null
+  max_discount: string | null
+  usage_limit: number | null
+  per_customer_limit: number | null
+  product_ids: number[]
+  category_ids: number[]
+  customer_ids: number[]
+  products: string[]
+  categories: string[]
+  customers: string[]
+  used_count: number
+  discount_given: string
+  created_by_name: string
+  created_at: string
+  updated_at: string
+}
+
+/** What can be sent when creating or changing an offer. Percentages and money are text. */
+export interface PromotionPayload {
+  name?: string
+  description?: string | null
+  promo_type?: PromotionType
+  scope?: PromotionScope
+  priority?: number
+  stackable?: boolean
+  starts_at?: string | null
+  ends_at?: string | null
+  coupon_code?: string | null
+  audience?: PromotionAudience
+  percent?: string | null
+  amount?: string | null
+  offer_price?: string | null
+  buy_quantity?: number | null
+  get_quantity?: number | null
+  get_percent?: string | null
+  min_cart_value?: string | null
+  min_quantity?: string | null
+  max_discount?: string | null
+  usage_limit?: number | null
+  per_customer_limit?: number | null
+  product_ids?: number[]
+  category_ids?: number[]
+  customer_ids?: number[]
+}
+
+export interface PromotionUsage {
+  sale_id: number
+  invoice_no: string | null
+  sale_date: string
+  sale_status: SaleStatus
+  customer_name: string | null
+  promotion_id: number
+  name: string
+  terms: string
+  coupon_code: string | null
+  discount_amount: string
+  basis: string
+}
+
+export interface QuickSale {
+  id: number
+  quick_no: string | null
+  status: SaleStatus
+  sale_date: string
+  customer_id: number | null
+  customer_name: string | null
+  gross_amount: string
+  discount: string
+  total_amount: string
+  payment_type: PaymentType | null
+  amount_paid: string | null
+  credit_amount: string
+  payment_method: PaymentMethod | null
+  payment_reference: string | null
+  note: string | null
+  created_by_name: string
+  created_at: string
+  posted_at: string | null
+  posted_by_name: string | null
+  void_reason: string | null
+  voided_at: string | null
+  /** Always null: a Quick Sale has no product and no cost. */
+  gross_profit: null
+  /** Always "Not Available". */
+  profit_label: string
+}
+
+export interface QuickSalePayload {
+  gross_amount?: string
+  discount?: string | null
+  customer_id?: number | null
+  sale_date?: string | null
+  note?: string | null
+}
+
+export interface PlanLimitUsage {
+  products: number
+  users: number
+  invoices: number
+  price_lookups: number
+}
+
+export interface SubscriptionPlan {
+  code: string
+  name: string
+  description: string | null
+  price: string | null
+  currency: string
+  billing_interval: 'MONTHLY' | 'YEARLY'
+  features: Record<string, boolean>
+  limits: Record<string, number | null>
+  is_current: boolean
+}
+
+export interface Subscription {
+  plan_code: string
+  plan_name: string
+  source: string
+  status: string | null
+  ends_at: string | null
+  features: Record<string, boolean>
+  /** null = unlimited. */
+  limits: Record<string, number | null>
+  usage: PlanLimitUsage
+  period: string
+  plans: SubscriptionPlan[]
+}
+
+export interface LookupProduct extends Product {
+  /** A promotional price the product has right now. Shown beside MRP and selling price, never replacing them. */
+  offer: { promotion_id: number; name: string; offer_price: string } | null
+}
+
+export interface LookupResult {
+  code: string
+  found: boolean
+  match_type: 'BARCODE' | 'SKU' | 'NAME' | 'SEARCH' | 'NONE'
+  /** "Barcode not found" when nothing matched. */
+  message: string | null
+  products: LookupProduct[]
+}
+
+export type ProviderState = 'LIVE' | 'CACHED' | 'STALE' | 'NO_DATA' | 'NOT_CONFIGURED' | 'DISABLED' | 'UNAVAILABLE'
+
+export interface PriceQuote {
+  product_name: string | null
+  matched_product: { id: number; name: string; sku: string; barcode: string | null; selling_price: string; mrp: string | null } | null
+  barcode: string
+  price: string
+  currency: string
+  source: string
+  source_label: string
+  source_url: string | null
+  location: string | null
+  location_matched: boolean | null
+  observed_on: string | null
+  checked_at: string | null
+  match_type: 'EXACT' | 'POSSIBLE'
+  match_label: string
+  match_basis: string
+  confidence: number
+  stale: boolean
+  currency_matches_shop: boolean
+  difference: string | null
+}
+
+export interface PriceResult {
+  barcode: string
+  product: { id: number; name: string; sku: string; selling_price: string; mrp: string | null } | null
+  quotes: PriceQuote[]
+  providers: { name: string; label: string; state: ProviderState; message: string; checked_at: string | null }[]
+  location: { city: string | null; state: string | null; market: string | null; applied: boolean; note: string }
+  identified_as: { name: string | null; brand: string | null; pack_text: string | null } | null
+  notes: string[]
+  changes_prices: false
+}
+
+export interface ReportTotals {
+  sales_count: number
+  gross_sales: string
+  line_discount: string
+  bill_discount: string
+  promotion_discount: string
+  discount: string
+  net_sales: string
+}
+
+export interface SalesSummary {
+  date_from: string
+  date_to: string
+  detailed: ReportTotals
+  quick: ReportTotals
+  combined: ReportTotals
+  detailed_gross_profit: string | null
+  detailed_sales_without_cost: number
+  combined_profit: null
+  combined_profit_label: string
+  days: { day: string; detailed: ReportTotals; quick: ReportTotals; combined: ReportTotals }[]
+}
+
+export interface DiscountReport {
+  date_from: string
+  date_to: string
+  gross_sales: string
+  net_sales: string
+  total_discount: string
+  line_discount: string
+  bill_discount: string
+  promotion_discount: string
+  promotions_used: number
+  promotion_applications: number
+  coupon_uses: number
+  coupon_discount: string
+  by_promotion: { promotion_id: number; name: string; uses: number; discount: string }[]
+  by_coupon: { code: string; uses: number; discount: string }[]
+  by_date: { day: string; line_discount: string; bill_discount: string; promotion_discount: string; total: string }[]
 }

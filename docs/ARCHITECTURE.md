@@ -342,3 +342,34 @@ dashboard analytics, reports, authentication, and screens for stock adjustments.
 - Frontend: TypeScript strict checks, oxlint, and a production build on every change.
 - PostgreSQL: the same suite runs on PostgreSQL at the checkpoint after Phase 10 and again in Phase 15.
 
+## Phase 8 additions
+
+**New services** (routers stay thin, services never commit or import HTTP, only `inventory_service` touches the stock
+ledger and only `khata_service` the customer ledger):
+
+| Service | Role |
+|---|---|
+| `quick_sale_service`, `payment_service` | money-only sales; payment resolution shared with `sale_service` |
+| `product_lookup_service` | one lookup for scanning and typed codes |
+| `promotion_service`, `promotion_calculation` | which offers may apply, and the pure paise arithmetic and stacking |
+| `price_providers`, `price_comparison_service` | provider interface and outside-price matching, cache and history |
+| `entitlement_service` | plan features, limits and monthly usage, enforced by the backend |
+| `sales_report_service` | Detailed, Quick, Combined; Gross, Discount, Net; discount analytics |
+
+**Offers and billing.** `sale_service` calls `promotion_service.evaluate` for the preview, whenever a draft is
+re-totalled, and again at posting under a lock on any offer that has a usage limit. The frontend displays the
+server's answer and does no discount arithmetic.
+
+**External providers.** A provider is a small class behind one interface; adding one changes nothing else. The only
+place that talks to the internet is `price_providers.http_get` (HTTPS only, fixed hosts, timeout, size cap). A price
+check runs in three steps (read, fetch with no transaction open, write) so no database lock is held while waiting.
+Providers run in parallel, each on its own, and every failure becomes a status, never an error. Keys are
+`SecretStr` settings read from the backend environment (`UPCITEMDB_API_KEY`), never in the frontend, the database,
+a URL, a log line or a response; the providers endpoint reports only configured true or false.
+
+**Plans.** `GET /subscription` feeds the frontend `useEntitlements` hook, used only to show or hide. The server
+refuses a feature the plan lacks with HTTP 403 and `type: plan_limit`.
+
+**Design for Phase 9 (not built).** Error handling will reuse the exception-handler layer and the idempotency
+mechanism; image intelligence will sit behind the same provider pattern and reuse `product_lookup_service` for
+barcodes. See the Phase 9 entry in the roadmap.

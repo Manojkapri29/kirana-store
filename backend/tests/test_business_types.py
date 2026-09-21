@@ -359,6 +359,13 @@ class TestNoBusinessSpecificCodeInTheCore:
         "api/v1/purchases.py", "schemas/purchase.py",
         "services/customer_service.py", "services/khata_service.py", "api/v1/customers.py", "schemas/customer.py",
         "services/sale_service.py", "services/sale_calculation.py", "api/v1/sales.py", "schemas/sale.py",
+        "services/quick_sale_service.py", "services/payment_service.py", "services/entitlement_service.py",
+        "api/v1/quick_sales.py", "api/v1/subscription.py", "schemas/quick_sale.py", "schemas/subscription.py",
+        "models/subscription.py", "models/promotion.py", "services/promotion_service.py",
+        "services/promotion_calculation.py", "api/v1/promotions.py", "schemas/promotion.py",
+        "services/price_comparison_service.py", "services/price_providers.py", "services/product_lookup_service.py",
+        "api/v1/price_intelligence.py", "schemas/price.py", "models/pricing.py",
+        "services/sales_report_service.py", "api/v1/reports.py", "schemas/report.py",
     ]  # fmt: skip
     BUSINESS_WORDS = re.compile(
         r"grocery|kirana|halwai|sweet[ _]?shop|bakery|fruit|vegetable|dairy|garment|footwear|cosmetic|"

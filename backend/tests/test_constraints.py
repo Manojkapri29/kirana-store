@@ -275,7 +275,8 @@ def cash_sale(tenant: Tenant, **overrides) -> Sale:
 
 def quick_sale(tenant: Tenant, **overrides) -> QuickSale:
     fields = {
-        "shop_id": tenant.shop.id, "sale_date": TODAY, "total_amount": Decimal("5000.00"),
+        "shop_id": tenant.shop.id, "sale_date": TODAY, "status": SaleStatus.POSTED, "quick_no": "QS-1",
+        "posted_at": utc_now(), "gross_amount": Decimal("5000.00"), "total_amount": Decimal("5000.00"),
         "payment_type": PaymentType.PAID, "amount_paid": Decimal("5000.00"),
         "payment_method": PaymentMethod.CASH, "created_by": tenant.user.id,
     }  # fmt: skip

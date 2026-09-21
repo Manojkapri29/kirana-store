@@ -354,3 +354,22 @@ order must use the same `products`, `customers`, pricing and inventory as in-sto
   availability, never a second stock number.
 - `sales` could later gain a nullable `order_id` and a `channel` column by an additive migration.
 - Online payments would reuse `payment_method`/`payment_reference`, which are already on documents.
+
+## Migrations 0007 to 0010 (Phase 8)
+
+* **0007 subscriptions.** `plans` and `plan_features` (global reference data, seeded with three editable example
+  plans), `shop_subscriptions` (one current TRIAL or ACTIVE per shop, by a partial unique index) and
+  `subscription_usage` (per shop, month and metric). No payment tables.
+* **0008 quick sales.** `quick_sales` gains `quick_no`, `gross_amount`, `discount`, `posted_at/by`; `status` gains DRAFT;
+  payment columns become nullable for a draft; existing rows become POSTED with number `QS/LEGACY/<id>`. The table
+  still has no product, quantity or cost column (a test guards it).
+* **0009 promotions.** `promotions` (kind, scope, status, priority, stackable, dates, coupon code unique per shop,
+  benefit columns of exactly one kind enforced by a CHECK, conditions, limits, JSON `targets`), `sale_promotions`
+  (the frozen snapshot per posted sale), `sales.promotion_discount`, `sales.coupon_code`,
+  `sale_items.promotion_discount`. The sale rule becomes `total = subtotal - discount - promotion_discount` and a
+  line's share cannot exceed the line. Downgrade is refused while a sale used an offer.
+* **0010 price observations.** `price_observations`: append-only, per shop; it is both the price-check history and
+  the cache. Prices are positive, currency is three letters, and nothing references a product.
+
+Money is integer paise, a percentage is basis points, quantities are thousandths. Every new table has `shop_id`,
+timestamps and composite (shop, id) keys; SQLite and PostgreSQL both support everything used.
