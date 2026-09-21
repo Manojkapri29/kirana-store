@@ -135,13 +135,14 @@ type), and write stock only through `inventory_service`.
 | `product_service` | Products: create, update, search, activate/deactivate; MRP setting; derives stock through `inventory_service` | Phase 3 |
 | `catalog_service` | Units and categories | Phase 3 |
 | `supplier_service` | Suppliers: create, update, search, activate/deactivate; duplicate warnings; the count of products per supplier. Generic for every business type | Phase 4 |
-| `contact_validation` | Lenient validation and normalisation of phone, email and GSTIN. Reusable (customers will use it) | Phase 4 |
+| `contact_validation` | Lenient validation and normalisation of phone, email and GSTIN. Used by suppliers and customers | Phase 4 |
+| `customer_service` | The customer *record*: create, update, search, activate/deactivate, phone uniqueness within the shop. Knows nothing about money | Phase 6 |
 | `business_type_service` | Business types, the shop's type, and the suggested categories/units. The only module that knows what a type suggests | Phase 3 |
 | `export_service` | Format engine: CSV/XLSX rendering, formula-injection protection. Knows nothing about products | Phase 3 |
 | `export_datasets` | What each export contains (columns and rows), built from the domain services | Phase 3 |
 | `audit_service` | Writes the insert-only audit log | Phase 3 |
 | `shop_service`, `context_service` | Shop settings and "today"; the current shop/user | Phase 3 |
-| `khata_service` | **The only writer of the customer ledger** | Phase 6 |
+| `khata_service` | **The only reader and writer of the customer ledger.** Opening balance, payment, adjustment, reversal, credit-sale and return-credit entries (the last two are for Phases 7 and 9), balances, the customer list with balances, and history with a running balance | Phase 6 |
 | `purchase_service` | Purchases: draft, edit, post, void, correct, list and search, item rows for exports. Writes stock only through `inventory_service` | Phase 5 (returns: Phase 9) |
 | `detailed_sale_service` | Product-wise bills and sales returns | Phases 7, 9 |
 | `quick_sale_service` | Money-only sales. It has **no dependency on `inventory_service`**, by design | Phase 8 |
@@ -177,12 +178,29 @@ Current Stock = Opening + Purchases - Sales + Sales Returns - Purchase Returns Â
 
 ## Customer ledger
 
-The table `customer_ledger` exists (Phase 2); `khata_service` (Phase 6) will fill it.
+The table `customer_ledger` exists (Phase 2); `khata_service` (Phase 6) fills it.
 
 Khata works the same way: an insert-only ledger with signed amounts, protected by the same trigger. A
-customer's outstanding balance is the sum of their entries. Entry types: opening balance, credit sale,
+customer's outstanding balance is the sum of their entries (**positive = the customer owes the shop, negative =
+an advance**), computed on every read and never stored. Entry types: opening balance, credit sale,
 payment, return credit, adjustment, reversal. `khata_service` is the only module allowed to reference the
-table (same source-scanning test).
+table (same source-scanning test). Rules: [BUSINESS_RULES.md](BUSINESS_RULES.md), section KH.
+
+Design points:
+- **Two services.** `customer_service` handles the customer record and never touches the ledger.
+  `khata_service` imports it (never the other way round) and provides everything that needs a balance, including
+  the customer list with balances and balance filters, the same way `inventory_service` owns the inventory list.
+- **One transaction.** The routers open `write_transaction()`; `khata_service` never commits. A customer created
+  with an opening balance is one transaction. The customer row is locked first, so opening-balance duplicates
+  and double reversals are refused even under simultaneous requests.
+- **No generic insert.** Endpoints under `/api/v1/customers`: list, create, get, patch, activate, deactivate,
+  balance, ledger, and the controlled writes `opening-balance`, `payments`, `adjustments`, `ledger/{id}/reverse`.
+  There is no DELETE and no endpoint for credit sales or return credit: Phases 7 and 9 call the service.
+- **Exports** `/api/v1/exports/customers` and `/customers/{id}/ledger`.
+- **UI.** Customers list (search, balance and status filters, largest dues first), add/edit form (with an
+  optional opening balance), and a detail page with the balance, contact details, action forms (payment,
+  opening balance, adjustment), and the ledger with debit and credit columns, running balance and reversal.
+  Migration `0005` adds `customers.email` and a name index.
 
 ## Reporting layer (planned)
 
@@ -283,8 +301,11 @@ Field errors inside a list use dotted paths (`items.2.quantity`, sent as `["body
 UI does line totals with exact integer (BigInt) arithmetic, so what is shown equals what the server computes.
 Migration `0004`.
 
-**Not built yet:** supplier payments and ledger, purchase returns, sales, returns, khata, expenses, dashboard
-analytics, reports, authentication, and screens for adjustments. `khata_service` is still a placeholder.
+**Phase 6 (customers + khata):** customer management and the customer ledger described above, screens, exports
+and migration `0005`. Credit sales and return credit exist only as service methods, ready for later phases.
+
+**Not built yet:** supplier payments and ledger, purchase returns, sales, sales returns, expenses, dashboard
+analytics, reports, authentication, and screens for stock adjustments.
 
 ## Testing strategy
 

@@ -1,5 +1,8 @@
 import { Route, Routes } from 'react-router-dom'
 
+import { CustomerDetailPage } from '@/features/customers/CustomerDetailPage'
+import { CustomerFormPage } from '@/features/customers/CustomerFormPage'
+import { CustomersPage } from '@/features/customers/CustomersPage'
 import { InventoryPage } from '@/features/inventory/InventoryPage'
 import { ProductDetailPage } from '@/features/products/ProductDetailPage'
 import { ProductFormPage } from '@/features/products/ProductFormPage'
@@ -32,6 +35,10 @@ export function App() {
         <Route path="purchases/new" element={<PurchaseFormPage mode="create" />} />
         <Route path="purchases/:id" element={<PurchaseDetailPage />} />
         <Route path="purchases/:id/edit" element={<PurchaseFormPage mode="edit" />} />
+        <Route path="customers" element={<CustomersPage />} />
+        <Route path="customers/new" element={<CustomerFormPage mode="create" />} />
+        <Route path="customers/:id" element={<CustomerDetailPage />} />
+        <Route path="customers/:id/edit" element={<CustomerFormPage mode="edit" />} />
         <Route path="suppliers" element={<SuppliersPage />} />
         <Route path="suppliers/new" element={<SupplierFormPage mode="create" />} />
         <Route path="suppliers/:id" element={<SupplierDetailPage />} />

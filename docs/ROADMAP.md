@@ -10,8 +10,8 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 | 2 | Database/models + SQLite + Alembic | Done |
 | 3 | Products + inventory ledger core + export framework | Done |
 | 4 | Suppliers | Done |
-| 5 | Purchases + weighted average cost | Done, awaiting review |
-| 6 | Customers + Khata | Planned |
+| 5 | Purchases + weighted average cost | Done |
+| 6 | Customers + Khata | Done, awaiting review |
 | 7 | Detailed Sales | Planned |
 | 8 | Quick/Daily Sales | Planned |
 | 9 | Returns | Planned |
@@ -90,9 +90,16 @@ purchase returns stock to 20; posting twice is refused; a failed posting leaves 
 returns (Phase 9), a purchase-order or goods-receipt step, and unit conversion between purchase and stock units.
 
 ### Phase 6: Customers + Khata
-Customers, `khata_service` as the only customer-ledger writer, opening balance, payment received,
-running balance, customer history, and export.
-**Done when:** outstanding balance always equals the sum of ledger entries.
+Customer management (create, edit, search, balance and status filters, activate/deactivate; never deleted) and
+the khata: `khata_service` as the only reader and writer of the insert-only customer ledger, with opening
+balance, payments (an overpayment becomes an advance), controlled adjustments, reversals, and the service
+methods for credit sales and return credit that Phases 7 and 9 will call. Outstanding is `SUM(amount_delta)`,
+never stored. Customer list with balances, detail page with the ledger and running balance, CSV/XLSX exports of
+the customer list and of one customer's khata. Migration `0005` (customer email, name index).
+**Done when:** outstanding balance always equals the sum of ledger entries; an entry is corrected only by a
+linked reversal or an adjustment; another shop's customers and ledger are unreachable.
+*Not in this phase:* Detailed or Quick Sales, Sales Returns (the service methods exist, nothing calls them yet),
+payment allocation to specific bills, payment reminders, and any payment gateway.
 
 ### Phase 7: Detailed Sales
 Product-wise cart, invoice numbering, oversell prevention, cost snapshot per line, paid or credit sales,

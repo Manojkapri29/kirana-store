@@ -9,10 +9,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import OwnerCtx
 from app.api.v1.products import StatusFilter, active_flag
 from app.db.session import get_session
-from app.models.enums import InventoryTxnType, PurchaseStatus
+from app.models.enums import CustomerLedgerEntryType, InventoryTxnType, PurchaseStatus
+from app.schemas.customer import BalanceFilter
 from app.services import export_datasets
 from app.services.export_service import ExportFile, ExportFormat
 from app.services.inventory_service import StockStatus
+from app.services.khata_service import BalanceStatus
 
 router = APIRouter(prefix="/exports", tags=["exports"])
 ReadSession = Annotated[Session, Depends(get_session)]
@@ -153,3 +155,46 @@ def export_purchase_details(
 ) -> Response:
     """One purchase with all its lines."""
     return download(export_datasets.export_purchase_details(session, ctx, fmt, purchase_id))
+
+
+_BALANCE = {
+    BalanceFilter.ANY: None,
+    BalanceFilter.OUTSTANDING: BalanceStatus.OUTSTANDING,
+    BalanceFilter.SETTLED: BalanceStatus.SETTLED,
+    BalanceFilter.ADVANCE: BalanceStatus.ADVANCE,
+}
+
+
+@router.get("/customers")
+def export_customers(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    status: StatusFilter = StatusFilter.ACTIVE,
+    balance: BalanceFilter = BalanceFilter.ANY,
+) -> Response:
+    """Customers with what each owes (or has paid ahead)."""
+    return download(
+        export_datasets.export_customers(
+            session, ctx, fmt, active=active_flag(status), q=q, balance=_BALANCE[balance]
+        )
+    )
+
+
+@router.get("/customers/{customer_id}/ledger")
+def export_customer_ledger(
+    customer_id: int,
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    entry_type: CustomerLedgerEntryType | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    """One customer's khata, oldest first, with the running balance."""
+    return download(
+        export_datasets.export_customer_ledger(
+            session, ctx, fmt, customer_id, entry_type=entry_type, date_from=date_from, date_to=date_to
+        )
+    )

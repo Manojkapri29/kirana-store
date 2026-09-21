@@ -1,4 +1,4 @@
-"""What each export contains: columns and rows for products, inventory, stock history and purchases.
+"""What each export contains: columns and rows for products, inventory, history, purchases and customers.
 
 Rows come from the domain services (never from tables directly), so the same shop scoping and the same
 stock calculation apply to exports as to the screens. The file format is handled by `export_service`.
@@ -12,10 +12,17 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from app.core.context import RequestContext
-from app.models.enums import InventoryTxnType, PurchaseStatus
-from app.services import inventory_service, product_service, purchase_service
+from app.models.enums import CustomerLedgerEntryType, InventoryTxnType, PurchaseStatus
+from app.services import (
+    customer_service,
+    inventory_service,
+    khata_service,
+    product_service,
+    purchase_service,
+)
 from app.services.export_service import Column, ExportFile, ExportFormat, Kind, render
 from app.services.inventory_service import StockStatus
+from app.services.khata_service import BalanceStatus
 from app.services.shop_service import get_shop, shop_today
 
 PRODUCT_COLUMNS = [
@@ -100,6 +107,46 @@ PURCHASE_ITEM_COLUMNS = [
     Column("avg_cost_after", "Average Cost After", Kind.MONEY),
     Column("purchase_total", "Purchase Total", Kind.MONEY),
 ]
+
+CUSTOMER_COLUMNS = [
+    Column("name", "Customer"),
+    Column("phone", "Phone"),
+    Column("email", "Email"),
+    Column("address", "Address"),
+    Column("balance", "Balance", Kind.MONEY),
+    Column("outstanding", "Outstanding (Owes)", Kind.MONEY),
+    Column("advance", "Advance (Paid Ahead)", Kind.MONEY),
+    Column("balance_status", "Balance Status"),
+    Column("entries", "Ledger Entries", Kind.INTEGER),
+    Column("status", "Status"),
+    Column("notes", "Notes"),
+    Column("created_at", "Created", Kind.DATETIME),
+]
+
+CUSTOMER_LEDGER_COLUMNS = [
+    Column("entry_date", "Date", Kind.DATE),
+    Column("customer", "Customer"),
+    Column("phone", "Phone"),
+    Column("entry_type", "Type"),
+    Column("debit", "Debit (Owed)", Kind.MONEY),
+    Column("credit", "Credit (Received)", Kind.MONEY),
+    Column("balance_after", "Balance After", Kind.MONEY),
+    Column("payment_method", "Payment Method"),
+    Column("payment_reference", "Payment Reference"),
+    Column("note", "Note"),
+    Column("reference_type", "Source"),
+    Column("reference_id", "Source ID", Kind.INTEGER),
+    Column("reverses", "Reverses Entry", Kind.INTEGER),
+    Column("reversed_by", "Reversed By Entry", Kind.INTEGER),
+    Column("created_by", "Recorded By"),
+    Column("created_at", "Recorded At", Kind.DATETIME),
+]
+
+BALANCE_LABELS = {
+    BalanceStatus.OUTSTANDING: "Owes",
+    BalanceStatus.SETTLED: "Settled",
+    BalanceStatus.ADVANCE: "Advance",
+}
 
 STATUS_LABELS = {
     StockStatus.IN_STOCK: "In Stock",
@@ -247,6 +294,59 @@ def _purchase_items(
     return _Dataset(name, PURCHASE_ITEM_COLUMNS, rows)
 
 
+def _customers(session: Session, ctx: RequestContext, *, active: bool | None, **filters: Any) -> _Dataset:
+    shop = get_shop(session, ctx.shop_id)
+    accounts, _ = khata_service.list_accounts(session, ctx.shop_id, active=active, limit=None, **filters)
+    rows = [
+        {
+            "name": a.customer.name,
+            "phone": a.customer.phone,
+            "email": a.customer.email,
+            "address": a.customer.address,
+            "balance": a.balance,
+            "outstanding": a.outstanding,
+            "advance": a.advance,
+            "balance_status": BALANCE_LABELS[a.status],
+            "entries": a.entry_count,
+            "status": "Active" if a.customer.is_active else "Inactive",
+            "notes": a.customer.notes,
+            "created_at": _local(a.customer.created_at, shop.timezone),
+        }
+        for a in accounts
+    ]
+    return _Dataset("customers", CUSTOMER_COLUMNS, rows)
+
+
+def _customer_ledger(session: Session, ctx: RequestContext, customer_id: int, **filters: Any) -> _Dataset:
+    shop = get_shop(session, ctx.shop_id)
+    customer = customer_service.get_customer(session, ctx.shop_id, customer_id)  # 404 for another shop's
+    entries, _ = khata_service.get_customer_ledger(
+        session, ctx.shop_id, customer_id, newest_first=False, limit=None, **filters
+    )
+    rows = [
+        {
+            "entry_date": e.entry_date,
+            "customer": customer.name,
+            "phone": customer.phone,
+            "entry_type": e.entry_type.value,
+            "debit": e.amount_delta if e.amount_delta > 0 else None,  # the customer owes more
+            "credit": -e.amount_delta if e.amount_delta < 0 else None,  # the customer owes less
+            "balance_after": e.balance_after,
+            "payment_method": e.payment_method.value if e.payment_method else None,
+            "payment_reference": e.payment_reference,
+            "note": e.note,
+            "reference_type": e.reference_type.value if e.reference_type else None,
+            "reference_id": e.reference_id,
+            "reverses": e.reverses_entry_id,
+            "reversed_by": e.reversed_by_entry_id,
+            "created_by": e.created_by_name,
+            "created_at": _local(e.created_at, shop.timezone),
+        }
+        for e in entries
+    ]
+    return _Dataset(f"customer_{customer_id}_ledger", CUSTOMER_LEDGER_COLUMNS, rows)
+
+
 def _file(session: Session, ctx: RequestContext, dataset: _Dataset, fmt: ExportFormat) -> ExportFile:
     today = shop_today(get_shop(session, ctx.shop_id))
     return render(fmt, name=dataset.name, columns=dataset.columns, rows=dataset.rows, on_date=today)
@@ -318,4 +418,33 @@ def export_purchase_details(
     """One purchase with all its lines: the header fields repeat on every row, as spreadsheets prefer."""
     purchase_service.get_purchase_view(session, ctx.shop_id, purchase_id)  # 404 for another shop's purchase
     dataset = _purchase_items(session, ctx, name=f"purchase_{purchase_id}", purchase_id=purchase_id)
+    return _file(session, ctx, dataset, fmt)
+
+
+def export_customers(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    active: bool | None = True,
+    q: str | None = None,
+    balance: BalanceStatus | None = None,
+) -> ExportFile:
+    return _file(session, ctx, _customers(session, ctx, active=active, q=q, balance=balance), fmt)
+
+
+def export_customer_ledger(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    customer_id: int,
+    *,
+    entry_type: CustomerLedgerEntryType | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> ExportFile:
+    """One customer's khata, oldest first, with debit and credit columns and the running balance."""
+    dataset = _customer_ledger(
+        session, ctx, customer_id, entry_type=entry_type, date_from=date_from, date_to=date_to
+    )
     return _file(session, ctx, dataset, fmt)

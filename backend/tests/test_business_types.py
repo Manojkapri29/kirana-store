@@ -357,6 +357,7 @@ class TestNoBusinessSpecificCodeInTheCore:
         "schemas/product.py", "schemas/inventory.py", "schemas/common.py",
         "services/purchase_service.py", "services/costing_service.py", "services/numbering_service.py",
         "api/v1/purchases.py", "schemas/purchase.py",
+        "services/customer_service.py", "services/khata_service.py", "api/v1/customers.py", "schemas/customer.py",
     ]  # fmt: skip
     BUSINESS_WORDS = re.compile(
         r"grocery|kirana|halwai|sweet[ _]?shop|bakery|fruit|vegetable|dairy|garment|footwear|cosmetic|"

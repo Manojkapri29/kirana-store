@@ -58,8 +58,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
     path: '/customers',
     icon: Users,
     labelKey: 'nav.customers',
-    descriptionKey: 'modules.customers.description',
-    phase: 6,
   },
   {
     id: 'suppliers',

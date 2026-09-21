@@ -297,3 +297,79 @@ export interface SupplierPurchaseTotals {
   posted_count: number
   posted_total: string
 }
+
+export type BalanceStatus = 'OUTSTANDING' | 'SETTLED' | 'ADVANCE'
+export type BalanceFilter = 'any' | 'outstanding' | 'settled' | 'advance'
+export type LedgerEntryType =
+  | 'OPENING_BALANCE'
+  | 'CREDIT_SALE'
+  | 'PAYMENT'
+  | 'RETURN_CREDIT'
+  | 'ADJUSTMENT'
+  | 'REVERSAL'
+export type PaymentMethod = 'CASH' | 'UPI' | 'OTHER'
+
+/** A customer with the balance the ledger gives them. `balance` is signed: positive = owes, negative = advance. */
+export interface Customer {
+  id: number
+  name: string
+  phone: string | null
+  email: string | null
+  address: string | null
+  notes: string | null
+  is_active: boolean
+  balance: string
+  outstanding: string
+  advance: string
+  balance_status: BalanceStatus
+  entry_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CustomerPayload {
+  name: string
+  phone: string | null
+  email: string | null
+  address: string | null
+  notes: string | null
+}
+
+export interface LedgerEntry {
+  id: number
+  customer_id: number
+  entry_date: string
+  entry_type: LedgerEntryType
+  /** Signed: positive = the customer owes more, negative = owes less. */
+  amount_delta: string
+  /** The running balance after this entry. */
+  balance_after: string
+  payment_method: PaymentMethod | null
+  payment_reference: string | null
+  reference_type: string | null
+  reference_id: number | null
+  reverses_entry_id: number | null
+  reversed_by_entry_id: number | null
+  note: string | null
+  created_by_name: string
+  created_at: string
+}
+
+export interface CustomerSaved {
+  customer: Customer
+  warnings: string[]
+  opening_entry: LedgerEntry | null
+}
+
+export interface BalanceSummary {
+  customer_id: number
+  balance: string
+  outstanding: string
+  advance: string
+  status: BalanceStatus
+}
+
+export interface KhataEntryResult {
+  entry: LedgerEntry
+  balance: BalanceSummary
+}

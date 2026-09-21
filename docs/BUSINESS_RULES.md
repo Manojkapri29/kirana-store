@@ -231,17 +231,67 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
 ## K. Khata (customer credit)
 
 - **K1.** The customer ledger is **insert-only** (enforced by a database trigger) and `khata_service` is
-  its only writer. Outstanding balance
+  its only reader and writer. Outstanding balance
   is the sum of entries (positive = the customer owes the shop); it is never stored.
 - **K2.** Entry types: `OPENING_BALANCE`, `CREDIT_SALE`, `PAYMENT`, `RETURN_CREDIT`, `ADJUSTMENT`, `REVERSAL`.
 - **K3.** A credit sale needs a customer and `amount paid < total`; the unpaid part posts a `CREDIT_SALE`.
   A fully paid sale posts nothing to khata. Quick Sales may also be on credit.
-- **K4.** A payment received posts a `PAYMENT` (cash or UPI). It reduces the running balance and is not
-  tied to specific bills. Paying more than is owed needs confirmation and is kept as an advance.
+- **K4.** A payment received posts a `PAYMENT` (cash, UPI or other, with an optional reference). It reduces
+  the running balance and is not tied to specific bills. Paying more than is owed asks for confirmation on the
+  screen and is kept as an advance (KH4).
 - **K5.** An existing paper-notebook balance is entered once as `OPENING_BALANCE`.
 - **K6.** A customer's history is the ledger merged with links to the originating sale, quick sale or return.
 - **K7.** Customers with entries are deactivated, never deleted. Phone numbers are unique per shop.
   Collect only the personal data that is needed.
+
+## KH. Khata ledger rules (Phase 6, implemented)
+
+- **KH1. Sign convention.** `amount_delta` is signed. **Positive = the customer owes the shop more; negative
+  = owes less.** `OPENING_BALANCE` and `CREDIT_SALE` are positive; `PAYMENT` and `RETURN_CREDIT` are negative;
+  `ADJUSTMENT` is either sign; `REVERSAL` is exactly the opposite of the entry it undoes. The database checks
+  the sign against the type. The API takes positive amounts and the operation decides the sign
+  (`/adjustments` takes a positive amount plus `INCREASE` or `DECREASE`).
+- **KH2. Outstanding = `SUM(amount_delta)`** for the customer. It is computed on every read and never stored
+  (there is no balance column on `customers`). Example: opening 1,000 + credit sale 500 - payment 300 = 1,200
+  owed; a further payment of 1,500 gives -300.
+- **KH3. Balance status.** `OUTSTANDING` (sum > 0), `SETTLED` (= 0), `ADVANCE` (< 0). The API returns the signed
+  `balance` plus `outstanding` (never below 0) and `advance` (never below 0).
+- **KH4. Advance.** A negative balance is money the shop holds for the customer. It is never capped or
+  discarded, and it is used up automatically by later credit sales (it is all one sum). Overpaying is allowed
+  by the API; the screen asks the shopkeeper to confirm.
+- **KH5. Insert-only, one writer.** Ledger rows are never updated or deleted (trigger). Only `khata_service`
+  reads or writes the table (source-scanning test). There is no generic "insert a ledger row" endpoint: money
+  moves only through the controlled operations. The customer record service (`customer_service`) knows nothing
+  about balances; balances always come through `khata_service`.
+- **KH6. Opening balance.** A positive amount, at most **one live** per customer (a repeat is a 409). If it was
+  wrong, reverse it and enter the right one. It can be given when the customer is created, in the same
+  transaction: if it is invalid, no customer is created.
+- **KH7. Payments** take an amount above zero (at most 2 decimals), a date (default today in the shop's
+  timezone, never in the future, backdating allowed), an optional method (`CASH`/`UPI`/`OTHER`), an optional
+  reference (at most 100 characters) and a note. An inactive customer can still pay.
+- **KH8. Adjustments** are the controlled way to correct a balance: positive or negative, never zero, and a
+  **reason is mandatory**. They are permanent like every entry.
+- **KH9. Reversal.** A mistake is undone by a `REVERSAL` that references the original and carries the opposite
+  amount; the original is untouched and is shown as reversed. An entry can be reversed **once** (checked by the
+  service and by a unique constraint), a reversal cannot itself be reversed, and a reason is required. Entries
+  that came from a sale or a return (`CREDIT_SALE`, `RETURN_CREDIT`) cannot be reversed by hand (the API returns
+  409): the document has to be cancelled instead, so khata and sale never disagree. The service supports this
+  for the document workflows of later phases through an explicit flag that no screen passes.
+- **KH10. Credit sale and return credit are a foundation only.** `record_credit_sale` (customer must be active;
+  reference `SALE` or `QUICK_SALE`) and `record_return_credit` (reference `SALES_RETURN`) exist for Detailed
+  Sales (Phase 7) and Sales Returns (Phase 9). A reference is required and the same document can be recorded
+  only once. Phase 6 creates no sales and no endpoint calls them; tests call them directly.
+- **KH11. History.** Shown by (date, id) with a **running balance** computed over the customer's whole
+  history, so filters narrow the rows but never change the balance column. A backdated entry slots into its
+  date and changes later running balances; the last row always equals the current balance.
+- **KH12. Customers.** Only the name is required. Phone (6 to 15 digits, stored compactly) is unique **within
+  the shop**, never across shops, and the message names who has it; email and address are optional. A repeated
+  name warns and saves. Customers are deactivated, never deleted; an inactive customer is hidden by default,
+  gets no new credit, can still pay, and can be reactivated. Search covers name, phone, email and address.
+- **KH13. Atomic and audited.** Every khata operation runs in the request's single transaction and writes an
+  audit entry; a failure after the entry is written rolls the entry back. The customer row is locked
+  (`FOR UPDATE` on PostgreSQL) so two operations on one customer line up.
+- **KH14. Generic.** Nothing in customer or khata code depends on the business type (tested for every type).
 
 ## F. Profit
 
@@ -285,6 +335,9 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
   including negative ones, are not changed. Amounts are written from exact decimals. Money columns use
   `#,##0.00`, quantity columns `#,##0.000`, dates are real Excel date cells shown as `dd/mm/yyyy`; recorded-at
   times are converted to the shop's timezone. CSV dates are ISO. Files are named like `products_2026-09-20.csv`.
+- **X7.** *(Phase 6.)* Customers (name, contact details, balance, owes, advance, status) and one customer's khata
+  (oldest first, with separate Debit and Credit columns and the running balance; reversals point at their
+  originals). Owner only, shop-scoped, formula-safe, UTF-8 BOM in CSV.
 - **X6.** Available now: Products, Inventory (current stock), Inventory history (the ledger with running
   balance and the purchase each row came from), and (Phase 5) Purchases (one row per purchase), Purchase items
   (one row per line, with stock and average-cost snapshots) and a single purchase with its lines. The engine is

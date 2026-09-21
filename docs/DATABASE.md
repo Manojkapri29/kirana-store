@@ -1,7 +1,7 @@
 # Database
 
 > **Status: implemented.** Migration `0001` (Phase 2) created the schema; migration `0002` (Phase 3 extension)
-> added business types; migration `0003` (Phase 4) extended suppliers; migration `0004` (Phase 5) turned the purchase tables into a workflow. 24 tables. Rules are in [BUSINESS_RULES.md](BUSINESS_RULES.md);
+> added business types; migration `0003` (Phase 4) extended suppliers; migration `0004` (Phase 5) turned the purchase tables into a workflow; migration `0005` (Phase 6) added customer email. 24 tables. Rules are in [BUSINESS_RULES.md](BUSINESS_RULES.md);
 > the workflows that fill these tables arrive in Phases 3 to 13.
 
 ## Principles
@@ -98,8 +98,9 @@ Global tables: `shops` (the tenants) and `units` (shared reference data).
   A product refers to its optional default supplier through the composite foreign key
   `products (shop_id, default_supplier_id) -> suppliers (shop_id, id)`, so a product can never use another
   shop's supplier, and `(shop_id, default_supplier_id)` is indexed for "products of this supplier".
-- **`customers`**: shop, name, phone? (unique per shop when present), address?, notes?, is_active.
-  The khata balance is not stored here.
+- **`customers`**: shop, name, phone? (unique **per shop** when present, never across shops; stored compactly),
+  `email?` *(added by `0005`)*, address?, notes?, is_active. Indexed by `(shop_id, name)` for search. The khata
+  balance is not stored here: it is the sum of the customer's `customer_ledger` rows.
 
 ### Ledgers (insert-only)
 - **`inventory_transactions`**: the stock ledger.
@@ -117,7 +118,11 @@ Global tables: `shops` (the tenants) and `units` (shared reference data).
 - **`customer_ledger`**: the khata ledger. `entry_type`: `OPENING_BALANCE`, `CREDIT_SALE`, `PAYMENT`,
   `RETURN_CREDIT`, `ADJUSTMENT`, `REVERSAL`. Signed `amount_delta` (positive = the customer owes more),
   `payment_method?` (payments only), `reference_type?` (`SALE`, `QUICK_SALE`, `SALES_RETURN`) + `reference_id`,
-  `reverses_entry_id?`, `note?`. Same sign, reversal and reference rules as the stock ledger.
+  `reverses_entry_id?` (unique: an entry is reversed at most once), `note?`, `entry_date`, `created_by`.
+  Same sign, reversal and reference rules as the stock ledger. `UNIQUE (shop, reference_type, reference_id,
+  entry_type)` means one document line is credited once. `payment_reference?` holds a payment's transaction
+  number. Opening-balance uniqueness (one live per customer) is enforced by `khata_service` under the customer
+  row lock, because a reversed opening balance may legitimately be entered again.
 
 Both ledgers, and `audit_log`, are **protected by database triggers** that abort any `UPDATE` or `DELETE`
 (SQLite `RAISE(ABORT)`, PostgreSQL trigger function). They have no `updated_at` column. Because rows can
@@ -216,6 +221,14 @@ every `CHECK` name in the migration is wrapped in `op.f(...)`. The backfill is a
 numbers, units and foreign keys survive, the new rules are enforced, downgrade and re-upgrade work.
 **Downgrade is refused while any `DRAFT` purchase exists** (revision `0003` has no draft status): post or
 discard them first.
+
+## Migration 0005: customers
+
+Adds `customers.email` (nullable) and the index `ix_customers_shop_id_name`. No table is rebuilt on upgrade, so
+the insert-only ledger triggers are not touched. The downgrade drops the column, which makes SQLite rebuild
+`customers` (foreign keys off, then `PRAGMA foreign_key_check`, as in `0002`); the ledger triggers survive
+because `customer_ledger` itself is not rebuilt. Tested against a database holding a customer with ledger
+entries: rows, balance, indexes and triggers survive upgrade, downgrade and re-upgrade.
 
 ## Always derived, never stored
 

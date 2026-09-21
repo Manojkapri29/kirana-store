@@ -61,7 +61,7 @@ def test_migration_state_is_at_head_and_matches_the_models(blank_db_url: str):
     command.upgrade(config, "head")
 
     head = ScriptDirectory.from_config(config).get_current_head()
-    assert head == "0004"
+    assert head == "0005"
     assert current_revision(blank_db_url) == head
 
     # `alembic check` raises if autogenerate would produce any change (models and DB disagree).
@@ -70,7 +70,7 @@ def test_migration_state_is_at_head_and_matches_the_models(blank_db_url: str):
 
 def test_there_is_a_single_migration_head():
     heads = ScriptDirectory.from_config(alembic_config("sqlite:///unused.db")).get_heads()
-    assert heads == ["0004"]
+    assert heads == ["0005"]
 
 
 def test_downgrade_removes_everything_and_upgrade_can_run_again(blank_db_url: str):
@@ -276,7 +276,7 @@ class TestMigration0002PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0004"
+        assert current_revision(blank_db_url) == "0005"
 
 
 class TestMigration0003PreservesData:
@@ -383,7 +383,7 @@ class TestMigration0003PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0004"
+        assert current_revision(blank_db_url) == "0005"
 
 
 class TestMigration0004PreservesData:
@@ -542,4 +542,97 @@ class TestMigration0004PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0004"
+        assert current_revision(blank_db_url) == "0005"
+
+
+class TestMigration0005PreservesData:
+    """0005 adds `customers.email` and a name index. Existing customers and their ledger must survive intact."""
+
+    NOW = "'2026-09-01 10:00:00.000000'"
+
+    def seed_revision_0004(self, url: str) -> None:
+        command.upgrade(alembic_config(url), "0004")
+        engine = create_db_engine(url)
+        with engine.begin() as c:
+            c.execute(
+                text(
+                    "INSERT INTO shops (id, name, business_type, phone, address, mrp_validation_mode, created_at, updated_at)"
+                    f" VALUES (7, 'Old Shop', 'BAKERY', '9999999999', '1 Old Road', 'WARN', {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO users (id, shop_id, email, password_hash, full_name, role, is_active, created_at, updated_at)"
+                    f" VALUES (3, 7, 'o@old.local', '!', 'Old Owner', 'OWNER', 1, {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO customers (id, shop_id, name, phone, address, is_active, created_at, updated_at)"
+                    f" VALUES (12, 7, 'Ramesh', '9876543210', 'Main Road', 1, {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO customer_ledger (id, shop_id, customer_id, entry_date, entry_type, amount_delta,"
+                    " created_by, created_at)"
+                    f" VALUES (1, 7, 12, '2026-08-01', 'OPENING_BALANCE', 100000, 3, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO customer_ledger (id, shop_id, customer_id, entry_date, entry_type, amount_delta,"
+                    " payment_method, created_by, created_at)"
+                    f" VALUES (2, 7, 12, '2026-08-05', 'PAYMENT', -25000, 'UPI', 3, {self.NOW})"
+                )
+            )
+        engine.dispose()
+
+    def test_customers_and_their_ledger_survive_and_gain_an_empty_email(self, blank_db_url: str):
+        self.seed_revision_0004(blank_db_url)
+
+        command.upgrade(alembic_config(blank_db_url), "head")
+
+        engine = create_db_engine(blank_db_url)
+        with engine.connect() as c:
+            row = c.execute(
+                text("SELECT name, phone, address, is_active, email FROM customers WHERE id = 12")
+            ).one()
+            assert tuple(row) == ("Ramesh", "9876543210", "Main Road", 1, None)
+            assert (
+                c.scalar(text("SELECT sum(amount_delta) FROM customer_ledger WHERE customer_id = 12"))
+                == 75000
+            )
+            indexes = {r[1] for r in c.exec_driver_sql("PRAGMA index_list(customers)")}
+            assert "ix_customers_shop_id_name" in indexes
+            assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+            # the ledger is still insert-only after the migration
+            with pytest.raises(Exception, match="insert-only"):
+                c.execute(text("UPDATE customer_ledger SET amount_delta = 1"))
+            c.rollback()
+            with pytest.raises(Exception, match="insert-only"):
+                c.execute(text("DELETE FROM customer_ledger"))
+            c.rollback()
+        engine.dispose()
+        command.check(alembic_config(blank_db_url))
+
+    def test_downgrade_and_upgrade_again_keep_every_row(self, blank_db_url: str):
+        self.seed_revision_0004(blank_db_url)
+        config = alembic_config(blank_db_url)
+        command.upgrade(config, "head")
+
+        command.downgrade(config, "0004")
+
+        engine = create_db_engine(blank_db_url)
+        with engine.connect() as c:
+            columns = {r[1] for r in c.exec_driver_sql("PRAGMA table_info(customers)")}
+            assert "email" not in columns and {"name", "phone", "address", "notes"} <= columns
+            assert c.scalar(text("SELECT name FROM customers WHERE id = 12")) == "Ramesh"
+            assert c.scalar(text("SELECT count(*) FROM customer_ledger")) == 2
+            assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+            with pytest.raises(Exception, match="insert-only"):  # triggers survived the table rebuild
+                c.execute(text("DELETE FROM customer_ledger"))
+            c.rollback()
+        engine.dispose()
+        command.upgrade(config, "head")
+        assert current_revision(blank_db_url) == "0005"

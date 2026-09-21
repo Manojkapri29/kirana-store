@@ -35,14 +35,22 @@ class Supplier(TimestampMixin, Base):
 
 
 class Customer(TimestampMixin, Base):
-    """A customer, mainly for khata (credit). The outstanding balance is never stored here; it is
-    derived from `customer_ledger`."""
+    """Someone the shop sells to, mainly on credit (khata). Generic: the same for every kind of business.
+
+    The outstanding balance is never stored here: it is the sum of the customer's `customer_ledger` rows,
+    and only `khata_service` reads or writes that ledger. A customer is never deleted, only deactivated, so
+    the ledger stays explainable.
+
+    Phone is optional; when present it is unique **within the shop** (never across shops), and is stored in
+    the compact form produced by `contact_validation`. Only the name is required.
+    """
 
     __tablename__ = "customers"
     __table_args__ = (
         # Phone is optional, but when present it identifies the customer within the shop.
         UniqueConstraint("shop_id", "phone"),
         UniqueConstraint("shop_id", "id"),
+        Index("ix_customers_shop_id_name", "shop_id", "name"),
         not_blank("name"),
         not_blank("phone"),
     )
@@ -51,6 +59,7 @@ class Customer(TimestampMixin, Base):
     shop_id: Mapped[int] = shop_id_column()
     name: Mapped[str] = mapped_column(String(200))
     phone: Mapped[str | None] = mapped_column(String(20))
+    email: Mapped[str | None] = mapped_column(String(254))
     address: Mapped[str | None] = mapped_column(String(500))
     notes: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=expression.true())
