@@ -11,6 +11,7 @@ import { ProductsPage } from '@/features/products/ProductsPage'
 import { PromotionDetailPage } from '@/features/promotions/PromotionDetailPage'
 import { PromotionFormPage } from '@/features/promotions/PromotionFormPage'
 import { PromotionsPage } from '@/features/promotions/PromotionsPage'
+import { AssistantPage } from '@/features/assistant/AssistantPage'
 import { PurchaseReturnFormPage } from '@/features/returns/PurchaseReturnFormPage'
 import { ReturnDetailPage } from '@/features/returns/ReturnDetailPage'
 import { ReturnsPage } from '@/features/returns/ReturnsPage'
@@ -53,6 +54,7 @@ export function App() {
         <Route path="purchases/:id" element={<PurchaseDetailPage />} />
         <Route path="purchases/:id/edit" element={<PurchaseFormPage mode="edit" />} />
         <Route path="purchases/:id/return" element={<PurchaseReturnFormPage />} />
+        <Route path="assistant" element={<AssistantPage />} />
         <Route path="returns" element={<ReturnsPage />} />
         <Route path="returns/sales/:id" element={<ReturnDetailPage kind="sales" />} />
         <Route path="returns/purchases/:id" element={<ReturnDetailPage kind="purchases" />} />

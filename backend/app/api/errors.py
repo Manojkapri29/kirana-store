@@ -35,7 +35,15 @@ from starlette.responses import Response
 
 from app.core import diagnostics
 from app.core.diagnostics import ErrorCategory
-from app.services.errors import ConflictError, DomainError, EntitlementError, InvalidInputError, NotFoundError
+from app.services.errors import (
+    AiServiceError,
+    ConflictError,
+    DomainError,
+    EntitlementError,
+    ForbiddenError,
+    InvalidInputError,
+    NotFoundError,
+)
 
 GENERIC_MESSAGE = "Something went wrong while completing this action."
 MESSAGES = {
@@ -175,7 +183,13 @@ def _unexpected(
 ) -> JSONResponse:
     """A failure the user cannot fix or see the inside of: log everything, reveal only a reference."""
     category = _unexpected_category(request, category)
-    reference = diagnostics.new_reference_id()
+    # A caller that already recorded this failure under a reference (an AI action) shows that same reference.
+    preset = getattr(exc, "reference_id", None)
+    reference = (
+        preset
+        if isinstance(preset, str) and diagnostics.REFERENCE_PATTERN.match(preset)
+        else diagnostics.new_reference_id()
+    )
     message = MESSAGES[category]
     _log(request, category, _CODES_BY_CATEGORY[category], status, reference, exc)
     body = error_body(
@@ -234,6 +248,26 @@ def register_error_handlers(app: FastAPI) -> None:
             ErrorCategory.PLAN_LIMIT, exc.message, detail=detail, extra={"feature": exc.feature}
         )
         return _respond(request, 403, body)
+
+    @app.exception_handler(ForbiddenError)
+    async def forbidden(request: Request, exc: ForbiddenError) -> JSONResponse:
+        body = error_body(ErrorCategory.AUTHORIZATION, exc.message, detail=exc.message)
+        return _respond(request, 403, body)
+
+    @app.exception_handler(AiServiceError)
+    async def ai_unavailable(request: Request, exc: AiServiceError) -> JSONResponse:
+        """The AI provider could not answer. The app is fine; the message never carries provider text."""
+        reference = diagnostics.new_reference_id()
+        _log(request, ErrorCategory.EXTERNAL_API, exc.code or "ai_unavailable", 503, reference, exc)
+        body = error_body(
+            ErrorCategory.EXTERNAL_API,
+            exc.message,
+            detail=f"{exc.message} Reference: {reference}",
+            error_code=exc.code,
+            reference_id=reference,
+            retryable=exc.retryable,
+        )
+        return _respond(request, 503, body)
 
     @app.exception_handler(InvalidInputError)
     async def invalid(request: Request, exc: InvalidInputError) -> JSONResponse:

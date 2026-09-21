@@ -918,3 +918,60 @@ def issue_purchase_return_line(
     session.add(row)
     _flush_or_conflict(session)
     return row
+
+
+# --- Read-only view of adjustments (for the AI insights) ---------------------------------------------
+
+
+@dataclass(frozen=True)
+class AdjustmentEntry:
+    txn_id: int
+    product_id: int
+    product_name: str
+    unit_code: str
+    quantity_delta: Decimal
+    stock_before: Decimal
+    reason_code: str | None
+    day: date
+
+
+def adjustments_between(session: Session, shop_id: int, start: date, end: date) -> list[AdjustmentEntry]:
+    """Stock adjustments dated in the period, with the stock each one started from, newest first."""
+    rows = session.execute(
+        select(InventoryTransaction, Product.name, Unit.code)
+        .join(
+            Product,
+            (Product.shop_id == InventoryTransaction.shop_id)
+            & (Product.id == InventoryTransaction.product_id),
+        )
+        .join(Unit, Unit.id == Product.unit_id)
+        .where(
+            InventoryTransaction.shop_id == shop_id,
+            InventoryTransaction.txn_type == InventoryTxnType.ADJUSTMENT,
+            InventoryTransaction.txn_date >= start,
+            InventoryTransaction.txn_date <= end,
+        )
+        .order_by(InventoryTransaction.txn_date.desc(), InventoryTransaction.id.desc())
+    ).all()
+    out: list[AdjustmentEntry] = []
+    for txn, name, unit_code in rows:
+        before = session.scalar(
+            select(func.coalesce(func.sum(InventoryTransaction.qty_delta), 0)).where(
+                InventoryTransaction.shop_id == shop_id,
+                InventoryTransaction.product_id == txn.product_id,
+                InventoryTransaction.id < txn.id,
+            )
+        )
+        out.append(
+            AdjustmentEntry(
+                txn.id,
+                txn.product_id,
+                name,
+                unit_code,
+                txn.qty_delta,
+                before if isinstance(before, Decimal) else Decimal(str(before or 0)),
+                txn.reason_code.value if txn.reason_code else None,
+                txn.txn_date,
+            )
+        )
+    return out

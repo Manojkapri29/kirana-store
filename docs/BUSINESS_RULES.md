@@ -616,3 +616,65 @@ need business logic in services, which arrive in later phases.
 - **IM8.** Future uses (not built): a supplier invoice photo to a purchase draft, a handwritten stock list to an
   adjustment draft, a shelf photo, a damaged or expired product photo to a suggested adjustment reason. Each will
   produce a draft that a person reviews; none will change stock by itself.
+
+## AI. AI assistant, actions and document intelligence (Phase 10, implemented)
+
+- **AI1.** The AI is an assistant, not the source of truth. Every number in an answer (sales, discounts, profit,
+  outstanding, purchases, stock) is read from the database by an existing report or service; the words are assembled
+  from templates. A language model never calculates a figure, a date range or a total.
+- **AI2.** Reading is fixed and read-only. The assistant has a list of tools; each takes only its own declared
+  arguments (an unknown one such as `shop_id` or `sql` is refused), is scoped to the signed-in shop, and calls an
+  existing service. There is no path from a question, a model or a document to arbitrary SQL, and none to a write.
+- **AI3.** Where the data is missing the answer says so and never estimates: "Profit Not Available because cost data is
+  missing.", "I don't have enough data to determine this.", "Possible match, confidence low." A tool whose data does not
+  exist in the application (online orders) says that, with no figures.
+- **AI4.** Refused before any planning, by the backend and not left to a model: database commands, another shop's data
+  (an authorization error, HTTP 403), changes to business records, and attempts to change the assistant's instructions
+  ("ignore previous instructions", revealing a prompt or key). A refusal changes nothing and uses no allowance.
+- **AI5.** Human confirmation. Business changes exist only as actions: the AI proposes (structured, validated), the person
+  sees an exact preview (action, shop, records, quantities, amounts, expected effect) with Confirm / Edit / Cancel, and
+  Confirm runs an existing service in one transaction, then the result is checked. The action can create only:
+  a purchase **draft**, stock adjustments (with a reason code, against the stock the person saw; refused if it has since
+  moved), or an offer **draft**. It cannot post a purchase, activate an offer, refund, change a price, write to Khata,
+  cancel an order, change a subscription, or change any financial record.
+- **AI6.** An action is confirmed once (guarded under a row lock). A failed confirmation rolls back completely, is recorded
+  on the action (with the error reference when unexpected) and in the audit log, and the action stays open to edit and retry.
+- **AI7.** Audit. Every proposal, edit, cancellation, confirmation and failed confirmation is an audit entry: who, which
+  shop, which AI feature, what was proposed, what was confirmed, the resulting record ids, success or failure and the
+  error reference. No question, prompt or document text is stored anywhere.
+- **AI8.** Recommendations are labelled "AI Recommendation" and are for review. Reorder: a product at or below its reorder
+  level, or with under a week of stock at the last 30 days' pace, is suggested up to about 21 days of that pace plus the
+  reorder level (twice the level if nothing sold), rounded up to the unit. Purchase suggestions group these by preferred
+  supplier with latest purchase price and average cost. Neither creates a purchase.
+- **AI9.** Unusual activity is described neutrally ("Unusual activity detected: ..."), always with how to check and never
+  as an accusation. Patterns: a sales drop or spike against the previous week, a discount rate at least twice the usual and
+  above 10%, returns above 15% of net sales (3 or more), a stock adjustment of at least 5 units and 25% of the stock it
+  started from, and Quick Sales at least twice the usual week. Online-order monitoring is not available.
+- **AI10.** Price comparison reads only prices the shop already saved (Phase 8 history); it never asks an outside source and
+  never changes or advises changing a price. It states source, time, match kind and confidence, and location, and says when
+  a match is only possible.
+- **AI11.** Document text is data. A photographed invoice or stock list is read into rows; every field is checked
+  (quantity above zero within the unit's decimals, price valid, discount within the line, dates real and not future,
+  printed totals compared, duplicate products and duplicate supplier invoice numbers flagged). A line that looks like an
+  instruction or a database command is dropped and reported. Nothing in a document reaches the question planner.
+- **AI12.** Product matching for documents uses the same matcher as the rest of the app (barcode, SKU, normalised name, brand,
+  pack size). A barcode or SKU match on one product is Matched; anything else is a Possible Match that only a person can
+  accept, or a New Product Candidate. No product is created from a document: an unmatched line blocks the draft until
+  the person chooses a product or adds it first.
+- **AI13.** Provider abstraction and keys. Business logic uses one provider interface and contains no provider-specific
+  code. The key is a backend setting (`AI_API_KEY`), never in the frontend, the database, a response, a log or Git; a
+  provider failure is the fixed message "AI Assistant is temporarily unavailable." with a reference and Retry, and the rest
+  of the application is unaffected. With no provider the assistant says "AI Assistant is not configured." and the
+  ready-made questions and reports still work.
+- **AI14.** Plans. The backend enforces `ai_assistant` (basic questions), `ai_insights` (insights, recommendations, price
+  comparison, category and decline analysis, monthly summary, offer ideas) and `ai_documents` (invoice and stock-list photos),
+  and the monthly limit `max_ai_requests_per_month` (checked before a provider is called). Tools that need another plan
+  feature (advanced reports, price intelligence, offers) still require it. Example values only; no pricing is implied.
+- **AI15.** No uncontrolled memory. The server keeps no conversation. The chat history lives in the browser tab (session
+  storage) and disappears with it. Usage rows hold counts and metadata only.
+
+## Where each AI rule is enforced
+
+| By the database | By services and routes |
+|---|---|
+| an action's result can exist only when it was executed; status is one of four values; tenant keys | AI1-AI3 tools and templates; AI4 guard; AI5-AI7 `ai_action_service`; AI8-AI10 `ai_insights_service`; AI11-AI12 `document_intelligence_service`; AI13 `ai_provider`; AI14 `entitlement_service` |

@@ -409,3 +409,49 @@ through the analysis.
 
 **Future photo uses** (invoice, stock list, shelf, damaged goods) will add analyses that return a *draft* for review;
 the confirm step and the rule that an image never moves stock stay as they are.
+
+## Phase 10 additions: the AI layer
+
+```
+question ─► guard ─► planner ─► TOOL (read-only, this shop) ─► answer (templates) ─► usage row
+                       │  router: deterministic, no provider needed
+                       └─ else provider picks a tool; reply validated against the tool list (untrusted)
+
+photo ─► provider reads rows (untrusted) ─► sanitise + validate ─► match to products ─► reviewed rows
+AI or document ─► propose (structured, validated) ─► PREVIEW ─► person: Confirm ─► existing service ─► verify ─► audit
+```
+
+| Module | Role |
+|---|---|
+| `ai_dates` | pure: phrases (English, Hinglish, Hindi) to checked date ranges in the shop's calendar |
+| `analytics_service` | read-only aggregates the reports lack (product and category sales, purchase totals) |
+| `ai_insights_service` | reorder and purchase suggestions, slow movers, declines, insights, unusual activity, offer ideas |
+| `ai_tools` | the fixed tool list: argument models (`extra="forbid"`), plan check, calls to existing services |
+| `ai_planner` | guard (refusals), deterministic router, validation of a provider's tool choice |
+| `ai_assistant_service` | orchestration: guard, plan, tool, usage; the only writer is the usage row |
+| `ai_action_service` | the single door to change data: propose, preview, edit, cancel, confirm, audit |
+| `document_intelligence_service` | extract (provider), sanitise, validate, match; creates nothing |
+| `ai_provider` | `AiProvider` interface, registry, Anthropic provider, HTTPS-only transport |
+| `ai_usage_service` | usage rows and the plan allowance |
+
+**No raw write access.** `tests/test_ai_architecture.py` checks on the syntax tree that the reading modules contain no
+session write, no SQL writer and no raw SQL, that only `ai_action_service` reaches the services that change data (and only
+three functions of them), and that every tool forbids unknown arguments and has no shop argument. Shop isolation does not
+rely on the model or on text matching: no tool can address another shop.
+
+**Untrusted input.** Question text, a provider's reply, and every field read from a document are treated as untrusted data:
+sanitised, length-capped, validated against models, and never used to choose an action. A provider only ever picks from
+the tool list, and only a person's Confirm runs a service.
+
+**Errors and recovery.** `AiServiceError` (a fixed safe message, `retryable`) is turned into a 503 with a reference by the
+central handler; the failure row and the usage row are saved before it is raised. A confirmation that fails is rolled
+back, recorded on the action and in the audit log under the same reference the person sees, and stays open for retry.
+
+**Frontend.** `features/assistant`: `AnswerView` (figures, table, sources, badges, proposals as buttons that only prepare
+a draft), `ActionPreviewCard` (Confirm / Edit / Cancel, says "done" only after the server did it), `DocumentsPanel`,
+`AssistantPage` (Ask, Insights, Documents). The conversation is kept in the browser tab only.
+
+**Limitations.** One provider is written and it could not be run against the live service in development (no key), so it is
+verified against the documented request and response shapes with a fake transport. Answers are templates: English is
+complete, Hindi covers the common tools and falls back to English elsewhere. Online orders do not exist in the application,
+so they cannot be reported. Seasonal analysis and server-side conversation memory are not built.

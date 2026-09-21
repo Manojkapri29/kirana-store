@@ -394,3 +394,20 @@ The idempotency table (`idempotency_keys`: shop, key, operation, request hash, s
 mechanism that uses it is now shared by every create and post (sales, quick sales, purchases, returns, products,
 customers, offers, confirmed photo products). Diagnostics are **not** stored in the database: they go to the server log
 (and optionally a private file), so there is no table a screen could read.
+
+## Migration 0013 (Phase 10)
+
+* **`ai_usage`.** One row per request that reached the AI layer: shop, user, `feature` (ask, tool, invoice_photo,
+  stock_list_photo), `provider`, `model`, `status` (OK, FAILED, UNSUPPORTED), `input_tokens`, `output_tokens`, and
+  `estimated_cost_micros` with `cost_currency` only when the provider reports a cost. No question, prompt, answer or
+  document text. Index on (shop, created_at). It feeds the usage screen and, with `subscription_usage`, the monthly limit.
+* **`ai_actions`.** A change the AI prepared and what a person did with it: `kind` (PURCHASE_DRAFT, STOCK_ADJUSTMENT,
+  PROMOTION_DRAFT), `status` (PROPOSED, EXECUTED, CANCELLED, FAILED), `feature`, `proposal` (as first proposed, never
+  edited), `current` (what a confirmation would do now), `attempts`, `result_type` and `result_ids` (only when EXECUTED,
+  enforced by a CHECK), `failure_message`, `reference_id`, `decided_by`, `decided_at`. Tenant keys to users. The
+  business data itself is created by the existing services and lives in their tables.
+* **Plan data.** Features `ai_assistant`, `ai_insights`, `ai_documents` and the limit `max_ai_requests_per_month`, seeded
+  for the three example plans (free: basic questions, 30 a month; basic: plus insights, 300; pro: everything, unlimited).
+  Editable like all plan entries; the downgrade removes them. `subscription_usage` gains the metric `ai_requests`.
+
+Audit entries for AI actions use the existing `audit_log` (entity `ai_action`).

@@ -66,6 +66,24 @@ class Settings(BaseSettings):
             return None
         return value
 
+    # --- AI assistant (Phase 10). Optional. The key is backend only; nothing here reaches the browser. ---
+    # Which provider to use ("anthropic" today; the provider layer is replaceable). Unset = "not configured":
+    # the assistant's ready-made questions, insights and reports still work, free-form questions are limited.
+    ai_provider: str | None = None
+    ai_api_key: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("AI_API_KEY", "KIRANA_AI_API_KEY")
+    )
+    ai_model: str | None = None  # the provider's own model name; a sensible default is used when unset
+    ai_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    ai_max_output_tokens: int = Field(default=1024, ge=64, le=8192)
+
+    @field_validator("ai_api_key", mode="before")
+    @classmethod
+    def _blank_ai_key_is_unset(cls, value: object) -> object:
+        if isinstance(value, str) and value.strip() in ("", "your_api_key_here"):
+            return None
+        return value
+
     # --- External price/product providers. Backend only: none of these ever reaches the browser. ---
     # Master switch. Off means no outgoing request is ever made; every price check reports "disabled".
     external_lookups_enabled: bool = True

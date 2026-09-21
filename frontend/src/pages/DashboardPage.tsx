@@ -1,5 +1,7 @@
-import { Info } from 'lucide-react'
+import { Info, Sparkles } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 
 import type { ParseKeys } from 'i18next'
 
@@ -24,6 +26,12 @@ const KPI_PLACEHOLDERS: readonly KpiPlaceholder[] = [
 
 export function DashboardPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const [question, setQuestion] = useState('')
+  const ask = (event: FormEvent) => {
+    event.preventDefault()
+    void navigate(question.trim() ? `/assistant?q=${encodeURIComponent(question.trim())}` : '/assistant')
+  }
 
   return (
     <div className="space-y-6">
@@ -31,6 +39,26 @@ export function DashboardPage() {
         <h1 className="text-2xl font-bold text-slate-900">{t('dashboard.title')}</h1>
         <p className="mt-1 text-slate-600">{t('dashboard.subtitle')}</p>
       </div>
+
+      <form onSubmit={ask} className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-emerald-900">
+          <Sparkles aria-hidden="true" className="size-5" />
+          {t('assistant.askHeading')}
+        </h2>
+        <div className="flex gap-3">
+          <input
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder={t('assistant.placeholder')}
+            aria-label={t('assistant.askHeading')}
+            maxLength={600}
+            className="block min-h-12 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-base focus-visible:outline-2 focus-visible:outline-emerald-600"
+          />
+          <button type="submit" className="min-h-12 rounded-lg bg-emerald-600 px-5 font-medium text-white hover:bg-emerald-700">
+            {t('assistant.ask')}
+          </button>
+        </div>
+      </form>
 
       <div
         role="note"

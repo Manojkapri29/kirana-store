@@ -99,7 +99,7 @@ class TestMigration0012:
                 )
             }
         engine.dispose()
-        command.upgrade(alembic_config(url), "head")
+        command.upgrade(alembic_config(url), "0012")
         engine = create_db_engine(url)
         with engine.connect() as c:
             after = {

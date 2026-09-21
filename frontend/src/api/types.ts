@@ -692,6 +692,7 @@ export interface PlanLimitUsage {
   users: number
   invoices: number
   price_lookups: number
+  ai_requests: number
 }
 
 export interface SubscriptionPlan {

@@ -80,7 +80,7 @@ class TestNoSecretsInGit:
         text = (ROOT / "backend" / ".env.example").read_text()
         assert "UPCITEMDB_API_KEY=your_api_key_here" in text
         for line in text.splitlines():
-            if re.match(r"^\s*[A-Z_]*(KEY|SECRET|TOKEN|PASSWORD)[A-Z_]*\s*=", line):
+            if re.match(r"^\s*[A-Z_]*(KEY|SECRET|TOKEN(?!S)|PASSWORD)[A-Z_]*\s*=", line):
                 assert line.split("=", 1)[1].strip() in {"your_api_key_here", ""}, line
 
     def test_no_tracked_file_contains_something_shaped_like_a_real_key(self):

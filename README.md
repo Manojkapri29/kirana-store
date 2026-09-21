@@ -113,7 +113,7 @@ All configuration comes from environment variables; nothing secret is committed.
 - [Architecture](docs/ARCHITECTURE.md): layers, service boundaries, ledgers, SaaS readiness
 - [Database](docs/DATABASE.md): planned schema and SQLite to PostgreSQL strategy
 - [Business rules](docs/BUSINESS_RULES.md): the approved rules every phase must follow
-- [Roadmap](docs/ROADMAP.md): Phases 1 to 16 (Phase 9 is the latest)
+- [Roadmap](docs/ROADMAP.md): Phases 1 to 16 (Phase 10 is the latest)
 
 ## What Phase 8 added
 
@@ -182,3 +182,34 @@ configured yet." and everything else (including reading a barcode in the browser
 | `KIRANA_IMAGE_ANALYSIS_PROVIDER`, `IMAGE_ANALYSIS_API_KEY` | For a future provider. The key stays in `backend/.env`; it is never sent to the browser or committed. |
 
 The `image_intelligence` plan feature controls who sees the photo tools (on for the example `pro` plan).
+
+## What Phase 10 added
+
+**Business Assistant.** Ask about your sales, stock, Khata, purchases, profit, discounts and more, in English, Hinglish
+or Hindi ("Aaj kitni sale hui?"). Every number comes from your own records through fixed read-only reports; the assistant
+cannot run database commands, cannot see another shop, and cannot change anything. Where data is missing it says so
+("Profit Not Available because cost data is missing."). It also gives reorder and purchase suggestions, unusual-activity
+notices, offer ideas and a monthly summary, each labelled **AI Recommendation** and for you to review.
+
+**Confirm before anything happens.** From a suggestion you can prepare a *draft*: a purchase draft, a stock adjustment, or
+an offer draft. You see exactly what it will do (Confirm / Edit / Cancel). Only Confirm runs the normal purchase, inventory
+or offer code, and the result is a draft (it is never posted or activated for you). Every step is in the audit log.
+
+**Documents.** Photograph a supplier invoice or a counted stock list, or type the lines yourself. Each line is checked and
+matched to your products (Matched, Possible Match, New Product Candidate); nothing is created until you confirm. Text on
+a document is only copied, never followed.
+
+**AI provider (optional).** No provider is required. Without one, the ready-made questions, reports and typed document
+lines all work, and the assistant says "AI Assistant is not configured." for free-form wording. To turn on free-form
+questions and photo reading, set these in `backend/.env` (never in the frontend or Git):
+
+| Variable | Meaning |
+|---|---|
+| `KIRANA_AI_PROVIDER` | `anthropic` today. |
+| `AI_API_KEY` | The provider key. Backend only; never sent to the browser, stored, or logged. |
+| `KIRANA_AI_MODEL` | The provider's model name (a default is used when unset). |
+| `KIRANA_AI_TIMEOUT_SECONDS`, `KIRANA_AI_MAX_OUTPUT_TOKENS` | Limits for one request. |
+
+AI is controlled by plan: `ai_assistant` (basic questions), `ai_insights` (recommendations and analysis) and
+`ai_documents` (document photos), with a monthly limit of requests. The conversation is kept only in your browser tab.
+Online orders are not part of this application yet, so the assistant reports none rather than inventing figures.

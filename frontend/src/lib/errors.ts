@@ -13,7 +13,7 @@ import type { ParseKeys } from 'i18next'
 
 import { ApiError, type ErrorCategory } from '@/api/client'
 
-export type ErrorContext = 'generic' | 'save' | 'checkout' | 'barcode' | 'price' | 'image_upload' | 'search' | 'return'
+export type ErrorContext = 'ai' | 'generic' | 'save' | 'checkout' | 'barcode' | 'price' | 'image_upload' | 'search' | 'return'
 
 export type RecoveryAction =
   | 'retry'
@@ -45,6 +45,7 @@ const INTERNAL: ErrorCategory[] = [...TRANSIENT, 'unexpected', 'checkout', 'prom
 const WRITING: ErrorContext[] = ['save', 'checkout', 'return']
 
 const TITLES: Record<ErrorContext, ParseKeys> = {
+  ai: 'recovery.titles.ai',
   generic: 'recovery.titles.generic',
   save: 'recovery.titles.save',
   checkout: 'recovery.titles.checkout',

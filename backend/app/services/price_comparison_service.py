@@ -572,3 +572,55 @@ def list_history(
     if limit is not None:
         query = query.limit(limit)
     return list(session.scalars(query)), total
+
+
+@dataclass(frozen=True)
+class SavedQuote:
+    quote: Quote
+    match: Match
+
+
+@dataclass(frozen=True)
+class SavedComparison:
+    product: LocalRef
+    quotes: list[SavedQuote]  # newest check first; only prices that fit this product
+    checked_at: datetime | None
+    has_barcode: bool
+
+
+def saved_comparison(session: Session, shop_id: int, product_id: int) -> SavedComparison:
+    """The prices already SAVED for one product, matched against it. Reads the shop's own history only: it
+    never
+    asks an outside source, so it is instant, free, and cannot fail because a provider is down. Needs the
+    plan's
+    price intelligence like every price feature. Information only: nothing here changes a price."""
+    entitlement_service.require_feature(session, shop_id, FEATURE)
+    product = session.scalar(select(Product).where(Product.shop_id == shop_id, Product.id == product_id))
+    if product is None:
+        raise NotFoundError("Product not found")
+    local = _local_ref(product)
+    if not product.barcode:
+        return SavedComparison(local, [], None, False)
+    rows = list(
+        session.scalars(
+            select(PriceObservation)
+            .where(
+                PriceObservation.shop_id == shop_id,
+                PriceObservation.barcode.in_(barcode_variants(product.barcode)),
+            )
+            .order_by(PriceObservation.checked_at.desc(), PriceObservation.id)
+        )
+    )
+    # Only the newest batch per provider: older checks of the same source are superseded, not extra prices.
+    newest: dict[str, datetime] = {}
+    for row in rows:
+        newest.setdefault(row.provider, row.checked_at)
+    quotes: list[SavedQuote] = []
+    for row in rows:
+        if row.checked_at != newest[row.provider]:
+            continue
+        quote = _quote_of(row)
+        match = match_quote(local, product.barcode, quote)
+        if match is not None:
+            quotes.append(SavedQuote(quote, match))
+    return SavedComparison(local, quotes, max(newest.values()) if newest else None, True)

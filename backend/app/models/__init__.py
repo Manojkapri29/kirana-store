@@ -1,6 +1,7 @@
 """SQLAlchemy models. Importing this package registers every table on `Base.metadata`,
 which Alembic uses to compare the models with the database."""
 
+from app.models.ai import AiAction, AiUsage
 from app.models.base import Base
 from app.models.catalog import Category, Product, Unit
 from app.models.expenses import Expense, ExpenseCategory
@@ -16,6 +17,8 @@ from app.models.subscription import Plan, PlanFeature, ShopSubscription, Subscri
 from app.models.system import AuditLog, DocumentSequence, IdempotencyKey
 
 __all__ = [
+    "AiAction",
+    "AiUsage",
     "AuditLog",
     "Base",
     "BusinessType",

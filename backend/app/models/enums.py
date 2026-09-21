@@ -157,6 +157,23 @@ class PromotionScope(StrEnum):
     CATEGORIES = "CATEGORIES"  # only products in the chosen categories
 
 
+class AiActionKind(StrEnum):
+    """What an AI-prepared action would do once a person confirms it. Each uses an existing service."""
+
+    PURCHASE_DRAFT = "PURCHASE_DRAFT"  # purchase_service.create_purchase: a DRAFT, never posted
+    STOCK_ADJUSTMENT = "STOCK_ADJUSTMENT"  # inventory_service.record_adjustment with a reason code
+    PROMOTION_DRAFT = "PROMOTION_DRAFT"  # promotion_service.create_promotion: a DRAFT, never activated
+
+
+class AiActionStatus(StrEnum):
+    """PROPOSED -> EXECUTED, or CANCELLED. FAILED (the service refused or broke) can be edited and retried."""
+
+    PROPOSED = "PROPOSED"
+    EXECUTED = "EXECUTED"
+    CANCELLED = "CANCELLED"
+    FAILED = "FAILED"
+
+
 class PromotionStatus(StrEnum):
     """DRAFT (being set up) -> ACTIVE <-> PAUSED -> EXPIRED. A promotion is never deleted."""
 

@@ -14,9 +14,10 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 | 6 | Customers + Khata | Done |
 | 7 | Detailed Sales | Done |
 | 8 | Quick Sales, barcode scanning, price intelligence, offers and coupons, plans | Done |
-| 9 | Returns, smart error recovery, smart photo capture | Done, awaiting review |
-| 10 | Inventory views + adjustments + stock count + reliability indicators | Planned |
-| ✔ | **PostgreSQL checkpoint** (after Phase 10) | Planned |
+| 9 | Returns, smart error recovery, smart photo capture | Done |
+| 10 | AI business assistant, document intelligence, smart automation | Done, awaiting review |
+| — | Inventory views + adjustments screen + stock count + reliability indicators (was Phase 10) | Deferred, not scheduled |
+| ✔ | **PostgreSQL checkpoint** (after the inventory views phase) | Planned |
 | 11 | Expenses | Planned |
 | 12 | Dashboard | Planned |
 | 13 | Reports | Planned |
@@ -184,13 +185,36 @@ photo, damaged or expired product photo to a suggested adjustment reason. Each w
 image will never change stock by itself. Priority: Data Integrity > User Safety > Security > Correctness >
 Recovery > Intelligence > Convenience.
 
-### Phase 10: Inventory views + adjustments + stock count + reliability indicators
-Inventory table (opening, purchased, sold, returns, adjustments, current), adjustments with reason
-codes, a stock-count screen, the product detail history page, and the stock-reliability indicator
-that reflects Quick Sales.
-**Done when:** the product detail page reproduces the "what came in, what was sold, what remains" example exactly.
+### Phase 10: AI business assistant, document intelligence, smart automation
+The AI is an assistant, never the source of truth and never a writer. Everything it says is read from the database by
+existing reports and services; everything it proposes needs a person's confirmation and then runs an existing service.
 
-### PostgreSQL checkpoint (after Phase 10)
+* **Assistant.** "Ask your Business Assistant" (dashboard and its own page): sales, top and slow products, stock, Khata,
+  purchases, profit where cost is known, discounts and offers, price comparison, unusual activity, reorder and purchase
+  suggestions, offer ideas and a monthly summary, in English, Hinglish and Hindi. Twenty fixed read-only tools
+  (`ai_tools`) call `sales_report_service`, `inventory_service`, `khata_service`, `analytics_service` and friends. No
+  arbitrary SQL, no shop argument, no write. Dates are turned into ranges by the backend (`ai_dates`).
+* **Confirmation system.** `ai_action_service`: the AI (or a document) proposes a structured action, the person sees an
+  exact preview (Confirm / Edit / Cancel), and only Confirm runs `purchase_service.create_purchase` (a DRAFT),
+  `inventory_service.record_adjustment` (with a reason code) or `promotion_service.create_promotion` (a DRAFT). Each step
+  is audited.
+* **Document intelligence.** A photographed supplier invoice becomes a purchase draft, a counted stock list an
+  adjustment draft: read by a provider, every field validated, rows matched to products (Matched, Possible Match, New
+  Product Candidate), reviewed and confirmed. Text on a document is data and is never followed. Product images keep
+  using the Phase 9 flow ("Add from photo", Confirm & Create Product).
+* **Provider abstraction.** One interface, one provider written (Anthropic's Messages API), none required. With none
+  configured the assistant says "AI Assistant is not configured." and keeps answering its ready-made questions.
+* **Usage and plans.** `ai_usage` records requests (feature, provider, model, tokens when given; never text); plan
+  features `ai_assistant`, `ai_insights`, `ai_documents` and a monthly limit `max_ai_requests_per_month`. Migration `0013`.
+
+**Done when:** every number in an answer comes from a service; no question, question wording or document text can make
+the AI write, delete, post, refund or reprice; a confirmed action creates exactly what its preview showed; another
+shop's data is unreachable; a provider failure leaves the rest of the app working.
+*Not in this phase:* online orders (the application has no online ordering yet, so those answers say so and invent
+nothing), automatic anything, a bundled provider key, more than one provider, seasonal-demand analysis, conversation
+memory on the server, and the Inventory screens/stock-count phase that used to be numbered 10.
+
+### PostgreSQL checkpoint (after the inventory views phase)
 Run the whole test suite, including the concurrency test, against PostgreSQL and fix any dialect drift.
 No PostgreSQL is installed before this point; the cheapest way to run it is decided then.
 

@@ -296,6 +296,15 @@ def _check_supplier(session: Session, shop_id: int, supplier_id: int | None) -> 
         )
 
 
+def invoice_number_taken(session: Session, shop_id: int, supplier_id: int, invoice_no: str | None) -> bool:
+    """Has this supplier's invoice number already been entered (draft or posted)? Lets screens warn early."""
+    try:
+        _check_invoice_free(session, shop_id, supplier_id, invoice_no, exclude_id=None)
+    except ConflictError:
+        return True
+    return False
+
+
 def _check_invoice_free(
     session: Session, shop_id: int, supplier_id: int, invoice_no: str | None, *, exclude_id: int | None
 ) -> None:

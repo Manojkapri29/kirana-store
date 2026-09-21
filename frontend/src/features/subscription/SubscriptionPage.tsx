@@ -7,12 +7,13 @@ import type { Subscription, SubscriptionPlan } from '@/api/types'
 import { Alert, Badge, PageHeader, QueryError, Spinner } from '@/components/ui'
 import { formatDate, formatMoney } from '@/lib/format'
 
-const FEATURES = ['barcode_lookup', 'promotions', 'price_intelligence', 'advanced_reports', 'online_store'] as const
+const FEATURES = ['barcode_lookup', 'promotions', 'price_intelligence', 'advanced_reports', 'online_store', 'image_intelligence', 'ai_assistant', 'ai_insights', 'ai_documents'] as const
 const LIMITS: { key: string; usage: keyof Subscription['usage'] }[] = [
   { key: 'max_products', usage: 'products' },
   { key: 'max_users', usage: 'users' },
   { key: 'max_monthly_invoices', usage: 'invoices' },
   { key: 'max_price_lookups_per_month', usage: 'price_lookups' },
+  { key: 'max_ai_requests_per_month', usage: 'ai_requests' },
 ]
 
 function FeatureRow({ name, on }: { name: string; on: boolean }) {

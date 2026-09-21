@@ -77,3 +77,22 @@ class InvalidInputError(DomainError):
     ) -> None:
         super().__init__(message, field=field, code=code)
         self.errors: list[tuple[str | None, str]] = errors or [(field, message)]
+
+
+class AiServiceError(DomainError):
+    """The AI provider could not answer (unreachable, too slow, limiting requests, or unusable reply).
+
+    The message is always the same safe sentence: nothing from the provider (its text, a status, a key) is
+    ever kept
+    here. `reason` says which of the cases it was, for the diagnostics log; `retryable` is true because trying
+    again later can succeed. The rest of the application is unaffected.
+    """
+
+    def __init__(self, reason: str, *, retryable: bool = True) -> None:
+        super().__init__("AI Assistant is temporarily unavailable.", code=f"ai_{reason}")
+        self.reason = reason
+        self.retryable = retryable
+
+
+class ForbiddenError(DomainError):
+    """The request asks for something this user may not have (another shop's data, for example). HTTP 403."""

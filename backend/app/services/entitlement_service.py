@@ -42,14 +42,25 @@ FEATURES = (
     "advanced_reports",
     "online_store",
     "image_intelligence",
+    "ai_assistant",
+    "ai_insights",
+    "ai_documents",
 )
-LIMITS = ("max_products", "max_users", "max_monthly_invoices", "max_price_lookups_per_month")
+LIMITS = (
+    "max_products",
+    "max_users",
+    "max_monthly_invoices",
+    "max_price_lookups_per_month",
+    "max_ai_requests_per_month",
+)
 
 METRIC_INVOICES = "invoices"
 METRIC_PRICE_LOOKUPS = "price_lookups"
+METRIC_AI_REQUESTS = "ai_requests"
 _LIMIT_OF_METRIC = {
     METRIC_INVOICES: "max_monthly_invoices",
     METRIC_PRICE_LOOKUPS: "max_price_lookups_per_month",
+    METRIC_AI_REQUESTS: "max_ai_requests_per_month",
 }
 
 FEATURE_LABELS = {
@@ -59,12 +70,16 @@ FEATURE_LABELS = {
     "advanced_reports": "advanced reports",
     "online_store": "the online store",
     "image_intelligence": "photo capture and image analysis",
+    "ai_assistant": "the AI assistant",
+    "ai_insights": "AI insights, recommendations and reports",
+    "ai_documents": "AI document intelligence",
 }
 LIMIT_LABELS = {
     "max_products": "products",
     "max_users": "users",
     "max_monthly_invoices": "invoices this month",
     "max_price_lookups_per_month": "price checks this month",
+    "max_ai_requests_per_month": "AI requests this month",
 }
 
 # What a shop gets if even the default plan row is missing: the basics, nothing extra.
@@ -237,6 +252,7 @@ def usage_summary(session: Session, shop_id: int) -> dict[str, int]:
         "users": user_count(session, shop_id),
         "invoices": get_usage(session, shop_id, METRIC_INVOICES, period),
         "price_lookups": get_usage(session, shop_id, METRIC_PRICE_LOOKUPS, period),
+        "ai_requests": get_usage(session, shop_id, METRIC_AI_REQUESTS, period),
     }
 
 

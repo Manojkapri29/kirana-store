@@ -7,6 +7,7 @@ writes, call `app.services`, and shape the response. Business rules never live h
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    ai,
     customers,
     exports,
     image_intelligence,
@@ -41,3 +42,4 @@ api_v1_router.include_router(quick_sales.router)
 api_v1_router.include_router(subscription.router)
 api_v1_router.include_router(reports.router)
 api_v1_router.include_router(exports.router)
+api_v1_router.include_router(ai.router)

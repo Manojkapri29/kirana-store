@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   PackageSearch,
   ReceiptText,
+  Sparkles,
   Undo2,
   Settings,
   ShoppingCart,
@@ -61,6 +62,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: Zap,
     labelKey: 'nav.quickSales',
   },
+  { id: 'assistant', path: '/assistant', icon: Sparkles, labelKey: 'nav.assistant' },
   { id: 'returns', path: '/returns', icon: Undo2, labelKey: 'nav.returns' },
   {
     id: 'promotions',
