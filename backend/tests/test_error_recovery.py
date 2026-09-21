@@ -151,8 +151,8 @@ class TestUnexpectedErrors:
         )
         for bad in ("x", "has spaces and $ymbols", "a" * 200):
             echoed = client_a.get("/health", headers={"X-Request-ID": bad}).headers["x-request-id"]
-            assert echoed != bad and re.match(r"^[0-9a-f]{16}$", echoed)
-        assert re.match(r"^[0-9a-f]{16}$", client_a.get("/health").headers["x-request-id"])
+            assert echoed != bad and re.match(r"^req_[0-9a-f]{16}$", echoed)
+        assert re.match(r"^req_[0-9a-f]{16}$", client_a.get("/health").headers["x-request-id"])
 
     def test_the_diagnostics_can_also_go_to_a_file(self, quiet, monkeypatch, tmp_path):
         target = tmp_path / "diag.jsonl"
@@ -488,9 +488,10 @@ class TestNothingIsLostOrFaked:
         self, client_a, quiet, monkeypatch
     ):
         assert client_a.get("/api/v1/sales/999999").json()["success"] is False
+        real = product_service.list_products
         monkeypatch.setattr(product_service, "list_products", boom)
         assert quiet.get("/api/v1/products").json()["success"] is False
-        monkeypatch.undo()
+        monkeypatch.setattr(product_service, "list_products", real)
         ok = client_a.get("/api/v1/products")
         assert ok.status_code == 200 and "success" not in ok.json()
 

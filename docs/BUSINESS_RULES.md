@@ -678,3 +678,27 @@ need business logic in services, which arrive in later phases.
 | By the database | By services and routes |
 |---|---|
 | an action's result can exist only when it was executed; status is one of four values; tenant keys | AI1-AI3 tools and templates; AI4 guard; AI5-AI7 `ai_action_service`; AI8-AI10 `ai_insights_service`; AI11-AI12 `document_intelligence_service`; AI13 `ai_provider`; AI14 `entitlement_service` |
+
+## OP. Operations (Phase 11, implemented)
+
+* **OP1. Account state.** A shop is `ACTIVE`, `TRIAL`, `SUSPENDED` or `DEACTIVATED`. A change needs a reason and is audited. It never
+  deletes or changes data. What a restricted state may do is configuration (`read_only` or `blocked`); the account page always works.
+* **OP2. Administrators.** Platform administrators have role permissions checked by the backend on every request, and do not see
+  shop business data. Support access to one shop needs a time-limited grant with a reason. Every admin action, allowed or denied,
+  is audited in an insert-only log.
+* **OP3. Entitlements.** One service answers "may this shop use X" and "is it within its limit". A limit refusal names what was
+  reached; nothing is deleted. Usage is counted with the action it belongs to, in the same transaction.
+* **OP4. Backups.** A backup is consistent, verified and checksummed before it is accepted. The only valid backup is never deleted.
+  Deleting backups is deliberate and logged.
+* **OP5. Restore.** Only a verified, compatible backup, with the exact confirmation phrase, after a safety backup of the current
+  database, with the application stopped. Every attempt is recorded. Restore over HTTP is off by default.
+* **OP6. Notifications never affect business data.** A notification failure is recorded and never rolls back or blocks a sale,
+  payment or stock change. Nothing is sent twice. An unconfigured channel is "not configured", not "sent".
+* **OP7. Analytics.** Only from the existing report services. Missing cost is "Not Available" (never zero). What cannot be known
+  (online store) says so.
+* **OP8. Integrity checks report, they never repair.** Repairs are made by a person through the normal, audited operations.
+* **OP9. Errors and logs.** A response never carries a stack, SQL, path, key or token. Logs never carry passwords, tokens, keys,
+  payment secrets or raw documents.
+* **OP10. Rate limits and retries.** Limits return 429 with `Retry-After`. A financial, inventory or order write is repeated only
+  with its idempotency key.
+

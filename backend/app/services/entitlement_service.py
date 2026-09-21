@@ -1,4 +1,4 @@
-"""entitlement_service: "may this shop use this feature?" and "is this shop within its limit?".
+"""entitlement_service (the plan entitlement service): "may this shop use this?", "is it within its limit?".
 
 The one place these questions are answered. Routes and services call `require_feature`, `check_limit` or
 `use_metered`; nothing else looks at plans. The backend is authoritative: the frontend only reads
@@ -45,6 +45,7 @@ FEATURES = (
     "ai_assistant",
     "ai_insights",
     "ai_documents",
+    "exports",
 )
 LIMITS = (
     "max_products",
@@ -52,15 +53,21 @@ LIMITS = (
     "max_monthly_invoices",
     "max_price_lookups_per_month",
     "max_ai_requests_per_month",
+    "max_exports_per_month",
+    "max_image_analyses_per_month",
 )
 
 METRIC_INVOICES = "invoices"
 METRIC_PRICE_LOOKUPS = "price_lookups"
 METRIC_AI_REQUESTS = "ai_requests"
+METRIC_EXPORTS = "exports"
+METRIC_IMAGE_ANALYSES = "image_analyses"
 _LIMIT_OF_METRIC = {
     METRIC_INVOICES: "max_monthly_invoices",
     METRIC_PRICE_LOOKUPS: "max_price_lookups_per_month",
     METRIC_AI_REQUESTS: "max_ai_requests_per_month",
+    METRIC_EXPORTS: "max_exports_per_month",
+    METRIC_IMAGE_ANALYSES: "max_image_analyses_per_month",
 }
 
 FEATURE_LABELS = {
@@ -73,6 +80,7 @@ FEATURE_LABELS = {
     "ai_assistant": "the AI assistant",
     "ai_insights": "AI insights, recommendations and reports",
     "ai_documents": "AI document intelligence",
+    "exports": "data exports",
 }
 LIMIT_LABELS = {
     "max_products": "products",
@@ -80,6 +88,8 @@ LIMIT_LABELS = {
     "max_monthly_invoices": "invoices this month",
     "max_price_lookups_per_month": "price checks this month",
     "max_ai_requests_per_month": "AI requests this month",
+    "max_exports_per_month": "exports this month",
+    "max_image_analyses_per_month": "photo analyses this month",
 }
 
 # What a shop gets if even the default plan row is missing: the basics, nothing extra.
@@ -226,6 +236,21 @@ def use_metered(session: Session, shop_id: int, metric: str, amount: int = 1) ->
         session.add(row)
     row.count = used + amount
     session.flush()
+    limit = get_entitlements(session, shop_id).limit(limit_key) if limit_key else None
+    if (
+        limit is not None and row.count >= limit
+    ):  # the allowance is now used up: tell the owner (once a month, safely)
+        from app.services import notification_service
+
+        ai = metric == METRIC_AI_REQUESTS
+        notification_service.emit_safely(
+            session,
+            shop_id,
+            "AI_USAGE_LIMIT" if ai else "SUBSCRIPTION_LIMIT",
+            title="Plan limit reached",
+            message=f"Your plan's limit for {LIMIT_LABELS.get(limit_key, limit_key)} has been reached.",
+            dedupe_key=f"limit:{metric}:{period}",
+        )
     return row.count
 
 
@@ -253,6 +278,8 @@ def usage_summary(session: Session, shop_id: int) -> dict[str, int]:
         "invoices": get_usage(session, shop_id, METRIC_INVOICES, period),
         "price_lookups": get_usage(session, shop_id, METRIC_PRICE_LOOKUPS, period),
         "ai_requests": get_usage(session, shop_id, METRIC_AI_REQUESTS, period),
+        "exports": get_usage(session, shop_id, METRIC_EXPORTS, period),
+        "image_analyses": get_usage(session, shop_id, METRIC_IMAGE_ANALYSES, period),
     }
 
 
@@ -382,3 +409,61 @@ def assign_plan(
     session.add(subscription)
     session.flush()
     return subscription
+
+
+# --- Questions a screen or another service asks ("what may this shop do?") ---------------------------------
+
+_USAGE_OF_LIMIT = {
+    "max_products": "products",
+    "max_users": "users",
+    "max_monthly_invoices": "invoices",
+    "max_price_lookups_per_month": "price_lookups",
+    "max_ai_requests_per_month": "ai_requests",
+    "max_exports_per_month": "exports",
+    "max_image_analyses_per_month": "image_analyses",
+}
+
+
+def usage_report(session: Session, shop_id: int) -> dict[str, dict[str, int | bool | None]]:
+    """Every limit with what was used, what is left, and whether it is unlimited (the shop's usage screen)."""
+    entitlements = get_entitlements(session, shop_id)
+    usage = usage_summary(session, shop_id)
+    report: dict[str, dict[str, int | bool | None]] = {}
+    for limit_key, usage_key in _USAGE_OF_LIMIT.items():
+        limit = entitlements.limit(limit_key)
+        used = usage.get(usage_key, 0)
+        report[limit_key] = {
+            "used": used,
+            "limit": limit,
+            "remaining": None if limit is None else max(limit - used, 0),
+            "unlimited": limit is None,
+            "percent_used": None if not limit else min(100, int(used * 100 / limit)),
+        }
+    return report
+
+
+def capabilities(session: Session, shop_id: int) -> dict[str, bool]:
+    """What this shop may use, in the words a screen wants. The single place these questions are answered:
+    can it use AI, the online store, price intelligence, exports, advanced reports? Limits: `usage_report`."""
+    e = get_entitlements(session, shop_id)
+    return {
+        "ai_assistant": e.allows("ai_assistant"),
+        "ai_insights": e.allows("ai_insights"),
+        "ai_documents": e.allows("ai_documents"),
+        "online_store": e.allows("online_store"),
+        "price_intelligence": e.allows("price_intelligence"),
+        "image_intelligence": e.allows("image_intelligence"),
+        "exports": e.allows("exports"),
+        "advanced_reports": e.allows("advanced_reports"),
+        "barcode_lookup": e.allows("barcode_lookup"),
+        "promotions": e.allows("promotions"),
+    }
+
+
+def can_add(session: Session, shop_id: int, limit_key: str, adding: int = 1) -> bool:
+    """Would adding `adding` more of a counted thing (products, users) stay within the plan? Never raises."""
+    limit = get_entitlements(session, shop_id).limit(limit_key)
+    if limit is None:
+        return True
+    used = usage_summary(session, shop_id).get(_USAGE_OF_LIMIT.get(limit_key, ""), 0)
+    return used + adding <= limit

@@ -82,3 +82,6 @@ class AuditLog(CreatedAtMixin, Base):
     # Generic JSON (not PostgreSQL JSONB) so the same column works on SQLite.
     before_json: Mapped[Any | None] = mapped_column(JSON)
     after_json: Mapped[Any | None] = mapped_column(JSON)
+    request_id: Mapped[str | None] = mapped_column(
+        String(64)
+    )  # the request that caused it, to match server logs

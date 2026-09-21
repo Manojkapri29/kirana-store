@@ -21,7 +21,9 @@ repeat safe: money and stock operations are only repeated with an idempotency ke
 `app.api.idempotency`).
 """
 
+import logging
 import re
+import time
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -33,16 +35,19 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
-from app.core import diagnostics
+from app.core import diagnostics, observability
 from app.core.diagnostics import ErrorCategory
 from app.services.errors import (
+    AccountRestrictedError,
     AiServiceError,
     ConflictError,
     DomainError,
     EntitlementError,
+    FeatureOffError,
     ForbiddenError,
     InvalidInputError,
     NotFoundError,
+    RateLimitedError,
 )
 
 GENERIC_MESSAGE = "Something went wrong while completing this action."
@@ -75,6 +80,8 @@ _CODES_BY_CATEGORY = {
     ErrorCategory.IMAGE_UPLOAD: "image_error",
     ErrorCategory.PROMOTION: "promotion_error",
     ErrorCategory.CHECKOUT: "checkout_error",
+    ErrorCategory.RATE_LIMITED: "rate_limited",
+    ErrorCategory.ACCOUNT: "account_restricted",
     ErrorCategory.UNEXPECTED: "internal_error",
 }
 _CODE_CATEGORIES = {
@@ -211,18 +218,52 @@ def _domain_category(exc: DomainError, default: ErrorCategory) -> ErrorCategory:
     return default
 
 
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
+    "Cross-Origin-Resource-Policy": "same-site",
+}
+
+
 class RequestContextMiddleware(BaseHTTPMiddleware):
-    """Gives every request a correlation id (kept from a well-formed `X-Request-ID`, else generated) and
-    returns it
-    in the response, so a problem reported by a user can be matched to the server's log line."""
+    """Gives every request a correlation id (kept from a well-formed `X-Request-ID`, else generated).
+
+    It returns the id in the response, writes one access-log line (method, masked path, status, duration,
+    shop and user ids, never the query string or body), and adds the standard security headers. A problem
+    reported by a user can be matched to the server's log line by this id."""
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        started = time.perf_counter()
         incoming = request.headers.get("x-request-id", "")
-        request.state.correlation_id = (
+        request_id = (
             incoming if diagnostics.CORRELATION_PATTERN.match(incoming) else diagnostics.new_correlation_id()
         )
-        response = await call_next(request)
-        response.headers.setdefault("X-Request-ID", request.state.correlation_id)
+        request.state.correlation_id = request_id
+        observability.set_request_id(request_id)
+        status = 500
+        try:
+            response = await call_next(request)
+            status = response.status_code
+        finally:
+            duration_ms = round((time.perf_counter() - started) * 1000, 1)
+            path = _endpoint(request)
+            noisy = path.startswith("/health")
+            observability.log_event(
+                "access", f"{request.method} {path} {status}",
+                level=logging.DEBUG if noisy else logging.INFO,
+                request_id=request_id, method=request.method, endpoint=path, status=status,
+                duration_ms=duration_ms,
+                shop_id=_state(request, "shop_id"), user_id=_state(request, "user_id"),
+            )  # fmt: skip
+        response.headers["X-Request-ID"] = request_id
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        if request.url.path.startswith("/api/"):
+            response.headers.setdefault(
+                "Cache-Control", "no-store"
+            )  # business data is never cached by a browser
         return response
 
 
@@ -246,6 +287,38 @@ def register_error_handlers(app: FastAPI) -> None:
         detail = [{"loc": ["body"], "msg": exc.message, "type": "plan_limit", "feature": exc.feature}]
         body = error_body(
             ErrorCategory.PLAN_LIMIT, exc.message, detail=detail, extra={"feature": exc.feature}
+        )
+        return _respond(request, 403, body)
+
+    @app.exception_handler(RateLimitedError)
+    async def rate_limited(request: Request, exc: RateLimitedError) -> JSONResponse:
+        observability.log_event(
+            "security", "rate limit reached", level=logging.WARNING, group=exc.group,
+            endpoint=_endpoint(request), method=request.method, shop_id=_state(request, "shop_id"),
+        )  # fmt: skip
+        body = error_body(ErrorCategory.RATE_LIMITED, exc.message, detail=exc.message, retryable=True,
+                          extra={"retry_after": exc.retry_after})  # fmt: skip
+        return _respond(request, 429, body, {"Retry-After": str(exc.retry_after)})
+
+    @app.exception_handler(FeatureOffError)
+    async def feature_off(request: Request, exc: FeatureOffError) -> JSONResponse:
+        body = error_body(
+            ErrorCategory.EXTERNAL_API,
+            exc.message,
+            detail=exc.message,
+            error_code="feature_off",
+            retryable=False,
+        )
+        return _respond(request, 503, body)
+
+    @app.exception_handler(AccountRestrictedError)
+    async def account_restricted(request: Request, exc: AccountRestrictedError) -> JSONResponse:
+        body = error_body(
+            ErrorCategory.ACCOUNT,
+            exc.message,
+            detail=exc.message,
+            retryable=False,
+            extra={"account_state": exc.state},
         )
         return _respond(request, 403, body)
 

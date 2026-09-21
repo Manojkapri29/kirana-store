@@ -7,7 +7,7 @@ parser can turn them into binary floats on the way. A JSON number with a fractio
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any
 
-from pydantic import BaseModel, BeforeValidator
+from pydantic import BaseModel, BeforeValidator, computed_field
 from pydantic_core import PydanticCustomError
 
 MONEY_PLACES = 2
@@ -66,8 +66,27 @@ PercentIn = Annotated[Decimal, BeforeValidator(_percent)]  # 12.5 means 12.5%, a
 
 
 class Page(BaseModel):
-    """Fields shared by paginated lists."""
+    """Fields shared by paginated lists.
+
+    Every list in the API pages with `limit` and `offset` (the request) and answers with `total`, `limit`,
+    `offset` and, for convenience, `page`, `page_size` and `total_pages` (calculated, so the two ways of
+    counting always agree)."""
 
     total: int
     limit: int
     offset: int
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def page_size(self) -> int:
+        return self.limit
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def page(self) -> int:
+        return self.offset // self.limit + 1 if self.limit else 1
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total_pages(self) -> int:
+        return -(-self.total // self.limit) if self.limit else 1

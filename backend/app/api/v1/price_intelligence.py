@@ -8,9 +8,9 @@ is reported in the answer, not as an error.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import Ctx
+from app.api.deps import Ctx, feature_flag, rate_limited
 from app.db.session import read_session, write_transaction
 from app.schemas.price import (
     HistoryOut,
@@ -22,7 +22,11 @@ from app.schemas.price import (
 )
 from app.services import price_comparison_service as svc
 
-router = APIRouter(prefix="/price-intelligence", tags=["price-intelligence"])
+router = APIRouter(
+    prefix="/price-intelligence",
+    tags=["price-intelligence"],
+    dependencies=[Depends(feature_flag("price_lookups")), Depends(rate_limited("external"))],
+)
 
 
 @router.get("/providers", response_model=ProviderListOut)

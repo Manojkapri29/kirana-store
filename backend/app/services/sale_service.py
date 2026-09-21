@@ -57,6 +57,7 @@ from app.services import (
     entitlement_service,
     inventory_service,
     khata_service,
+    notification_service,
     numbering_service,
     payment_service,
     promotion_service,
@@ -1040,6 +1041,8 @@ def post_sale(
         before=before,
         after=_snapshot(sale, items),
     )
+    # Tell the owner about low stock, in a savepoint: a notification problem never fails a sale.
+    notification_service.emit_low_stock_after_sale(session, ctx.shop_id, [item.product_id for item in items])
     return get_sale_view(session, ctx.shop_id, sale.id)
 
 

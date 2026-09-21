@@ -26,7 +26,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, func, select
+from sqlalchemy import ColumnElement, and_, case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -492,6 +492,14 @@ def record_adjustment(
     )
     session.add(row)
     _flush_or_conflict(session)
+    record_audit(
+        session,
+        ctx,
+        entity_type="product",
+        entity_id=product.id,
+        action="stock_adjustment",
+        after={"quantity_delta": quantity_delta, "reason_code": reason_code.value, "txn_id": row.id},
+    )
     return row
 
 
@@ -975,3 +983,35 @@ def adjustments_between(session: Session, shop_id: int, start: date, end: date) 
             )
         )
     return out
+
+
+def movement_summary(
+    session: Session, shop_id: int, start: date, end: date
+) -> dict[str, dict[str, Decimal | int]]:
+    """Stock movement in a period by kind (purchases, sales, returns...): units in and out. Read-only."""
+    rows = session.execute(
+        select(
+            InventoryTransaction.txn_type,
+            func.coalesce(
+                func.sum(case((InventoryTransaction.qty_delta > 0, InventoryTransaction.qty_delta), else_=0)),
+                0,
+            ),
+            func.coalesce(
+                func.sum(
+                    case((InventoryTransaction.qty_delta < 0, -InventoryTransaction.qty_delta), else_=0)
+                ),
+                0,
+            ),
+            func.count(),
+        )
+        .where(
+            InventoryTransaction.shop_id == shop_id,
+            InventoryTransaction.txn_date >= start,
+            InventoryTransaction.txn_date <= end,
+        )
+        .group_by(InventoryTransaction.txn_type)
+    ).all()
+    return {
+        kind.value: {"units_in": Decimal(units_in), "units_out": Decimal(units_out), "entries": entries}
+        for kind, units_in, units_out, entries in rows
+    }

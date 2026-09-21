@@ -42,7 +42,7 @@ from sqlalchemy.orm import Session, aliased
 from app.core.context import RequestContext
 from app.models import Customer, CustomerLedgerEntry, QuickSale, Sale, User
 from app.models.enums import CustomerLedgerEntryType, KhataReferenceType, PaymentMethod
-from app.services import customer_service
+from app.services import customer_service, notification_service
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
 from app.services.shop_service import get_shop, shop_today
@@ -535,6 +535,16 @@ def record_payment(
         payment_reference=_text(payment_reference, limit=MAX_REFERENCE_LENGTH, field="payment_reference"),
         note=_text(note, limit=MAX_NOTE_LENGTH, field="note"),
     )
+    notification_service.emit_safely(
+        session,
+        ctx.shop_id,
+        "PAYMENT_RECEIVED",
+        title="Payment received",
+        message="A customer payment was recorded.",
+        dedupe_key=f"payment:{entry.id}",
+        entity_type="customer",
+        entity_id=customer_id,
+    )  # contained: a notification problem never fails a payment
     return _result(session, ctx, customer, entry)
 
 
@@ -777,3 +787,28 @@ def create_customer_with_opening_balance(
             session, ctx, saved.customer.id, opening_balance, entry_date=opening_date
         )
     return saved, opening
+
+
+def collections_between(session: Session, shop_id: int, start: date, end: date) -> Decimal:
+    """Money received from customers in a period: payments, less any payment that was reversed. Read-only."""
+    original = CustomerLedgerEntry.__table__.alias("original")
+    payments = session.scalar(
+        select(func.coalesce(func.sum(-CustomerLedgerEntry.amount_delta), 0)).where(
+            CustomerLedgerEntry.shop_id == shop_id,
+            CustomerLedgerEntry.entry_type == CustomerLedgerEntryType.PAYMENT,
+            CustomerLedgerEntry.entry_date >= start,
+            CustomerLedgerEntry.entry_date <= end,
+        )
+    )
+    undone = session.scalar(
+        select(func.coalesce(func.sum(CustomerLedgerEntry.amount_delta), 0))
+        .join(original, original.c.id == CustomerLedgerEntry.reverses_entry_id)
+        .where(
+            CustomerLedgerEntry.shop_id == shop_id,
+            CustomerLedgerEntry.entry_type == CustomerLedgerEntryType.REVERSAL,
+            original.c.entry_type == CustomerLedgerEntryType.PAYMENT,
+            CustomerLedgerEntry.entry_date >= start,
+            CustomerLedgerEntry.entry_date <= end,
+        )
+    )
+    return Decimal(payments or 0) - Decimal(undone or 0)

@@ -16,14 +16,14 @@ from app.models import Base
 from tests.conftest import alembic_config, sqlite_url
 
 EXPECTED_TABLES = {
-    "ai_actions", "ai_usage", "audit_log", "business_types", "categories", "customer_ledger", "customers", "document_sequences",
-    "expense_categories", "expenses", "idempotency_keys", "inventory_transactions", "products",
+    "admin_audit_logs", "ai_actions", "ai_usage", "audit_log", "backup_records", "business_types", "categories", "customer_ledger", "customers", "document_sequences",
+    "expense_categories", "expenses", "idempotency_keys", "inventory_transactions", "notification_deliveries", "notification_events", "notification_preferences", "products", "restore_records", "support_access_grants", "system_admins", "system_events",
     "plan_features", "plans", "price_observations", "product_images", "promotions", "purchase_items", "purchase_return_items", "purchase_returns", "purchases", "quick_sales",
     "sale_items", "sale_promotions", "sales", "sales_return_items", "sales_returns", "shop_subscriptions", "shops",
     "subscription_usage", "suppliers", "units", "users",
 }  # fmt: skip
 
-HEAD = "0013"  # the newest revision: the one place to change when a migration is added
+HEAD = "0014"  # the newest revision: the one place to change when a migration is added
 
 MIGRATION_FILES = sorted((BACKEND_DIR / "migrations" / "versions").glob("*.py"))
 
@@ -137,7 +137,7 @@ def test_migration_renders_valid_looking_postgresql_ddl():
     assert "DEFAULT false" in sql and "DEFAULT true" in sql
     assert not re.search(r"BOOLEAN DEFAULT [01]\b", sql), "boolean defaults must not be SQLite-style 0/1"
     assert "CREATE FUNCTION kirana_forbid_change()" in sql
-    assert sql.count("CREATE TRIGGER") == 3
+    assert sql.count("CREATE TRIGGER") == 4  # + admin_audit_logs (0014)
     assert sql.count("INSERT INTO units") == 12
     assert "AUTOINCREMENT" not in sql
 
@@ -884,6 +884,7 @@ class TestMigration0007Subscriptions:
                 == 27
                 + 3
                 + 12  # + image_intelligence per plan (0012) + AI: 3 features and a limit per plan (0013)
+                + 9  # + exports and two optional monthly limits per plan (0014)
             )  # 3 plans x (5 features + 4 limits)
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()

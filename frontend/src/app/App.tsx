@@ -11,6 +11,9 @@ import { ProductsPage } from '@/features/products/ProductsPage'
 import { PromotionDetailPage } from '@/features/promotions/PromotionDetailPage'
 import { PromotionFormPage } from '@/features/promotions/PromotionFormPage'
 import { PromotionsPage } from '@/features/promotions/PromotionsPage'
+import { AdminConsolePage } from '@/features/admin/AdminConsolePage'
+import { InsightsPage } from '@/features/insights/InsightsPage'
+import { NotificationsPage } from '@/features/notifications/NotificationsPage'
 import { AssistantPage } from '@/features/assistant/AssistantPage'
 import { PurchaseReturnFormPage } from '@/features/returns/PurchaseReturnFormPage'
 import { ReturnDetailPage } from '@/features/returns/ReturnDetailPage'
@@ -82,6 +85,9 @@ export function App() {
         <Route path="suppliers/:id" element={<SupplierDetailPage />} />
         <Route path="suppliers/:id/edit" element={<SupplierFormPage mode="edit" />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="insights" element={<InsightsPage />} />
+        <Route path="admin" element={<AdminConsolePage />} />
         {/* Modules that are not built yet render a placeholder. Each phase swaps in the real page. */}
         {NAV_ITEMS.filter((item) => item.phase !== undefined).map((item) => (
           <Route key={item.id} path={item.path} element={<ComingSoonPage item={item} />} />

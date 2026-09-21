@@ -5,8 +5,10 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core import observability
 from app.core.context import RequestContext
 from app.models import AuditLog
 
@@ -45,5 +47,45 @@ def record_audit(
             action=action,
             before_json=to_jsonable(before),
             after_json=to_jsonable(after),
+            request_id=observability.current_request_id(),
+        )
+    )
+
+
+def list_entries(
+    session: Session, shop_id: int, *, entity_type: str | None, limit: int, offset: int
+) -> tuple[list[AuditLog], int]:
+    """One shop's audit entries, newest first. Only that shop's rows are ever returned."""
+    conditions = [AuditLog.shop_id == shop_id]
+    if entity_type:
+        conditions.append(AuditLog.entity_type == entity_type)
+    total = session.scalar(select(func.count()).select_from(AuditLog).where(*conditions)) or 0
+    rows = session.scalars(
+        select(AuditLog).where(*conditions).order_by(AuditLog.id.desc()).limit(limit).offset(offset)
+    )
+    return list(rows), total
+
+
+def record_system_audit(
+    session: Session,
+    shop_id: int,
+    *,
+    entity_type: str,
+    entity_id: int | None,
+    action: str,
+    before: dict[str, Any] | None = None,
+    after: dict[str, Any] | None = None,
+) -> None:
+    """An audit entry for something the PLATFORM did to a shop (a state or plan change): no shop user."""
+    session.add(
+        AuditLog(
+            shop_id=shop_id,
+            user_id=None,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            action=action,
+            before_json=to_jsonable(before),
+            after_json=to_jsonable(after),
+            request_id=observability.current_request_id(),
         )
     )

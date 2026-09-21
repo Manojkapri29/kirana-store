@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 
 import { BackendStatusBadge } from '@/components/BackendStatusBadge'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
+import { NotificationBell } from '@/components/NotificationBell'
 
 interface HeaderProps {
   onMenuClick: () => void
@@ -27,6 +28,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
       <div className="flex items-center gap-2 sm:gap-3">
         <BackendStatusBadge />
+        <NotificationBell />
         <LanguageSwitcher />
       </div>
     </header>

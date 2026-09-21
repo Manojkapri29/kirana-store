@@ -11,7 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import Ctx
+from app.api.deps import Ctx, rate_limited
 from app.api.idempotency import IdempotencyHeader, run_idempotent
 from app.db.session import get_session, write_transaction
 from app.models.enums import PaymentType, SaleStatus
@@ -66,7 +66,7 @@ def list_sales(
     )
 
 
-@router.post("/calculate", response_model=PreviewOut)
+@router.post("/calculate", response_model=PreviewOut, dependencies=[Depends(rate_limited("coupon"))])
 def calculate(payload: CalculateIn, ctx: Ctx, session: ReadSession) -> PreviewOut:
     """Price a cart without saving anything. The billing screen shows exactly these numbers."""
     items = [item.model_dump() for item in payload.items]

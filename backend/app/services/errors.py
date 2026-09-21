@@ -96,3 +96,31 @@ class AiServiceError(DomainError):
 
 class ForbiddenError(DomainError):
     """The request asks for something this user may not have (another shop's data, for example). HTTP 403."""
+
+
+class RateLimitedError(DomainError):
+    """Too many requests in a short time (HTTP 429). `retry_after` is how many seconds to wait."""
+
+    def __init__(self, *, retry_after: int, group: str) -> None:
+        super().__init__("Too many requests. Please wait a moment and try again.", code="rate_limited")
+        self.retry_after = retry_after
+        self.group = group
+
+
+class FeatureOffError(DomainError):
+    """The operator has switched this capability off for everyone (a feature flag). HTTP 503."""
+
+    def __init__(self, feature: str) -> None:
+        super().__init__(
+            "This feature is temporarily turned off. The rest of the application is unaffected.",
+            code="feature_off",
+        )
+        self.feature = feature
+
+
+class AccountRestrictedError(DomainError):
+    """The shop's account state does not allow this (suspended or deactivated). HTTP 403; message is safe."""
+
+    def __init__(self, message: str, *, state: str) -> None:
+        super().__init__(message, code="account_restricted")
+        self.state = state

@@ -1,9 +1,12 @@
 """Tenancy: shops and their users."""
 
+from datetime import datetime
+
 from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import expression
 
+from app.db.types import UTCDateTime
 from app.models.base import (
     Base,
     TimestampMixin,
@@ -12,7 +15,7 @@ from app.models.base import (
     not_blank,
     shop_id_column,
 )
-from app.models.enums import Language, MrpValidationMode, UserRole
+from app.models.enums import AccountStatus, Language, MrpValidationMode, UserRole
 
 
 class BusinessType(Base):
@@ -60,6 +63,14 @@ class Shop(TimestampMixin, Base):
         default=Language.EN,
         server_default=Language.EN.value,
     )
+    # SaaS account state. Changing it never deletes anything; it only decides what the shop may do.
+    account_status: Mapped[AccountStatus] = mapped_column(
+        enum_type(AccountStatus, "account_status"),
+        default=AccountStatus.ACTIVE,
+        server_default=AccountStatus.ACTIVE.value,
+    )
+    status_reason: Mapped[str | None] = mapped_column(String(300))
+    status_changed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     allow_negative_stock: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=expression.false()
     )

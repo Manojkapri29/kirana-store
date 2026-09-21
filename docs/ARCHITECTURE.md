@@ -455,3 +455,19 @@ a draft), `ActionPreviewCard` (Confirm / Edit / Cancel, says "done" only after t
 verified against the documented request and response shapes with a fake transport. Answers are templates: English is
 complete, Hindi covers the common tools and falls back to English elsewhere. Online orders do not exist in the application,
 so they cannot be reported. Seasonal analysis and server-side conversation memory are not built.
+
+## Phase 11 additions: operations
+
+* **Request path.** `RequestContextMiddleware` (correlation id, access log, security headers) → shop context, which now also
+  applies the shop's account state (`account_service.restriction`) → router dependencies for feature flags, rate limits and
+  metering (`api/deps.py`) → service. Admin routes use `admin_deps.admin_permission(...)`, a different identity from a shop user.
+* **New services** (all follow the existing rules: no commit, no FastAPI): `system_event_service`, `account_service`,
+  `admin_service`, `backup_service`, `restore_service`, `notification_service`, `alert_service`, `system_health_service`,
+  `operations_analytics_service`. `app/reporting/integrity.py` is a read-only checker.
+* **Where the layers still hold.** Inventory writes only through `inventory_service`, khata only through `khata_service`. The
+  analytics overview reads through the existing report services; it has no data source of its own. Notification emitters run in a
+  savepoint so a failure cannot fail the business transaction.
+* **Cross-cutting core modules**: `core/observability` (logging, request id), `core/ratelimit` (sliding window),
+  `core/schema_state` (migration head vs database), `core/config` (`production_problems()`).
+* **Operator tools** (not HTTP): `python -m app.backup_cli`, `app.admin_cli`, `app.integrity_cli`.
+

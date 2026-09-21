@@ -27,6 +27,8 @@ export type ErrorCategory =
   | 'image_upload'
   | 'promotion_calculation'
   | 'checkout'
+  | 'rate_limited'
+  | 'account_restricted'
   | 'unexpected'
 
 export interface ErrorMeta {
@@ -38,6 +40,8 @@ export interface ErrorMeta {
   retryable?: boolean
   /** Structured facts from the server, for example the possible duplicates. */
   data?: unknown
+  /** Seconds to wait before trying again, when the server asked (HTTP 429 sends Retry-After). */
+  retryAfterSeconds?: number | null
 }
 
 export class ApiError extends Error {
@@ -51,6 +55,7 @@ export class ApiError extends Error {
   readonly referenceId: string | null
   readonly retryable: boolean
   readonly data: unknown
+  readonly retryAfterSeconds: number | null
 
   constructor(
     message: string,
@@ -69,6 +74,7 @@ export class ApiError extends Error {
     this.referenceId = meta.referenceId ?? null
     this.retryable = meta.retryable ?? false
     this.data = meta.data
+    this.retryAfterSeconds = meta.retryAfterSeconds ?? null
   }
 }
 
@@ -79,6 +85,7 @@ function categoryFromStatus(status: number): ErrorCategory {
   if (status === 404) return 'not_found'
   if (status === 409) return 'conflict'
   if (status === 422) return 'validation'
+  if (status === 429) return 'rate_limited'
   if (status === 504) return 'timeout'
   return status >= 500 ? 'unexpected' : 'validation'
 }
@@ -94,6 +101,11 @@ interface ErrorBody {
   data?: unknown
 }
 
+function parseRetryAfter(value: string | null): number | null {
+  const seconds = value === null ? NaN : Number(value)
+  return Number.isFinite(seconds) && seconds >= 0 ? Math.min(Math.ceil(seconds), 3600) : null
+}
+
 async function toApiError(response: Response, path: string): Promise<ApiError> {
   let body: ErrorBody = {}
   try {
@@ -107,6 +119,7 @@ async function toApiError(response: Response, path: string): Promise<ApiError> {
     referenceId: body.reference_id ?? null,
     retryable: body.retryable ?? response.status >= 502,
     data: body.data,
+    retryAfterSeconds: parseRetryAfter(response.headers.get('Retry-After')),
   }
   const detail = body.detail
 

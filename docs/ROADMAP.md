@@ -18,7 +18,8 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 | 10 | AI business assistant, document intelligence, smart automation | Done, awaiting review |
 | — | Inventory views + adjustments screen + stock count + reliability indicators (was Phase 10) | Deferred, not scheduled |
 | ✔ | **PostgreSQL checkpoint** (after the inventory views phase) | Planned |
-| 11 | Expenses | Planned |
+| 11 | Production hardening, SaaS operations, notifications, backup/restore, analytics | Done, awaiting review |
+| — | Expenses (was Phase 11) | Deferred, not scheduled |
 | 12 | Dashboard | Planned |
 | 13 | Reports | Planned |
 | 14 | Authentication | Planned |
@@ -218,8 +219,28 @@ memory on the server, and the Inventory screens/stock-count phase that used to b
 Run the whole test suite, including the concurrency test, against PostgreSQL and fix any dialect drift.
 No PostgreSQL is installed before this point; the cheapest way to run it is decided then.
 
-### Phase 11: Expenses
-Expense categories and entries, today and monthly totals, and export.
+### Phase 11: Production hardening, SaaS operations, notifications, backup/restore, analytics
+Makes the application safe to run for real, without adding a new business module. Details are in `PRODUCTION.md`,
+`SECURITY.md`, `OBSERVABILITY.md`, `NOTIFICATIONS.md`, `SAAS_ADMIN.md`, `BACKUP_AND_RESTORE.md` and
+`POSTGRES_MIGRATION_CHECKLIST.md`.
+
+* **Production configuration**: environments, a production start-up check that refuses unsafe settings by name, feature
+  flags, rate limits, health endpoints (`/health`, `/health/live`, `/health/ready`), request ids, structured logs.
+* **SaaS operations**: administrators with roles and permissions (token based, audited, no automatic view of shop data),
+  shop account lifecycle (`ACTIVE/TRIAL/SUSPENDED/DEACTIVATED`), plan entitlements and usage for exports and photo analyses.
+* **Notifications**: events, deliveries and preferences; in-app inbox is real; other channels are "not configured".
+* **Backup and restore** for SQLite: consistent verified backups, retention that never deletes the only valid backup,
+  rehearsed and confirmed restores with a safety copy; an integrity checker that only reports.
+* **Analytics** built only from the existing reports; **exports** completed (suppliers) and metered.
+* **Frontend**: notification bell and page, dashboard and Insights from real data, account and offline banners,
+  "Contact support", unsaved-work protection, admin console.
+
+**Done when:** tests prove tenant isolation for the new tables and endpoints, backups verify and restore, a notification
+failure never fails a business action, the production check refuses unsafe settings, and migration 0014 upgrades a Phase 10
+database with its data intact.
+*Not in this phase:* login and passwords (Phase 14, so login rate limiting and login security events are not built), online
+store and order lifecycle (the application has none), payments and billing, cloud backup storage, real email/SMS/WhatsApp/push
+providers, a metrics endpoint, PostgreSQL itself (an audit and a checklist only), and expenses.
 
 ### Phase 12: Dashboard
 KPI cards and charts (Recharts), with sales trends split by mode and stock caveats.

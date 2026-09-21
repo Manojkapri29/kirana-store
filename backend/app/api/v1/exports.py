@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import OwnerCtx
+from app.api.deps import OwnerCtx, feature_flag, meter_export, rate_limited
 from app.api.v1.products import StatusFilter, active_flag
 from app.db.session import get_session
 from app.models.enums import (
@@ -25,7 +25,11 @@ from app.services.export_service import ExportFile, ExportFormat
 from app.services.inventory_service import StockStatus
 from app.services.khata_service import BalanceStatus
 
-router = APIRouter(prefix="/exports", tags=["exports"])
+router = APIRouter(
+    prefix="/exports",
+    tags=["exports"],
+    dependencies=[Depends(feature_flag("exports")), Depends(rate_limited("export")), Depends(meter_export)],
+)
 ReadSession = Annotated[Session, Depends(get_session)]
 Format = Annotated[ExportFormat, Query(alias="format", description="csv or xlsx")]
 
@@ -172,6 +176,18 @@ _BALANCE = {
     BalanceFilter.SETTLED: BalanceStatus.SETTLED,
     BalanceFilter.ADVANCE: BalanceStatus.ADVANCE,
 }
+
+
+@router.get("/suppliers")
+def export_suppliers(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    status: StatusFilter = StatusFilter.ACTIVE,
+) -> Response:
+    """Suppliers and how many products each supplies."""
+    return download(export_datasets.export_suppliers(session, ctx, fmt, active=active_flag(status), q=q))
 
 
 @router.get("/customers")

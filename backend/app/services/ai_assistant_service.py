@@ -17,7 +17,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.context import RequestContext
-from app.services import ai_planner, ai_tools, ai_usage_service, entitlement_service
+from app.models.enums import EventSeverity
+from app.services import ai_planner, ai_tools, ai_usage_service, entitlement_service, system_event_service
 from app.services.ai_answer import (
     NOT_CONFIGURED,
     NOT_CONFIGURED_TEXT,
@@ -125,6 +126,15 @@ def ask(
                 provider=used_provider.name,
                 model=None,
                 status=ai_usage_service.FAILED,
+            )
+            system_event_service.record(
+                session,
+                category="ai",
+                severity=EventSeverity.WARNING,
+                source=f"ai:{used_provider.name}",
+                code=error.reason,
+                message="The AI provider could not answer.",
+                shop_id=ctx.shop_id,
             )
             return AskOutcome(_unusable(""), error)
         if planned is None:

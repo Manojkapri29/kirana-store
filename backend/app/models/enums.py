@@ -187,3 +187,61 @@ class PromotionAudience(StrEnum):
     ALL = "ALL"
     NEW_CUSTOMER = "NEW_CUSTOMER"  # a customer with no earlier posted sale (from the shop's own history)
     CUSTOMERS = "CUSTOMERS"  # only the listed customers
+
+
+class AccountStatus(StrEnum):
+    """A shop's account state (SaaS operations). Data is never deleted by a change of state."""
+
+    ACTIVE = "ACTIVE"
+    TRIAL = "TRIAL"
+    SUSPENDED = "SUSPENDED"
+    DEACTIVATED = "DEACTIVATED"
+
+
+class AdminRole(StrEnum):
+    """System-level roles (not a shop's OWNER or STAFF)."""
+
+    SUPER_ADMIN = "SUPER_ADMIN"
+    SUPPORT_ADMIN = "SUPPORT_ADMIN"
+    OPERATIONS_ADMIN = "OPERATIONS_ADMIN"
+
+
+class EventSeverity(StrEnum):
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+
+
+class BackupStatus(StrEnum):
+    CREATED = "CREATED"  # the file exists but has not been verified
+    VERIFIED = "VERIFIED"  # integrity check, checksum and schema revision all confirmed
+    FAILED = "FAILED"
+    DELETED = "DELETED"  # removed by retention; the record stays
+
+
+class BackupKind(StrEnum):
+    MANUAL = "MANUAL"
+    SCHEDULED = "SCHEDULED"
+    PRE_RESTORE = "PRE_RESTORE"  # the safety copy taken just before a restore
+
+
+class RestoreMode(StrEnum):
+    VALIDATE = "VALIDATE"
+    REHEARSAL = "REHEARSAL"
+    RESTORE = "RESTORE"
+
+
+class NotificationChannel(StrEnum):
+    IN_APP = "IN_APP"
+    EMAIL = "EMAIL"
+    SMS = "SMS"
+    WHATSAPP = "WHATSAPP"
+    PUSH = "PUSH"
+
+
+class DeliveryStatus(StrEnum):
+    PENDING = "PENDING"
+    SENT = "SENT"
+    FAILED = "FAILED"
+    RETRYING = "RETRYING"
+    CANCELLED = "CANCELLED"

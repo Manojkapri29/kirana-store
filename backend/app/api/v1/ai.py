@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import Ctx, OwnerCtx
+from app.api.deps import Ctx, OwnerCtx, feature_flag, rate_limited
 from app.core import diagnostics
 from app.core.config import get_settings
 from app.core.context import RequestContext
@@ -47,7 +47,11 @@ from app.services import (
 )
 from app.services.errors import DomainError, NotFoundError
 
-router = APIRouter(prefix="/ai", tags=["ai"])
+router = APIRouter(
+    prefix="/ai",
+    tags=["ai"],
+    dependencies=[Depends(feature_flag("ai")), Depends(rate_limited("ai"))],
+)
 ReadSession = Annotated[Session, Depends(get_session)]
 
 
@@ -91,7 +95,9 @@ def run_tool(name: str, payload: ToolIn, ctx: Ctx) -> AnswerOut:
 # ------------------------------------------------------------------------------------
 
 
-@router.post("/documents/extract", response_model=ExtractionOut)
+@router.post(
+    "/documents/extract", response_model=ExtractionOut, dependencies=[Depends(rate_limited("image"))]
+)
 def extract_document(payload: ExtractIn, ctx: OwnerCtx) -> ExtractionOut:
     """Read a photographed invoice or stock list into rows. Nothing is stored and nothing is created."""
     with write_transaction() as session:

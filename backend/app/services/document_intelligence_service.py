@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.context import RequestContext
 from app.models import Product, Supplier, Unit
+from app.models.enums import EventSeverity
 from app.services import ai_format as fmt
 from app.services import (
     ai_planner,
@@ -45,6 +46,7 @@ from app.services import (
     inventory_service,
     product_match_service,
     purchase_service,
+    system_event_service,
 )
 from app.services.ai_provider import AiProvider, configured_provider
 from app.services.errors import AiServiceError, InvalidInputError
@@ -200,6 +202,15 @@ def extract(
     except AiServiceError as error:
         ai_usage_service.record(
             session, ctx, feature=feature, provider=used.name, model=None, status=ai_usage_service.FAILED
+        )
+        system_event_service.record(
+            session,
+            category="ai",
+            severity=EventSeverity.WARNING,
+            source=f"ai:{used.name}",
+            code=error.reason,
+            message="The AI provider could not read a document.",
+            shop_id=ctx.shop_id,
         )
         return Extraction("FAILED", None, kind, provider_label=used.label, provider_error=error)
     header, rows, warnings = sanitize_extraction(reply.data, kind)

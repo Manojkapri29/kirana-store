@@ -7,6 +7,15 @@ from app.models.catalog import Category, Product, Unit
 from app.models.expenses import Expense, ExpenseCategory
 from app.models.inventory import InventoryTransaction
 from app.models.khata import CustomerLedgerEntry
+from app.models.notifications import NotificationDelivery, NotificationEvent, NotificationPreference
+from app.models.operations import (
+    AdminAuditLog,
+    BackupRecord,
+    RestoreRecord,
+    SupportAccessGrant,
+    SystemAdmin,
+    SystemEvent,
+)
 from app.models.parties import Customer, Supplier
 from app.models.pricing import PriceObservation, ProductImage
 from app.models.promotion import Promotion, SalePromotion
@@ -17,6 +26,15 @@ from app.models.subscription import Plan, PlanFeature, ShopSubscription, Subscri
 from app.models.system import AuditLog, DocumentSequence, IdempotencyKey
 
 __all__ = [
+    "AdminAuditLog",
+    "BackupRecord",
+    "NotificationDelivery",
+    "NotificationEvent",
+    "NotificationPreference",
+    "RestoreRecord",
+    "SupportAccessGrant",
+    "SystemAdmin",
+    "SystemEvent",
     "AiAction",
     "AiUsage",
     "AuditLog",

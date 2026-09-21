@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import Ctx
+from app.api.deps import Ctx, rate_limited
 from app.api.idempotency import IdempotencyHeader, run_idempotent
 from app.db.session import get_session, write_transaction
 from app.schemas.product import (
@@ -81,7 +81,7 @@ def create_product(
     )
 
 
-@router.get("/lookup", response_model=LookupOut)
+@router.get("/lookup", response_model=LookupOut, dependencies=[Depends(rate_limited("coupon"))])
 def lookup_product(
     ctx: Ctx,
     session: ReadSession,

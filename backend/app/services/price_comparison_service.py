@@ -41,7 +41,8 @@ from app.core.config import Settings, get_settings
 from app.core.context import RequestContext
 from app.db.types import utc_now
 from app.models import PriceObservation, Product
-from app.services import entitlement_service, price_providers
+from app.models.enums import EventSeverity
+from app.services import entitlement_service, price_providers, system_event_service
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.price_providers import Identity, PriceProvider, ProviderUnavailable, Quote
 from app.services.product_lookup_service import (  # noqa: F401  (pack_size_of stays importable from here)
@@ -478,6 +479,16 @@ def finish(session: Session, ctx: RequestContext, prepared: Prepared, fetched: F
                 )  # fmt: skip
         else:
             reason = fetched.problems.get(name, "could not be reached")
+            # For the operators: an outside price service is failing. Never affects the bill.
+            system_event_service.record(
+                session,
+                category="integration",
+                severity=EventSeverity.WARNING,
+                source=f"price:{name}",
+                code="unavailable",
+                message=f"{plan.provider.label} {reason}.",
+                shop_id=ctx.shop_id,
+            )
             if plan.cached:
                 quotes += [(q, True) for q in plan.cached]
                 reports.append(

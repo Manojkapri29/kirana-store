@@ -47,8 +47,9 @@ class TestTheSeededPlans:
         with session_factory() as s:
             views = {v.plan.code: v for v in plans.list_plans(s)}
         assert [k for k in plans.FEATURES if views["free"].features[k]] == [
-            "ai_assistant"
-        ]  # only the basic AI questions
+            "ai_assistant",
+            "exports",
+        ]  # the basic AI questions, and the ability to export one's own data
         assert views["basic"].features["promotions"] and not views["basic"].features["price_intelligence"]
         assert all(views["pro"].features[k] for k in plans.FEATURES)
         assert views["pro"].limits["max_products"] is None  # unlimited
@@ -438,7 +439,15 @@ class TestTheSubscriptionScreenData:
         assert (data["plan_code"], data["source"], data["status"]) == ("basic", "subscription", "ACTIVE")
         assert data["features"]["promotions"] is True and data["features"]["price_intelligence"] is False
         assert data["limits"]["max_products"] == 1000
-        assert set(data["usage"]) == {"products", "users", "invoices", "price_lookups", "ai_requests"}
+        assert set(data["usage"]) == {
+            "products",
+            "users",
+            "invoices",
+            "price_lookups",
+            "ai_requests",
+            "exports",
+            "image_analyses",
+        }
         assert [p["code"] for p in data["plans"]] == ["free", "basic", "pro"]
         assert [p["is_current"] for p in data["plans"]] == [False, True, False]
         assert data["plans"][0]["price"] == "0.00" and data["plans"][1]["price"] is None

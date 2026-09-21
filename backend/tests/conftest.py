@@ -137,6 +137,19 @@ def assert_sql_rejected(
 # --- API fixtures ----------------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _rate_limits_off_by_default(monkeypatch: pytest.MonkeyPatch):
+    """Most tests fire many requests in a second; the rate-limit tests turn the limiter back on themselves."""
+    from app.core import ratelimit
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("KIRANA_RATE_LIMIT_ENABLED", "false")
+    get_settings.cache_clear()
+    ratelimit.limiter.reset()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def make_client(monkeypatch: pytest.MonkeyPatch, session_factory: sessionmaker[Session]):
     """Build an API client that acts as the given tenant's user (replacing the development login).

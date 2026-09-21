@@ -36,6 +36,7 @@ from app.services import (
     sale_service,
     sales_report_service,
     sales_return_service,
+    supplier_service,
 )
 from app.services.export_service import Column, ExportFile, ExportFormat, Kind, render
 from app.services.inventory_service import StockStatus
@@ -136,6 +137,19 @@ CUSTOMER_COLUMNS = [
     Column("advance", "Advance (Paid Ahead)", Kind.MONEY),
     Column("balance_status", "Balance Status"),
     Column("entries", "Ledger Entries", Kind.INTEGER),
+    Column("status", "Status"),
+    Column("notes", "Notes"),
+    Column("created_at", "Created", Kind.DATETIME),
+]
+
+SUPPLIER_COLUMNS = [
+    Column("name", "Supplier"),
+    Column("phone", "Phone"),
+    Column("alternate_phone", "Alternate Phone"),
+    Column("email", "Email"),
+    Column("address", "Address"),
+    Column("gstin", "GSTIN"),
+    Column("products", "Products Supplied", Kind.INTEGER),
     Column("status", "Status"),
     Column("notes", "Notes"),
     Column("created_at", "Created", Kind.DATETIME),
@@ -749,6 +763,27 @@ def _customers(session: Session, ctx: RequestContext, *, active: bool | None, **
     return _Dataset("customers", CUSTOMER_COLUMNS, rows)
 
 
+def _suppliers(session: Session, ctx: RequestContext, *, active: bool | None, q: str | None) -> _Dataset:
+    shop = get_shop(session, ctx.shop_id)
+    views, _ = supplier_service.list_suppliers(session, ctx.shop_id, q=q, active=active, limit=None)
+    rows = [
+        {
+            "name": v.supplier.name,
+            "phone": v.supplier.phone,
+            "alternate_phone": v.supplier.alternate_phone,
+            "email": v.supplier.email,
+            "address": v.supplier.address,
+            "gstin": v.supplier.gstin,
+            "products": v.product_count,
+            "status": "Active" if v.supplier.is_active else "Inactive",
+            "notes": v.supplier.notes,
+            "created_at": _local(v.supplier.created_at, shop.timezone),
+        }
+        for v in views
+    ]
+    return _Dataset("suppliers", SUPPLIER_COLUMNS, rows)
+
+
 def _customer_ledger(session: Session, ctx: RequestContext, customer_id: int, **filters: Any) -> _Dataset:
     shop = get_shop(session, ctx.shop_id)
     customer = customer_service.get_customer(session, ctx.shop_id, customer_id)  # 404 for another shop's
@@ -864,6 +899,17 @@ def export_customers(
     balance: BalanceStatus | None = None,
 ) -> ExportFile:
     return _file(session, ctx, _customers(session, ctx, active=active, q=q, balance=balance), fmt)
+
+
+def export_suppliers(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    active: bool | None = True,
+    q: str | None = None,
+) -> ExportFile:
+    return _file(session, ctx, _suppliers(session, ctx, active=active, q=q), fmt)
 
 
 def export_customer_ledger(

@@ -81,6 +81,9 @@ class SalesSummary:
     returns_total: Decimal = ZERO  # what they refunded
     # returns left out of the profit adjustment because a returned item's cost was unknown
     returns_without_cost: int = 0
+    # Detailed Sales whose every cost is known: what they sold for and what the goods cost (before returns).
+    costed_net: Decimal | None = None
+    costed_cogs: Decimal | None = None
 
     @property
     def combined(self) -> Totals:
@@ -308,6 +311,8 @@ def sales_summary(
         returns_count=returns_count,
         returns_total=_money(returns_total),
         returns_without_cost=without_cost,
+        costed_net=_money(known_total) if known_count else None,
+        costed_cogs=_money(cogs) if known_count else None,
     )
 
 

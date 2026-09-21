@@ -27,7 +27,84 @@ class Settings(BaseSettings):
     app_name: str = "Shop Manager API"
     app_version: str = "0.1.0"
     environment: Literal["development", "test", "production"] = "development"
+    debug: bool = False  # never true in production (rejected at start-up)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # "json" (one object per line, for log collectors) or "text" (for a terminal).
+    log_format: Literal["json", "text"] = "text"
+
+    @field_validator("environment", mode="before")
+    @classmethod
+    def _environment_aliases(cls, value: object) -> object:
+        """`testing` and `prod` are accepted spellings of `test` and `production`."""
+        if isinstance(value, str):
+            return {"testing": "test", "prod": "production", "dev": "development"}.get(
+                value.strip().lower(), value.strip().lower()
+            )
+        return value
+
+    # The browser address of the frontend (used for links and to check CORS in production).
+    frontend_url: str | None = None
+    # Signs sessions and tokens once login exists (Phase 14). Required in production; never logged or shown.
+    secret_key: SecretStr | None = None
+
+    # --- Rate limiting (per shop, or per client address where there is no shop). "calls per window". ---
+    rate_limit_enabled: bool = True
+    rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
+    rate_limit_ai: int = Field(default=30, ge=1)  # assistant questions, insights, document reading
+    rate_limit_image: int = Field(default=20, ge=1)  # photo analysis
+    rate_limit_external: int = Field(default=40, ge=1)  # barcode lookup, outside price checks
+    rate_limit_coupon: int = Field(
+        default=600, ge=1
+    )  # bill pricing and coupon checks (a cashier types quickly)
+    rate_limit_export: int = Field(default=20, ge=1)
+    rate_limit_admin: int = Field(default=60, ge=1)  # internal administration
+    rate_limit_admin_auth_failures: int = Field(default=10, ge=1)  # bad admin tokens per window per address
+    # Reserved for login and the public storefront, which do not exist yet (Phase 14 / online ordering).
+    rate_limit_auth: int = Field(default=10, ge=1)
+    rate_limit_public: int = Field(default=60, ge=1)
+
+    # --- Shop account lifecycle: what each state allows. "blocked" = nothing but the account page;
+    # "read_only" =
+    # looking is allowed, changing is not. Policies are configuration, not code. ---
+    suspended_policy: Literal["read_only", "blocked"] = "read_only"
+    deactivated_policy: Literal["read_only", "blocked"] = "blocked"
+
+    # --- Feature flags: switch a whole capability off for every shop (an operator's emergency brake). ---
+    feature_ai: bool = True
+    feature_exports: bool = True
+    feature_notifications: bool = True
+    feature_price_lookups: bool = True
+
+    # --- Backups. SQLite only for now; the storage is behind an interface so object storage can follow. ---
+    backup_dir: str = "./data/backups"
+    backup_storage_provider: str = "local"  # "local" is the only one written; others report "not configured"
+    backup_keep_daily_days: int = Field(default=14, ge=1, le=3650)
+    backup_keep_weekly_weeks: int = Field(default=8, ge=0, le=520)
+    backup_min_free_mb: int = Field(
+        default=200, ge=0
+    )  # refuse to start a backup with less free space than this
+    backup_stale_after_hours: int = Field(default=36, ge=1)  # the owner is told when the last backup is older
+    # Restoring over the live database from the API is off unless an operator turns it on. The CLI always
+    # works.
+    restore_via_api_enabled: bool = False
+
+    # --- Notifications. In-app always works. Other channels stay "not configured" until set up. ---
+    notification_email_provider: str | None = None
+    notification_sms_provider: str | None = None
+    notification_whatsapp_provider: str | None = None
+    notification_push_provider: str | None = None
+    notification_max_attempts: int = Field(default=5, ge=1, le=20)
+    notification_backoff_seconds: int = Field(default=60, ge=1)
+
+    # Upload limits shared by every file entry point (the image settings below are the existing names).
+    allowed_image_types: Annotated[list[str], NoDecode] = ["image/jpeg", "image/png", "image/webp"]
+
+    @field_validator("allowed_image_types", mode="before")
+    @classmethod
+    def _split_types(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [item.strip().lower() for item in value.split(",") if item.strip()]
+        return value
 
     # SQLite for the MVP; a PostgreSQL URL (postgresql+psycopg://...) works after the Phase 15 gate.
     database_url: str = "sqlite:///./data/kirana.db"
@@ -110,6 +187,31 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    def production_problems(self) -> list[str]:
+        """What is wrong with this configuration for a production start. Names only, never values."""
+        if not self.is_production:
+            return []
+        problems: list[str] = []
+        if self.secret_key is None or len(self.secret_key.get_secret_value()) < 32:
+            problems.append("KIRANA_SECRET_KEY must be set to a random value of at least 32 characters")
+        if not self.frontend_url:
+            problems.append("KIRANA_FRONTEND_URL must be set")
+        elif not self.frontend_url.startswith("https://"):
+            problems.append("KIRANA_FRONTEND_URL must use https")
+        if not self.cors_origins or any(origin.strip() == "*" for origin in self.cors_origins):
+            problems.append("KIRANA_CORS_ORIGINS must list the frontend origin(s), not '*'")
+        elif self.frontend_url and self.frontend_url.rstrip("/") not in [
+            o.rstrip("/") for o in self.cors_origins
+        ]:
+            problems.append("KIRANA_CORS_ORIGINS must include KIRANA_FRONTEND_URL")
+        if self.debug:
+            problems.append("KIRANA_DEBUG must be false")
+        if self.log_level == "DEBUG":
+            problems.append("KIRANA_LOG_LEVEL must not be DEBUG")
+        if not self.rate_limit_enabled:
+            problems.append("KIRANA_RATE_LIMIT_ENABLED must not be false")
+        return problems
 
 
 @lru_cache

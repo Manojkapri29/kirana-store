@@ -411,3 +411,21 @@ customers, offers, confirmed photo products). Diagnostics are **not** stored in 
   Editable like all plan entries; the downgrade removes them. `subscription_usage` gains the metric `ai_requests`.
 
 Audit entries for AI actions use the existing `audit_log` (entity `ai_action`).
+
+## Migration 0014 (Phase 11)
+
+One additive migration (tested up, down and up again; a Phase 10 database keeps all its data):
+
+| Change | Detail |
+|---|---|
+| `shops` | `account_status` (default `ACTIVE`), `status_reason`, `status_changed_at` |
+| `audit_log` | nullable `request_id` |
+| `system_admins`, `admin_audit_logs`, `support_access_grants` | platform tables (no `shop_id` except where a shop is the target); `admin_audit_logs` is insert-only (triggers on SQLite and PostgreSQL) |
+| `system_events` | operational events, optional shop |
+| `backup_records`, `restore_records` | backup and restore history; no credentials or absolute paths |
+| `notification_events`, `notification_deliveries`, `notification_preferences` | shop-owned; composite foreign keys `(shop_id, id)` keep an event, a delivery and a user in one shop; `(event, user, channel)` unique |
+| `plan_features` | `exports` (on) and `max_exports_per_month`, `max_image_analyses_per_month` (unlimited): no plan changes behaviour |
+
+Indexes were **not** added: the hot paths were checked with `EXPLAIN QUERY PLAN` (see `PRODUCTION.md`) and already use existing
+indexes. `docs/POSTGRES_MIGRATION_CHECKLIST.md` lists what changes when PostgreSQL replaces SQLite.
+

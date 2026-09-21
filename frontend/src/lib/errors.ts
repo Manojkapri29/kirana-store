@@ -25,6 +25,7 @@ export type RecoveryAction =
   | 'choose_another'
   | 'adjust_cart'
   | 'cancel'
+  | 'contact_support'
 
 export interface Recovery {
   category: ErrorCategory
@@ -38,6 +39,8 @@ export interface Recovery {
   actions: RecoveryAction[]
   /** True for a problem the person can fix by changing what they entered. */
   needsInputChange: boolean
+  /** Seconds the server asked the person to wait (rate limiting). Null when it did not say. */
+  waitSeconds: number | null
 }
 
 const TRANSIENT: ErrorCategory[] = ['network', 'timeout', 'database', 'external_api']
@@ -86,6 +89,17 @@ export function describeError(input: unknown, options: DescribeOptions = {}): Re
     preserved: writing || context === 'image_upload',
     needsInputChange: false,
     serverMessage: internal ? null : error.message,
+    waitSeconds: error.retryAfterSeconds,
+  }
+
+  // Too many requests: nothing is wrong with the data. Wait, then it is safe to repeat a read; a write is repeated
+  // by the person (with its idempotency key) once the wait is over.
+  if (category === 'rate_limited') {
+    return { ...base, titleKey: 'recovery.titles.rateLimited', messageKey: null, actions: safe ? ['retry', 'go_back'] : ['go_back'] }
+  }
+  // The shop's account state does not allow this. The server's sentence is written for the owner.
+  if (category === 'account_restricted') {
+    return { ...base, titleKey: 'recovery.titles.accountRestricted', messageKey: null, actions: ['go_back', 'contact_support'] }
   }
 
   // A stock problem while checking out: show what is available and let the cart be adjusted.
@@ -132,6 +146,8 @@ export function describeError(input: unknown, options: DescribeOptions = {}): Re
   if (context === 'checkout' || (context === 'save' && !canRetry)) actions.push('save_draft')
   if (writing) actions.push(context === 'save' ? 'cancel' : 'go_back')
   if (!actions.includes('go_back') && !actions.includes('cancel') && !actions.includes('continue')) actions.push('refresh')
+  // Something failed on our side and there is a reference to quote: the person can hand it to support.
+  if (base.reference && internal) actions.push('contact_support')
   return { ...base, titleKey: TITLES[context], messageKey, actions: [...new Set(actions)] }
 }
 

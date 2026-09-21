@@ -9,6 +9,7 @@ import {
   PackageSearch,
   ReceiptText,
   Sparkles,
+  TrendingUp,
   Undo2,
   Settings,
   ShoppingCart,
@@ -91,6 +92,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     phase: 11,
   },
   { id: 'reports', path: '/reports', icon: BarChart3, labelKey: 'nav.reports' },
+  { id: 'insights', path: '/insights', icon: TrendingUp, labelKey: 'nav.insights' },
   { id: 'plan', path: '/plan', icon: CreditCard, labelKey: 'nav.plan' },
   { id: 'settings', path: '/settings', icon: Settings, labelKey: 'nav.settings' },
 ]

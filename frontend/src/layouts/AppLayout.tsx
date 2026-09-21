@@ -1,7 +1,9 @@
 import { useCallback, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 
+import { AccountBanner } from '@/components/AccountBanner'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { OfflineBanner } from '@/components/OfflineBanner'
 
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
@@ -17,6 +19,8 @@ export function AppLayout() {
       <Sidebar open={sidebarOpen} onClose={closeSidebar} />
       <div className="lg:pl-64">
         <Header onMenuClick={() => setSidebarOpen(true)} />
+        <OfflineBanner />
+        <AccountBanner />
         <main className="mx-auto w-full max-w-7xl p-4 sm:p-6">
           <ErrorBoundary key={location.pathname}>
             <Outlet />

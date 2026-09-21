@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { describeError, type ErrorContext, type RecoveryAction } from '@/lib/errors'
@@ -27,6 +28,7 @@ const ACTION_KEYS: Record<RecoveryAction, string> = {
   choose_another: 'recovery.actions.choose_another',
   adjust_cart: 'recovery.actions.adjust_cart',
   cancel: 'recovery.actions.cancel',
+  contact_support: 'recovery.actions.contact_support',
 }
 
 /**
@@ -36,8 +38,20 @@ const ACTION_KEYS: Record<RecoveryAction, string> = {
  */
 export function ErrorNotice({ error, context = 'generic', safeToRepeat, children, labels, ...handlers }: Props) {
   const { t } = useTranslation()
+  const [supportShown, setSupportShown] = useState(false)
   const recovery = describeError(error, { context, safeToRepeat })
-  const wanted = recovery.actions.filter((action) => action === 'refresh' || handlers[action] !== undefined)
+  // "Contact support" has no address to invent: it copies the reference and tells the person to quote it.
+  const contactSupport = () => {
+    setSupportShown(true)
+    try {
+      void navigator.clipboard?.writeText(recovery.reference ?? '')
+    } catch {
+      // The reference is on screen anyway.
+    }
+  }
+  const wanted = recovery.actions.filter(
+    (action) => action === 'refresh' || action === 'contact_support' || handlers[action] !== undefined,
+  )
   // A person is never left without a next step, unless the fix is simply to change what they typed.
   const actions: RecoveryAction[] = wanted.length > 0 || recovery.needsInputChange ? wanted : ['refresh']
 
@@ -48,14 +62,18 @@ export function ErrorNotice({ error, context = 'generic', safeToRepeat, children
       {recovery.messageKey && <p className="mt-1">{t(recovery.messageKey)}</p>}
       {children}
       {recovery.preserved && <p className="mt-1 text-sm">{t('recovery.preserved')}</p>}
+      {recovery.waitSeconds !== null && recovery.category === 'rate_limited' && (
+        <p className="mt-1">{t('recovery.wait', { count: recovery.waitSeconds })}</p>
+      )}
       {recovery.reference && <p className="mt-1 text-sm">{t('recovery.reference', { id: recovery.reference })}</p>}
+      {supportShown && <p className="mt-1 text-sm">{t('recovery.supportHint', { id: recovery.reference ?? '' })}</p>}
       {actions.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {actions.map((action, index) => (
             <Button
               key={action}
               variant={index === 0 ? 'primary' : 'secondary'}
-              onClick={handlers[action] ?? (() => window.location.reload())}
+              onClick={handlers[action] ?? (action === 'contact_support' ? contactSupport : () => window.location.reload())}
             >
               {labels?.[action] ?? t(ACTION_KEYS[action] as never)}
             </Button>

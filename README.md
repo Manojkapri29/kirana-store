@@ -97,7 +97,7 @@ npm test               # unit and component tests (vitest)
 kirana-store/
 ├── backend/     FastAPI app (app/), migrations/, tests/, requirements, .env.example
 ├── frontend/    React + Vite + TypeScript app (src/), .env.example
-└── docs/        ARCHITECTURE, DATABASE, BUSINESS_RULES, ROADMAP
+└── docs/        ARCHITECTURE, DATABASE, BUSINESS_RULES, ROADMAP, PRODUCTION, SECURITY, ...
 ```
 
 ## Configuration
@@ -113,7 +113,10 @@ All configuration comes from environment variables; nothing secret is committed.
 - [Architecture](docs/ARCHITECTURE.md): layers, service boundaries, ledgers, SaaS readiness
 - [Database](docs/DATABASE.md): planned schema and SQLite to PostgreSQL strategy
 - [Business rules](docs/BUSINESS_RULES.md): the approved rules every phase must follow
-- [Roadmap](docs/ROADMAP.md): Phases 1 to 16 (Phase 10 is the latest)
+- [Roadmap](docs/ROADMAP.md): Phases 1 to 16 (Phase 11 is the latest)
+- [Production](docs/PRODUCTION.md), [Security](docs/SECURITY.md), [Observability](docs/OBSERVABILITY.md)
+- [Backup and restore](docs/BACKUP_AND_RESTORE.md), [Notifications](docs/NOTIFICATIONS.md), [SaaS administration](docs/SAAS_ADMIN.md)
+- [PostgreSQL migration checklist](docs/POSTGRES_MIGRATION_CHECKLIST.md)
 
 ## What Phase 8 added
 
@@ -213,3 +216,31 @@ questions and photo reading, set these in `backend/.env` (never in the frontend 
 AI is controlled by plan: `ai_assistant` (basic questions), `ai_insights` (recommendations and analysis) and
 `ai_documents` (document photos), with a monthly limit of requests. The conversation is kept only in your browser tab.
 Online orders are not part of this application yet, so the assistant reports none rather than inventing figures.
+
+## What Phase 11 added
+
+**Ready to run for real.** A production start-up check (the application refuses to start with a missing secret or unsafe
+settings, naming the setting and never its value), `/health`, `/health/live`, `/health/ready`, request ids on every response
+and log line, structured logs that never carry secrets, configurable rate limits (HTTP 429 with `Retry-After`), and feature
+switches. See [docs/PRODUCTION.md](docs/PRODUCTION.md).
+
+**For the shop owner.** A notification bell and inbox (in-app is real; email, SMS, WhatsApp and push say "Not set up yet"),
+a dashboard and Insights page built from your own records ("Not Available" where cost is missing), plan usage, a backup
+status line, calm messages when the shop account is restricted or the connection is down, "Contact support" that copies the
+reference, and a warning before you close a tab with unsaved work.
+
+**For the people who run the platform.** Administrators with roles (token based; command line to create), shop suspension
+and reactivation with a reason, plans without payments, backups you can verify and rehearse, a read-only integrity check, and
+an audited console at `/admin` that never shows a shop's sales or customers. See [docs/SAAS_ADMIN.md](docs/SAAS_ADMIN.md)
+and [docs/BACKUP_AND_RESTORE.md](docs/BACKUP_AND_RESTORE.md).
+
+**Not done (on purpose).** Login and passwords (Phase 14), an online store and online orders, payments and billing,
+cloud backups, real email/SMS/WhatsApp providers, and PostgreSQL (a checklist only).
+
+```bash
+cd backend
+.venv/bin/python -m app.backup_cli create        # a consistent, verified backup
+.venv/bin/python -m app.integrity_cli            # read-only data check
+.venv/bin/python -m app.admin_cli create --email ops@example.com --name "Ops" --role SUPER_ADMIN
+```
+

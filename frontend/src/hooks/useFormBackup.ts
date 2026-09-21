@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { useDirtyGuard } from './useDirtyGuard'
+
 const PREFIX = 'shop.draft.'
 const MAX_AGE_MS = 24 * 60 * 60 * 1000
 
@@ -29,17 +31,25 @@ function read<T>(key: string): Stored<T> | null {
  *
  * `key` names the form. When a saved copy exists on arrival, `restorable` holds it and the screen offers to
  * restore or discard it; nothing is applied silently. Call `clear()` once the data is really saved on the server.
- * A backup older than a day is dropped.
+ * A backup older than a day is dropped. While the form holds unsaved changes, closing or reloading the tab asks the
+ * browser to confirm (`dirty` says when).
  */
 export function useFormBackup<T>(key: string, value: T, options: { enabled?: boolean } = {}) {
   const enabled = options.enabled ?? true
   const [restorable, setRestorable] = useState<T | null>(() => (enabled ? (read<T>(key)?.value ?? null) : null))
   // A form that has not been touched is never saved: it would replace a good backup with an empty one.
-  const initial = useRef(JSON.stringify(value))
+  // The baseline moves to the current value once the data is really saved (`clear`), so a saved form is not "dirty".
+  const [baseline, setBaseline] = useState(() => JSON.stringify(value))
+  const latest = useRef(value)
+  useEffect(() => {
+    latest.current = value
+  }, [value])
+  const dirty = enabled && JSON.stringify(value) !== baseline
+  useDirtyGuard(dirty)
 
   useEffect(() => {
     if (!enabled) return
-    if (JSON.stringify(value) === initial.current) return
+    if (JSON.stringify(value) === baseline) return
     const timer = setTimeout(() => {
       try {
         localStorage.setItem(PREFIX + key, JSON.stringify({ savedAt: Date.now(), value } satisfies Stored<T>))
@@ -48,7 +58,7 @@ export function useFormBackup<T>(key: string, value: T, options: { enabled?: boo
       }
     }, 400)
     return () => clearTimeout(timer)
-  }, [enabled, key, value])
+  }, [enabled, key, value, baseline])
 
   const clear = useCallback(() => {
     try {
@@ -57,7 +67,8 @@ export function useFormBackup<T>(key: string, value: T, options: { enabled?: boo
       // ignore
     }
     setRestorable(null)
+    setBaseline(JSON.stringify(latest.current))
   }, [key])
 
-  return { restorable, dismiss: () => setRestorable(null), clear }
+  return { restorable, dismiss: () => setRestorable(null), clear, dirty }
 }

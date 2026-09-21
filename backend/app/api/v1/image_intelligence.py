@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import Ctx
+from app.api.deps import Ctx, meter_image_analysis, rate_limited
 from app.api.idempotency import IdempotencyHeader, run_idempotent
 from app.core.config import get_settings
 from app.db.session import get_session, write_transaction
@@ -47,7 +47,11 @@ def status(ctx: Ctx, session: ReadSession) -> ProviderStatusOut:
     return ProviderStatusOut(allowed_by_plan=allowed, **info)
 
 
-@router.post("/analyze", response_model=AnalysisOut)
+@router.post(
+    "/analyze",
+    response_model=AnalysisOut,
+    dependencies=[Depends(rate_limited("image")), Depends(meter_image_analysis)],
+)
 def analyze(payload: AnalyzeIn, ctx: Ctx, session: ReadSession) -> AnalysisOut:
     """Read a photo and suggest what it shows. Nothing is created, changed or kept."""
     settings = get_settings()

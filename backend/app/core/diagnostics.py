@@ -43,6 +43,8 @@ class ErrorCategory(StrEnum):
     IMAGE_UPLOAD = "image_upload"
     PROMOTION = "promotion_calculation"
     CHECKOUT = "checkout"
+    RATE_LIMITED = "rate_limited"
+    ACCOUNT = "account_restricted"
     UNEXPECTED = "unexpected"
 
 
@@ -53,7 +55,7 @@ def new_reference_id(now: datetime | None = None) -> str:
 
 
 def new_correlation_id() -> str:
-    return secrets.token_hex(8)
+    return "req_" + secrets.token_hex(8)
 
 
 # --- Redaction -------------------------------------------------------------------------------------

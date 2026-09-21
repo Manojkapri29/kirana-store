@@ -14,6 +14,7 @@ discount belongs to the bill, not to one line.
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -22,7 +23,9 @@ from app.models import (
     Category,
     Product,
     Purchase,
+    PurchaseItem,
     PurchaseReturn,
+    QuickSale,
     Sale,
     SaleItem,
     SalesReturn,
@@ -30,7 +33,7 @@ from app.models import (
     Supplier,
     Unit,
 )
-from app.models.enums import DocumentStatus, PurchaseStatus, SaleStatus
+from app.models.enums import DocumentStatus, PaymentType, PurchaseStatus, SaleStatus
 
 ZERO = Decimal("0.00")
 ZERO_QTY = Decimal("0.000")
@@ -212,3 +215,119 @@ def purchase_totals(session: Session, shop_id: int, start: date, end: date) -> P
         returns_total=_money(returns[1]),
         by_supplier=rows,
     )
+
+
+def credit_sales(session: Session, shop_id: int, start: date, end: date) -> tuple[int, Decimal]:
+    """Bills in the period sold on credit: how many, and the unpaid part in total (Detailed and Quick)."""
+    unpaid = Sale.total_amount - func.coalesce(Sale.amount_paid, 0)
+    count, total = session.execute(
+        select(func.count(), func.coalesce(func.sum(unpaid), 0)).where(
+            Sale.shop_id == shop_id,
+            Sale.status == SaleStatus.POSTED,
+            Sale.payment_type == PaymentType.CREDIT,
+            Sale.sale_date >= start,
+            Sale.sale_date <= end,
+        )
+    ).one()
+    q_unpaid = QuickSale.total_amount - func.coalesce(QuickSale.amount_paid, 0)
+    q_count, q_total = session.execute(
+        select(func.count(), func.coalesce(func.sum(q_unpaid), 0)).where(
+            QuickSale.shop_id == shop_id,
+            QuickSale.status == SaleStatus.POSTED,
+            QuickSale.payment_type == PaymentType.CREDIT,
+            QuickSale.sale_date >= start,
+            QuickSale.sale_date <= end,
+        )
+    ).one()
+    return count + q_count, _money(total) + _money(q_total)
+
+
+def customer_activity(session: Session, shop_id: int, start: date, end: date) -> tuple[int, int]:
+    """(customers who bought in the period, how many of them bought before it). Named customers only."""
+    in_period = (
+        select(Sale.customer_id)
+        .where(
+            Sale.shop_id == shop_id,
+            Sale.status == SaleStatus.POSTED,
+            Sale.customer_id.is_not(None),
+            Sale.sale_date >= start,
+            Sale.sale_date <= end,
+        )
+        .distinct()
+    )
+    ids = [row for row in session.scalars(in_period)]
+    if not ids:
+        return 0, 0
+    returning = session.scalar(
+        select(func.count(func.distinct(Sale.customer_id))).where(
+            Sale.shop_id == shop_id,
+            Sale.status == SaleStatus.POSTED,
+            Sale.customer_id.in_(ids),
+            Sale.sale_date < start,
+        )
+    )
+    return len(ids), returning or 0
+
+
+def purchase_trend(session: Session, shop_id: int, end: date, months: int = 6) -> list[tuple[str, Decimal]]:
+    """Posted purchase value per calendar month for the last `months` months, oldest first."""
+    first = end.replace(day=1)
+    for _ in range(months - 1):
+        first = (first - timedelta(days=1)).replace(day=1)
+    rows = session.execute(
+        select(Purchase.purchase_date, Purchase.total_amount).where(
+            Purchase.shop_id == shop_id,
+            Purchase.status == PurchaseStatus.POSTED,
+            Purchase.purchase_date >= first,
+            Purchase.purchase_date <= end,
+        )
+    ).all()
+    totals: dict[str, Decimal] = {}
+    cursor = first
+    for _ in range(months):
+        totals[f"{cursor:%Y-%m}"] = ZERO
+        cursor = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
+    for day, amount in rows:
+        totals[f"{day:%Y-%m}"] = totals.get(f"{day:%Y-%m}", ZERO) + _money(amount)
+    return list(totals.items())
+
+
+@dataclass(frozen=True)
+class CostMove:
+    product_id: int
+    name: str
+    first_cost: Decimal
+    last_cost: Decimal
+    change_percent: Decimal
+
+
+def cost_movement(session: Session, shop_id: int, start: date, end: date, limit: int = 5) -> list[CostMove]:
+    """Products whose purchase price changed in the period (first to last posted purchase), biggest first."""
+    rows = session.execute(
+        select(
+            PurchaseItem.product_id, Product.name, PurchaseItem.unit_cost, Purchase.purchase_date, Purchase.id
+        )
+        .join(
+            Purchase, (Purchase.shop_id == PurchaseItem.shop_id) & (Purchase.id == PurchaseItem.purchase_id)
+        )
+        .join(Product, (Product.shop_id == PurchaseItem.shop_id) & (Product.id == PurchaseItem.product_id))
+        .where(
+            Purchase.shop_id == shop_id,
+            Purchase.status == PurchaseStatus.POSTED,
+            Purchase.purchase_date >= start,
+            Purchase.purchase_date <= end,
+        )
+        .order_by(Purchase.purchase_date, Purchase.id)
+    ).all()
+    seen: dict[int, list[Any]] = {}
+    for product_id, name, cost, _day, _pid in rows:
+        seen.setdefault(product_id, [name, cost, cost])[2] = cost
+    moves = []
+    for product_id, (name, first, last) in seen.items():
+        if first and first != last:
+            moves.append(
+                CostMove(
+                    product_id, name, first, last, ((last - first) * 100 / first).quantize(Decimal("0.1"))
+                )
+            )
+    return sorted(moves, key=lambda m: -abs(m.change_percent))[:limit]
