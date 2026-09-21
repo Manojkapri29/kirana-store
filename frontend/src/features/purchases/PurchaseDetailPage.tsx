@@ -111,11 +111,11 @@ export function PurchaseDetailPage() {
                 <Pencil aria-hidden="true" className="size-5" />
                 {t('common.edit')}
               </LinkButton>
-              <Button loading={post.isPending} disabled={p.items.length === 0} onClick={confirmAndPost}>
+              <Button requires="PURCHASE_POST" loading={post.isPending} disabled={p.items.length === 0} onClick={confirmAndPost}>
                 <CircleCheck aria-hidden="true" className="size-5" />
                 {t('purchases.detail.post')}
               </Button>
-              <Button variant="danger" onClick={() => setShowVoid((open) => !open)}>
+              <Button requires="PURCHASE_VOID" variant="danger" onClick={() => setShowVoid((open) => !open)}>
                 <Ban aria-hidden="true" className="size-5" />
                 {t('purchases.detail.discard')}
               </Button>
@@ -128,7 +128,7 @@ export function PurchaseDetailPage() {
             </LinkButton>
           )}
           {p.status === 'POSTED' && (
-            <Button variant="danger" onClick={() => setShowVoid((open) => !open)}>
+            <Button requires="PURCHASE_VOID" variant="danger" onClick={() => setShowVoid((open) => !open)}>
               <Ban aria-hidden="true" className="size-5" />
               {t('purchases.detail.void')}
             </Button>

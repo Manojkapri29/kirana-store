@@ -14,6 +14,7 @@ import {
   Settings,
   ShoppingCart,
   Truck,
+  UserCog,
   Users,
   Wallet,
   type LucideIcon,
@@ -29,56 +30,58 @@ export interface NavItem {
   descriptionKey?: ParseKeys
   /** Roadmap phase in which the real module is built. Absent for finished screens. */
   phase?: number
+  /** The permission that shows this item. Only a convenience: the server decides what a person may do. */
+  permission?: string
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'dashboard', path: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard' },
   {
-    id: 'products',
+    id: 'products', permission: 'PRODUCT_VIEW',
     path: '/products',
     icon: PackageSearch,
     labelKey: 'nav.products',
   },
   {
-    id: 'inventory',
+    id: 'inventory', permission: 'INVENTORY_VIEW',
     path: '/inventory',
     icon: Boxes,
     labelKey: 'nav.inventory',
   },
   {
-    id: 'purchases',
+    id: 'purchases', permission: 'PURCHASE_VIEW',
     path: '/purchases',
     icon: Truck,
     labelKey: 'nav.purchases',
   },
   {
-    id: 'sales',
+    id: 'sales', permission: 'SALE_VIEW',
     path: '/sales',
     icon: ShoppingCart,
     labelKey: 'nav.sales',
   },
   {
-    id: 'quick-sales',
+    id: 'quick-sales', permission: 'SALE_VIEW',
     path: '/quick-sales',
     icon: Zap,
     labelKey: 'nav.quickSales',
   },
-  { id: 'assistant', path: '/assistant', icon: Sparkles, labelKey: 'nav.assistant' },
-  { id: 'returns', path: '/returns', icon: Undo2, labelKey: 'nav.returns' },
+  { id: 'assistant', permission: 'AI_USE', path: '/assistant', icon: Sparkles, labelKey: 'nav.assistant' },
+  { id: 'returns', permission: 'SALE_VIEW', path: '/returns', icon: Undo2, labelKey: 'nav.returns' },
   {
-    id: 'promotions',
+    id: 'promotions', permission: 'PROMOTION_VIEW',
     path: '/promotions',
     icon: Tag,
     labelKey: 'nav.offers',
   },
   {
-    id: 'customers',
+    id: 'customers', permission: 'CUSTOMER_VIEW',
     path: '/customers',
     icon: Users,
     labelKey: 'nav.customers',
   },
   {
-    id: 'suppliers',
+    id: 'suppliers', permission: 'SUPPLIER_VIEW',
     path: '/suppliers',
     icon: ReceiptText,
     labelKey: 'nav.suppliers',
@@ -91,8 +94,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
     descriptionKey: 'modules.expenses.description',
     phase: 11,
   },
-  { id: 'reports', path: '/reports', icon: BarChart3, labelKey: 'nav.reports' },
-  { id: 'insights', path: '/insights', icon: TrendingUp, labelKey: 'nav.insights' },
-  { id: 'plan', path: '/plan', icon: CreditCard, labelKey: 'nav.plan' },
+  { id: 'reports', permission: 'REPORT_VIEW', path: '/reports', icon: BarChart3, labelKey: 'nav.reports' },
+  { id: 'insights', permission: 'REPORT_VIEW', path: '/insights', icon: TrendingUp, labelKey: 'nav.insights' },
+  { id: 'plan', permission: 'SUBSCRIPTION_VIEW', path: '/plan', icon: CreditCard, labelKey: 'nav.plan' },
+  { id: 'staff', path: '/staff', icon: UserCog, labelKey: 'nav.staff', permission: 'STAFF_VIEW' },
   { id: 'settings', path: '/settings', icon: Settings, labelKey: 'nav.settings' },
 ]

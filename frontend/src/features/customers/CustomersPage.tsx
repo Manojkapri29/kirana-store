@@ -37,7 +37,7 @@ export function CustomersPage() {
   const data = customers.data
   const isFiltering = q !== '' || status !== 'active' || balance !== 'any'
   const addButton = (
-    <LinkButton to="/customers/new">
+    <LinkButton to="/customers/new" requires="CUSTOMER_CREATE">
       <Plus aria-hidden="true" className="size-5" />
       {t('customers.add')}
     </LinkButton>

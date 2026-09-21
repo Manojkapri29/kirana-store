@@ -98,6 +98,10 @@ class ForbiddenError(DomainError):
     """The request asks for something this user may not have (another shop's data, for example). HTTP 403."""
 
 
+class AuthenticationError(DomainError):
+    """Who you are could not be established (wrong password, no session, an expired session). HTTP 401."""
+
+
 class RateLimitedError(DomainError):
     """Too many requests in a short time (HTTP 429). `retry_after` is how many seconds to wait."""
 

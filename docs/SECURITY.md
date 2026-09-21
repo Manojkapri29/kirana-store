@@ -20,7 +20,7 @@ What is enforced, where, and what is not done yet. "Enforced" means the backend 
 | SQL injection | Enforced, tested | SQLAlchemy parameters only; no string-built SQL |
 | Search abuse | Enforced, tested | `%`, `_` and `\` are literal (`autoescape`); queries over 100 characters are refused; pages are bounded (`limit` ≤ 100) |
 | CORS | Enforced, tested | only the configured origins; methods GET/POST/PUT/PATCH/OPTIONS; no `DELETE`; explicit headers |
-| CSRF | Not applicable yet | no cookies or sessions exist; when login arrives (Phase 14) use header tokens or SameSite cookies |
+| CSRF | Enforced, tested | per-session CSRF token (hashed) echoed in `X-CSRF-Token` on every change made with the cookie; SameSite=Lax as a second layer; Bearer calls need none |
 | XSS | React escapes output; API sends `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a strict `Referrer-Policy`; `Cache-Control: no-store` on `/api/` |
 | CSV formula injection | Enforced, tested | cells starting `= + - @ tab CR` are neutralised in CSV and XLSX; real date cells in XLSX; UTF-8 BOM in CSV |
 | Uploads | Enforced, tested (Phase 10) | MIME, extension and file signature must agree; size and pixel limits; decoded and re-encoded; generated storage names; no path from user input |
@@ -33,7 +33,9 @@ What is enforced, where, and what is not done yet. "Enforced" means the backend 
 | Admin access | Enforced, tested | hashed tokens, role permissions, denials audited, support access by time-limited grant |
 | Backups | Enforced, tested | checksum, integrity check, refusal to restore an invalid or incompatible file, confirmation phrase, safety copy |
 | Public storefront | Not built | there is no public API to leak from; `online_visible` remains a data flag only |
-| Authentication | **Not built** | Phase 14 |
+| Authentication | Enforced, tested (Phase 12) | Argon2id, HttpOnly cookie sessions stored as hashes, idle + absolute expiry, throttling, account pause, `AUTHENTICATION.md` |
+| Authorization | Enforced, tested (Phase 12) | one permission table for every route, every role tested against every route, no escalation, `RBAC.md` |
+| Invitations | Enforced, tested | random, expiring, single-use, hash-stored, fragment link, never logged |
 | Dependency scanning | Not done | run `pip-audit` / `npm audit` in CI |
 
 ## Reporting a problem

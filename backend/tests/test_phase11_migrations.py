@@ -64,6 +64,7 @@ def test_a_phase_10_database_is_upgraded_with_its_data_intact(tmp_path):
         entries[(plan, "max_exports_per_month")][1] is None for plan in ("free", "basic", "pro")
     )  # and unlimited: no invented policy
     assert rows(url, "PRAGMA foreign_key_check") == []
+    command.upgrade(alembic_config(url), "head")
     command.check(alembic_config(url))
 
 

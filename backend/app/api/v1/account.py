@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import Ctx, OwnerCtx, feature_flag
+from app.api.deps import Ctx, feature_flag
 from app.core.config import get_settings
 from app.db.session import get_session, write_transaction
 from app.schemas.operations import (
@@ -96,7 +96,7 @@ def health(ctx: Ctx, session: ReadSession) -> HealthOut:
     summary="Sales, stock, customers, purchases, profit and offers in one view",
 )
 def analytics(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -108,7 +108,7 @@ def analytics(
 
 @router.get("/audit-log", response_model=AuditListOut, summary="Who did what in this shop (owner only)")
 def audit_log(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     entity_type: Annotated[str | None, Query(max_length=50)] = None,
     limit: Limit = 50,

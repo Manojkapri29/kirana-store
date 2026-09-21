@@ -1,11 +1,13 @@
 """SQLAlchemy models. Importing this package registers every table on `Base.metadata`,
 which Alembic uses to compare the models with the database."""
 
+from app.models.access import Account, AuthSession, Invitation, Role, RolePermission
 from app.models.ai import AiAction, AiUsage
 from app.models.base import Base
 from app.models.catalog import Category, Product, Unit
 from app.models.expenses import Expense, ExpenseCategory
 from app.models.inventory import InventoryTransaction
+from app.models.jobs import BackgroundJob
 from app.models.khata import CustomerLedgerEntry
 from app.models.notifications import NotificationDelivery, NotificationEvent, NotificationPreference
 from app.models.operations import (
@@ -26,6 +28,12 @@ from app.models.subscription import Plan, PlanFeature, ShopSubscription, Subscri
 from app.models.system import AuditLog, DocumentSequence, IdempotencyKey
 
 __all__ = [
+    "Account",
+    "AuthSession",
+    "BackgroundJob",
+    "Invitation",
+    "Role",
+    "RolePermission",
     "AdminAuditLog",
     "BackupRecord",
     "NotificationDelivery",

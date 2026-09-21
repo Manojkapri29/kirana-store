@@ -16,6 +16,7 @@ from app.models import Base
 from tests.conftest import alembic_config, sqlite_url
 
 EXPECTED_TABLES = {
+    "accounts", "auth_sessions", "background_jobs", "invitations", "role_permissions", "roles",
     "admin_audit_logs", "ai_actions", "ai_usage", "audit_log", "backup_records", "business_types", "categories", "customer_ledger", "customers", "document_sequences",
     "expense_categories", "expenses", "idempotency_keys", "inventory_transactions", "notification_deliveries", "notification_events", "notification_preferences", "products", "restore_records", "support_access_grants", "system_admins", "system_events",
     "plan_features", "plans", "price_observations", "product_images", "promotions", "purchase_items", "purchase_return_items", "purchase_returns", "purchases", "quick_sales",
@@ -23,7 +24,7 @@ EXPECTED_TABLES = {
     "subscription_usage", "suppliers", "units", "users",
 }  # fmt: skip
 
-HEAD = "0014"  # the newest revision: the one place to change when a migration is added
+HEAD = "0015"  # the newest revision: the one place to change when a migration is added
 
 MIGRATION_FILES = sorted((BACKEND_DIR / "migrations" / "versions").glob("*.py"))
 

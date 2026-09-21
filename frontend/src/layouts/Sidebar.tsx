@@ -6,6 +6,7 @@ import { NavLink } from 'react-router-dom'
 
 import { getShop } from '@/api/catalog'
 import { NAV_ITEMS } from '@/app/navigation'
+import { useCan } from '@/features/auth/authContext'
 
 interface SidebarProps {
   open: boolean
@@ -14,6 +15,7 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { t } = useTranslation()
+  const can = useCan()
   // The business's own name, so the app never presents itself as belonging to one kind of shop.
   const shop = useQuery({ queryKey: ['shop'], queryFn: getShop })
 
@@ -65,7 +67,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         <nav aria-label={t('layout.mainNavigation')} className="flex-1 overflow-y-auto px-3 py-2">
           <ul className="space-y-1">
-            {NAV_ITEMS.map(({ id, path, icon: Icon, labelKey }) => (
+            {NAV_ITEMS.filter((item) => !item.permission || can(item.permission)).map(({ id, path, icon: Icon, labelKey }) => (
               <li key={id}>
                 <NavLink
                   to={path}

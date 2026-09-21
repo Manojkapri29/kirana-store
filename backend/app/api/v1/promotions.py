@@ -12,7 +12,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import Ctx, OwnerCtx
+from app.api.deps import Ctx
 from app.api.idempotency import IdempotencyHeader, run_idempotent
 from app.db.session import get_session, write_transaction
 from app.models.enums import PromotionStatus, PromotionType
@@ -60,7 +60,7 @@ def list_promotions(
 
 @router.post("", response_model=PromotionOut, status_code=201)
 def create_promotion(
-    payload: PromotionCreate, ctx: OwnerCtx, idempotency_key: IdempotencyHeader = None
+    payload: PromotionCreate, ctx: Ctx, idempotency_key: IdempotencyHeader = None
 ) -> PromotionOut:
     """Create an offer as a draft. It applies to nothing until it is activated."""
     values = payload.model_dump(exclude_none=True)
@@ -101,7 +101,7 @@ def get_promotion(promotion_id: int, ctx: Ctx, session: ReadSession) -> Promotio
 
 
 @router.patch("/{promotion_id}", response_model=PromotionOut)
-def update_promotion(promotion_id: int, payload: PromotionUpdate, ctx: OwnerCtx) -> PromotionOut:
+def update_promotion(promotion_id: int, payload: PromotionUpdate, ctx: Ctx) -> PromotionOut:
     """Change an offer. Its kind and scope are fixed. Sales that already used it are not affected."""
     with write_transaction() as session:
         changes = payload.model_dump(exclude_unset=True)
@@ -109,7 +109,7 @@ def update_promotion(promotion_id: int, payload: PromotionUpdate, ctx: OwnerCtx)
 
 
 @router.post("/{promotion_id}/activate", response_model=PromotionOut)
-def activate(promotion_id: int, ctx: OwnerCtx) -> PromotionOut:
+def activate(promotion_id: int, ctx: Ctx) -> PromotionOut:
     with write_transaction() as session:
         return PromotionOut.from_view(
             promotion_service.set_status(session, ctx, promotion_id, PromotionStatus.ACTIVE)
@@ -117,7 +117,7 @@ def activate(promotion_id: int, ctx: OwnerCtx) -> PromotionOut:
 
 
 @router.post("/{promotion_id}/pause", response_model=PromotionOut)
-def pause(promotion_id: int, ctx: OwnerCtx) -> PromotionOut:
+def pause(promotion_id: int, ctx: Ctx) -> PromotionOut:
     with write_transaction() as session:
         return PromotionOut.from_view(
             promotion_service.set_status(session, ctx, promotion_id, PromotionStatus.PAUSED)
@@ -125,7 +125,7 @@ def pause(promotion_id: int, ctx: OwnerCtx) -> PromotionOut:
 
 
 @router.post("/{promotion_id}/expire", response_model=PromotionOut)
-def expire(promotion_id: int, ctx: OwnerCtx) -> PromotionOut:
+def expire(promotion_id: int, ctx: Ctx) -> PromotionOut:
     """End an offer for good. It cannot be reactivated; make a new one."""
     with write_transaction() as session:
         return PromotionOut.from_view(

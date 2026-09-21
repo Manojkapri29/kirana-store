@@ -38,6 +38,7 @@ from app.services import (
     ai_format as fmt,
 )
 from app.services import (
+    authorization_service,
     entitlement_service,
     inventory_service,
     promotion_service,
@@ -352,10 +353,19 @@ def _view(session: Session, ctx: RequestContext, action: AiAction) -> ActionView
 # --- Life cycle --------------------------------------------------------------------------------------------
 
 
+# What the person must hold for the action the assistant proposes: it can never do what they could not do themselves.
+ACTION_PERMISSION = {
+    AiActionKind.PURCHASE_DRAFT: "PURCHASE_CREATE",
+    AiActionKind.STOCK_ADJUSTMENT: "INVENTORY_ADJUST",
+    AiActionKind.PROMOTION_DRAFT: "PROMOTION_CREATE",
+}
+
+
 def propose(
     session: Session, ctx: RequestContext, *, kind: AiActionKind, feature: str, payload: dict[str, Any]
 ) -> ActionView:
     """Record what the AI proposes. Nothing happens to the shop's data."""
+    authorization_service.require(ctx, ACTION_PERMISSION[kind])
     entitlement_service.require_feature(session, ctx.shop_id, _NEEDS_FEATURE[kind])
     if feature not in FEATURES:
         raise InvalidInputError("Unknown assistant feature.", field="feature")
@@ -465,6 +475,7 @@ def cancel(session: Session, ctx: RequestContext, action_id: int) -> ActionView:
 def confirm(session: Session, ctx: RequestContext, action_id: int) -> ActionView:
     """Do what the person confirmed, through the existing service, then check the result. All or nothing."""
     action = _get(session, ctx.shop_id, action_id, lock=True)
+    authorization_service.require(ctx, "AI_ACTION_CONFIRM", ACTION_PERMISSION[action.kind])
     _open(action)
     preview = preview_of(session, ctx, action.kind, action.current)
     if not preview["can_confirm"]:

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core import diagnostics, observability
+from app.core import diagnostics, metrics, observability
 from app.db.types import utc_now
 from app.models import SystemEvent
 from app.models.enums import EventSeverity
@@ -48,6 +48,7 @@ def record(
             "application", "could not record a system event", level=logging.WARNING, source=source
         )
         return
+    metrics.record_system_event(category, severity.value)
     level = logging.ERROR if severity is EventSeverity.ERROR else logging.WARNING
     observability.log_event(category, message, level=level, source=source, code=code, shop_id=shop_id)
 

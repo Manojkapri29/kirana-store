@@ -20,9 +20,10 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 | ✔ | **PostgreSQL checkpoint** (after the inventory views phase) | Planned |
 | 11 | Production hardening, SaaS operations, notifications, backup/restore, analytics | Done, awaiting review |
 | — | Expenses (was Phase 11) | Deferred, not scheduled |
-| 12 | Dashboard | Planned |
+| 12 | Multi-user staff, roles and permissions, sign-in, deployment, monitoring (this replaced the old Dashboard/Authentication slots) | Done, awaiting review |
+| — | Dashboard (was Phase 12) | Partly delivered (real dashboard and Insights arrived in Phase 11); charts deferred |
 | 13 | Reports | Planned |
-| 14 | Authentication | Planned |
+| — | Authentication (was Phase 14) | Done in Phase 12 |
 | 15 | Testing, validation and PostgreSQL gate | Planned |
 | 16 | Deployment preparation | Planned |
 
@@ -242,17 +243,25 @@ database with its data intact.
 store and order lifecycle (the application has none), payments and billing, cloud backup storage, real email/SMS/WhatsApp/push
 providers, a metrics endpoint, PostgreSQL itself (an audit and a checklist only), and expenses.
 
-### Phase 12: Dashboard
-KPI cards and charts (Recharts), with sales trends split by mode and stock caveats.
-**Done when:** dashboard numbers match a hand-calculated dataset.
+### Phase 12: Multi-user staff, RBAC, sign-in, deployment, monitoring
+Turns the single-owner application into a secure multi-user one, and prepares it to run for real. Details in `AUTHENTICATION.md`, `RBAC.md`,
+`STAFF_MANAGEMENT.md`, `PRODUCTION_DEPLOYMENT.md`, `MONITORING.md` and `BACKGROUND_JOBS.md`.
+
+* **Sign-in and sessions** (there was none): Argon2id, HttpOnly cookie sessions stored as hashes, CSRF, expiry, throttling and pause, change password, operator CLI.
+* **Memberships and roles**: `accounts` + `users` (the membership), six system roles, custom roles, ~50 permissions, one route-rule table, no escalation, multi-shop choice.
+* **Staff management**: invitations by one-time link (nothing is sent), staff and roles screens, suspend/remove, audit of every change.
+* **AI and exports** follow permissions (tool-level filtering, confirmation permission).
+* **Deployment**: Dockerfiles, nginx, compose, guide (unverified images: no Docker was available). **Monitoring**: Prometheus-format metrics, optional. **Jobs**: a database-backed queue and worker.
+
+**Done when:** every route is tested against every role, cross-shop and manipulated-id attempts fail, suspended/removed members lose access at once, invitations work once,
+and migration 0015 upgrades a Phase 11 database with its data intact.
+*Not in this phase:* email/SMS delivery (invitations are handed over as links), self-service password reset, MFA/SSO, ownership transfer, the online store and its order
+permissions in use, payments, and PostgreSQL itself.
 
 ### Phase 13: Reports
 Sales and purchase reports (daily, weekly, monthly, custom range; Detailed/Quick/Combined),
 inventory, product performance (detailed sales only), and the profit estimate under the profit rules.
 
-### Phase 14: Authentication
-Registration, login, token refresh, roles, and real shop scoping replacing the development context.
-**Done when:** one shop can never read or write another shop's data.
 
 ### Phase 15: Testing, validation and PostgreSQL gate
 Invariant and reconciliation tests over random transaction sequences, Hindi and mobile review,

@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 
 import { App } from '@/app/App'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { AuthProvider } from '@/features/auth/AuthProvider'
 import { MUTATIONS_RETRY, queryRetryDelay, shouldRetryQuery } from '@/lib/retryPolicy'
 import '@/i18n'
 
@@ -23,7 +24,9 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
         <BrowserRouter>
-          <App />
+          <AuthProvider>
+            <App />
+          </AuthProvider>
         </BrowserRouter>
       </ErrorBoundary>
     </QueryClientProvider>

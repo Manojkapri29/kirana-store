@@ -41,6 +41,7 @@ from app.services import ai_format as fmt
 from app.services import (
     ai_planner,
     ai_usage_service,
+    authorization_service,
     entitlement_service,
     image_validation,
     inventory_service,
@@ -55,6 +56,8 @@ from app.services.shop_service import get_shop, shop_today
 
 FEATURE = "ai_documents"
 KINDS = ("invoice", "stock_list")
+# Reading a document leads to a purchase or a stock adjustment, so it needs what those need.
+KIND_PERMISSION = {"invoice": "PURCHASE_CREATE", "stock_list": "INVENTORY_ADJUST"}
 MAX_ROWS = 200
 NOT_CONFIGURED_TEXT = "Document analysis is not configured yet."
 MATCHED = "MATCHED"
@@ -186,6 +189,7 @@ def extract(
     first."""
     if kind not in KINDS:
         raise InvalidInputError("Choose a document type: invoice or stock list.", field="kind")
+    authorization_service.require(ctx, KIND_PERMISSION[kind])
     entitlement_service.require_feature(session, ctx.shop_id, FEATURE)
     settings = settings or get_settings()
     data = image_validation.decode_base64(image_base64, max_bytes=settings.image_max_bytes)
@@ -322,6 +326,7 @@ def match_rows(
     edits; either way they are validated the same way and nothing is trusted."""
     if kind not in KINDS:
         raise InvalidInputError("Choose a document type: invoice or stock list.", field="kind")
+    authorization_service.require(ctx, KIND_PERMISSION[kind])
     entitlement_service.require_feature(session, ctx.shop_id, FEATURE)
     if len(rows) > MAX_ROWS:
         raise InvalidInputError(f"At most {MAX_ROWS} lines can be checked at once.", field="rows")

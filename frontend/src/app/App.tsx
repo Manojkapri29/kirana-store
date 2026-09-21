@@ -11,6 +11,11 @@ import { ProductsPage } from '@/features/products/ProductsPage'
 import { PromotionDetailPage } from '@/features/promotions/PromotionDetailPage'
 import { PromotionFormPage } from '@/features/promotions/PromotionFormPage'
 import { PromotionsPage } from '@/features/promotions/PromotionsPage'
+import { AcceptInvitationPage } from '@/features/auth/AcceptInvitationPage'
+import { AuthGate } from '@/features/auth/AuthGate'
+import { ChangePasswordPage } from '@/features/auth/ChangePasswordPage'
+import { RolesPage } from '@/features/staff/RolesPage'
+import { StaffPage } from '@/features/staff/StaffPage'
 import { AdminConsolePage } from '@/features/admin/AdminConsolePage'
 import { InsightsPage } from '@/features/insights/InsightsPage'
 import { NotificationsPage } from '@/features/notifications/NotificationsPage'
@@ -44,7 +49,14 @@ import { NAV_ITEMS } from './navigation'
 export function App() {
   return (
     <Routes>
-      <Route element={<AppLayout />}>
+      <Route path="accept-invitation" element={<AcceptInvitationPage />} />
+      <Route
+        element={
+          <AuthGate>
+            <AppLayout />
+          </AuthGate>
+        }
+      >
         <Route index element={<DashboardPage />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="products/new" element={<ProductFormPage mode="create" />} />
@@ -86,6 +98,9 @@ export function App() {
         <Route path="suppliers/:id/edit" element={<SupplierFormPage mode="edit" />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="staff" element={<StaffPage />} />
+        <Route path="staff/roles" element={<RolesPage />} />
+        <Route path="account/password" element={<ChangePasswordPage />} />
         <Route path="insights" element={<InsightsPage />} />
         <Route path="admin" element={<AdminConsolePage />} />
         {/* Modules that are not built yet render a placeholder. Each phase swaps in the real page. */}

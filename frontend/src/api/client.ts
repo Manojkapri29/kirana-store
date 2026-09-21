@@ -171,6 +171,23 @@ export interface SendOptions {
   idempotencyKey?: string
 }
 
+/** Fired when the server says the session is no longer valid, so the app can ask the person to sign in again in place. */
+export const UNAUTHORIZED_EVENT = 'kirana:unauthorized'
+/** Fired after each API call, so the app can tell how long the person has been idle (for the session-expiry warning). */
+export const ACTIVITY_EVENT = 'kirana:activity'
+const CSRF_COOKIE = 'kirana_csrf'
+const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+/** The CSRF token the server put in a cookie the app can read. It is sent back in a header on every change. */
+function csrfToken(): string | null {
+  try {
+    const found = document.cookie.split('; ').find((entry) => entry.startsWith(`${CSRF_COOKIE}=`))
+    return found ? decodeURIComponent(found.slice(CSRF_COOKIE.length + 1)) : null
+  } catch {
+    return null
+  }
+}
+
 /** One fetch with a timeout. Turns a lost connection or a timeout into an `ApiError` the screens can explain. */
 async function request(path: string, init: RequestInit, options: SendOptions = {}): Promise<Response> {
   const controller = new AbortController()
@@ -182,7 +199,18 @@ async function request(path: string, init: RequestInit, options: SendOptions = {
   try {
     const headers = new Headers(init.headers)
     if (options.idempotencyKey) headers.set('Idempotency-Key', options.idempotencyKey)
-    return await fetch(path, { ...init, headers, signal: controller.signal })
+    const method = (init.method ?? 'GET').toUpperCase()
+    const token = UNSAFE.has(method) ? csrfToken() : null
+    if (token && !headers.has('X-CSRF-Token')) headers.set('X-CSRF-Token', token)
+    // Same-origin in development (the Vite proxy) and behind a reverse proxy; an API on another origin needs "include".
+    const response = await fetch(path, { ...init, headers, signal: controller.signal, credentials: BASE_URL ? 'include' : 'same-origin' })
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(ACTIVITY_EVENT))
+      if (response.status === 401 && !path.includes('/auth/')) {
+        window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+      }
+    }
+    return response
   } catch {
     if (timedOut) {
       throw new ApiError('This is taking longer than expected.', 0, {}, {}, { category: 'timeout', retryable: true })

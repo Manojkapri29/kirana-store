@@ -39,6 +39,7 @@ from app.schemas.admin import (
 )
 from app.services import (
     admin_service,
+    background_job_service,
     backup_service,
     restore_service,
     system_event_service,
@@ -218,6 +219,22 @@ def system_health(
     _: Annotated[AdminIdentity, Depends(admin_permission("system.health"))], session: ReadSession
 ) -> dict:
     return system_health_service.detail(session)
+
+
+@router.get("/system/jobs", summary="Recent background jobs (a worker must be running for them to be done)")
+def jobs(
+    _: Annotated[AdminIdentity, Depends(admin_permission("system.health"))],
+    session: ReadSession,
+    limit: Limit = 30,
+) -> list[dict]:
+    return [
+        {
+            "id": j.id, "type": j.job_type, "status": j.status.value, "attempts": j.attempts, "max_attempts": j.max_attempts,
+            "created_at": j.created_at, "started_at": j.started_at, "completed_at": j.completed_at,
+            "error_code": j.error_code, "error_message": j.error_message,
+        }
+        for j in background_job_service.list_jobs(session, limit=limit)
+    ]  # fmt: skip
 
 
 @router.get("/system/overview", summary="Shops by state and recent platform events")

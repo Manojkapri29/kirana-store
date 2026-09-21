@@ -57,12 +57,12 @@ export function ProductsPage() {
         actions={
           <>
             {allows('image_intelligence') !== false && (
-              <LinkButton to="/products/from-photo" variant="secondary">
+              <LinkButton to="/products/from-photo" requires="PRODUCT_CREATE" variant="secondary">
                 <Camera aria-hidden="true" className="size-5" />
                 {t('photo.addFromPhoto')}
               </LinkButton>
             )}
-            <LinkButton to="/products/new">
+            <LinkButton to="/products/new" requires="PRODUCT_CREATE">
               <Plus aria-hidden="true" className="size-5" />
               {t('products.add')}
             </LinkButton>
@@ -113,7 +113,7 @@ export function ProductsPage() {
           hint={isFiltering ? undefined : t('products.emptyHint')}
           action={
             !isFiltering && (
-              <LinkButton to="/products/new">
+              <LinkButton to="/products/new" requires="PRODUCT_CREATE">
                 <Plus aria-hidden="true" className="size-5" />
                 {t('products.add')}
               </LinkButton>

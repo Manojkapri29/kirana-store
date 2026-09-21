@@ -55,7 +55,7 @@ export function PurchasesPage() {
   const data = purchases.data
   const isFiltering = q !== '' || supplierId !== '' || status !== '' || dateFrom !== '' || dateTo !== ''
   const addButton = (
-    <LinkButton to="/purchases/new">
+    <LinkButton to="/purchases/new" requires="PURCHASE_CREATE">
       <Plus aria-hidden="true" className="size-5" />
       {t('purchases.add')}
     </LinkButton>

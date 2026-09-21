@@ -93,9 +93,8 @@ commit -> response built from the same transaction. A `DomainError` rolls everyt
 404 (not found, also for another shop's data), 409 (conflict, e.g. duplicate SKU) or 422 (rule broken),
 with the offending field named so a form can show the message next to it.
 
-**Current shop and user:** `api/deps.py` resolves them through `context_service`. Until Phase 14 that is
-the seeded development owner; in production it answers 503 so a deployment cannot run without login.
-Phase 14 replaces that one function.
+**Current shop and user (since Phase 12):** `api/deps.py` resolves them from the signed-in session on the server: session token -> membership -> shop, role -> permissions. (Before Phase 12 this was
+the seeded development owner; that shortcut survives only as `KIRANA_DEV_AUTH_BYPASS`, off by default and refused in production.)
 
 ## Business types: a generic core with optional defaults
 
@@ -220,9 +219,8 @@ Not built in the MVP, but the foundations are laid now because they are expensiv
 - Every business table carries `shop_id`, and **references between shop-owned tables are composite foreign
   keys `(shop_id, x_id)`**. The database refuses a row in Shop A that points at a row in Shop B, so isolation
   does not depend on every query remembering a `WHERE shop_id = ...`. Queries must still filter by shop.
-- The service layer will receive the current shop from a single dependency. Until authentication (Phase 14)
-  it is a fixed development shop, added in Phase 3 together with the first routes that need it.
-- Users belong to a shop and have a role (owner/staff).
+- The service layer receives the current shop from a single dependency, which reads it from the signed-in session (Phase 12).
+- A person (`accounts`) belongs to shops through memberships (`users`), each with a role and a status.
 - No shop data in global state, files or caches without a shop key.
 - Later: PostgreSQL Row-Level Security as defence in depth, subscription plans and usage limits, an admin
   panel, WhatsApp notifications, scheduled reports and cloud backup.
@@ -470,4 +468,17 @@ so they cannot be reported. Seasonal analysis and server-side conversation memor
 * **Cross-cutting core modules**: `core/observability` (logging, request id), `core/ratelimit` (sliding window),
   `core/schema_state` (migration head vs database), `core/config` (`production_problems()`).
 * **Operator tools** (not HTTP): `python -m app.backup_cli`, `app.admin_cli`, `app.integrity_cli`.
+
+## Phase 12 additions: people, permissions, operations
+
+* **Request path.** middleware (request id, access log, security headers, metrics) -> `get_principal` (session cookie or Bearer token, CSRF check on
+  changes, idle/absolute expiry) -> `get_request_context` (membership -> shop, role -> permissions; refused if the membership is not active) ->
+  `_context_for_request` (**the one permission check**, from the `ROUTE_RULES` table; a route with no rule is refused) -> account-state restriction ->
+  the router's own dependencies (feature flag, rate limit, metering) -> service.
+* **New modules.** `core/permissions.py` (catalogue, default roles, route rules), `services/password_service`, `auth_service`, `authorization_service`,
+  `invitation_service`, `staff_service`, `background_job_service`, `core/metrics.py`, `api/v1/auth.py`, `staff.py`, `api/routes/metrics.py`; tools
+  `app/account_cli.py` and `app/worker.py`. Layering is unchanged: routers call services; services never commit or import `fastapi`.
+* **What did not change.** Inventory writes still only through `inventory_service`, khata only through `khata_service`; every shop table still points at
+  `users(shop_id, id)`; posted documents are still never deleted. `users` became the membership instead of being replaced (see `STAFF_MANAGEMENT.md`).
+* **Deployment.** `PRODUCTION_DEPLOYMENT.md`; the frontend is served by nginx which also forwards `/api`, so the browser sees one origin.
 

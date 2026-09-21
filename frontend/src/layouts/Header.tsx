@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { BackendStatusBadge } from '@/components/BackendStatusBadge'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { NotificationBell } from '@/components/NotificationBell'
+import { UserMenu } from '@/features/auth/UserMenu'
 
 interface HeaderProps {
   onMenuClick: () => void
@@ -30,6 +31,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         <BackendStatusBadge />
         <NotificationBell />
         <LanguageSwitcher />
+        <UserMenu />
       </div>
     </header>
   )

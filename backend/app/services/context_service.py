@@ -1,7 +1,7 @@
 """Resolves the current shop and user for a request.
 
-Until authentication exists (Phase 14) this is the development user created by `python -m app.seed`.
-Phase 14 replaces this one function with a lookup from the logged-in user; nothing else changes.
+The real context comes from the signed-in session (`api/deps.get_request_context`). This is the development
+shortcut (`KIRANA_DEV_AUTH_BYPASS`): the user created by `python -m app.seed`.
 """
 
 from sqlalchemy import select

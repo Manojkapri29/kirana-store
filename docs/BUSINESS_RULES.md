@@ -702,3 +702,19 @@ need business logic in services, which arrive in later phases.
 * **OP10. Rate limits and retries.** Limits return 429 with `Retry-After`. A financial, inventory or order write is repeated only
   with its idempotency key.
 
+## AC. Access control (Phase 12, implemented)
+
+* **AC1. The server decides.** Who a request acts for comes only from the session; a `shop_id` from the client is never trusted. Every route needs a
+  permission (one table); a route without a rule is refused.
+* **AC2. Membership.** A person's standing in a shop is ACTIVE, SUSPENDED, INVITED or REMOVED. A membership is never deleted; history keeps naming the person.
+  Suspending or removing ends their sessions at once.
+* **AC3. No escalation.** Nobody gives a permission they lack, changes their own access, or manages someone who holds more than they do. A custom role never
+  holds an owner-only permission. A shop always keeps an active owner.
+* **AC4. Invitations** are random, expire, work once and are stored only as a hash; nothing is sent unless a delivery channel exists.
+* **AC5. AI never widens access.** Every assistant tool needs the permission of the data it reads; confirming an action needs `AI_ACTION_CONFIRM` and the
+  permission of what it does.
+* **AC6. Exports** need the permission to see the data and the permission to download it, are shop-scoped and are audited.
+* **AC7. Sign-in.** Passwords are Argon2id hashes; a wrong email and a wrong password look the same; repeated failures pause the account; sessions expire when idle
+  and at an absolute limit; changing a password ends the other sessions.
+* **AC8. Jobs** are idempotent or they do not belong on the queue.
+

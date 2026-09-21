@@ -1,6 +1,6 @@
 """Identity of the development shop and user created by `python -m app.seed`.
 
-Until authentication exists (Phase 14) every request acts as this user, in this shop.
+Only when KIRANA_DEV_AUTH_BYPASS is on (never in production) does a request act as this user.
 """
 
 DEV_SHOP_NAME = "Development Shop"

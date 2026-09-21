@@ -32,7 +32,7 @@ export function SuppliersPage() {
   const data = suppliers.data
   const isFiltering = q !== '' || status !== 'active'
   const addButton = (
-    <LinkButton to="/suppliers/new">
+    <LinkButton to="/suppliers/new" requires="SUPPLIER_CREATE">
       <Plus aria-hidden="true" className="size-5" />
       {t('suppliers.add')}
     </LinkButton>

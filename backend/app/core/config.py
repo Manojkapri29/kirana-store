@@ -44,7 +44,7 @@ class Settings(BaseSettings):
 
     # The browser address of the frontend (used for links and to check CORS in production).
     frontend_url: str | None = None
-    # Signs sessions and tokens once login exists (Phase 14). Required in production; never logged or shown.
+    # Required in production; never logged or shown. (Session tokens are random and stored hashed; this key is kept for signing.)
     secret_key: SecretStr | None = None
 
     # --- Rate limiting (per shop, or per client address where there is no shop). "calls per window". ---
@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     rate_limit_export: int = Field(default=20, ge=1)
     rate_limit_admin: int = Field(default=60, ge=1)  # internal administration
     rate_limit_admin_auth_failures: int = Field(default=10, ge=1)  # bad admin tokens per window per address
-    # Reserved for login and the public storefront, which do not exist yet (Phase 14 / online ordering).
+    # Sign-in attempts per window, per client address and per email (the public storefront does not exist yet).
     rate_limit_auth: int = Field(default=10, ge=1)
     rate_limit_public: int = Field(default=60, ge=1)
 
@@ -188,6 +188,38 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.environment == "production"
 
+    # --- Sign-in and sessions ---
+    # A session ends after this long without use, and at the latest after the absolute limit, whatever the activity.
+    session_idle_minutes: int = Field(default=60, ge=5, le=1440)
+    session_absolute_hours: int = Field(default=12, ge=1, le=168)
+    session_cookie_name: str = "kirana_session"
+    csrf_cookie_name: str = "kirana_csrf"
+    # None = decide from the environment: Secure in production (needs HTTPS), not Secure in development (plain HTTP).
+    session_cookie_secure: bool | None = None
+    session_cookie_samesite: Literal["lax", "strict"] = "lax"
+    # After this many wrong passwords in a row the account is paused for a while (and the attempts are rate limited).
+    login_max_failures: int = Field(default=5, ge=3, le=20)
+    login_lockout_minutes: int = Field(default=15, ge=1, le=1440)
+    password_min_length: int = Field(default=10, ge=8, le=64)
+    # Argon2id cost. The defaults follow the OWNER guidance (19 MiB, 2 passes is the floor); tests lower them for speed.
+    password_hash_time_cost: int = Field(default=3, ge=1, le=10)
+    password_hash_memory_kib: int = Field(default=65536, ge=1024, le=1048576)
+    invitation_expiry_hours: int = Field(default=72, ge=1, le=720)
+    # Behind a reverse proxy the client address is in X-Forwarded-For; trust it only when the proxy sets it.
+    trust_proxy_headers: bool = False
+    # Development shortcut: every request acts as the seeded development owner, with no sign-in. Never in production.
+    dev_auth_bypass: bool = False
+
+    # --- Monitoring and background jobs ---
+    metrics_enabled: bool = False
+    metrics_token: SecretStr | None = None  # required to read /metrics when it is enabled
+    job_max_attempts: int = Field(default=3, ge=1, le=20)
+    job_backoff_seconds: int = Field(default=30, ge=1, le=3600)
+
+    @property
+    def cookie_secure(self) -> bool:
+        return self.is_production if self.session_cookie_secure is None else self.session_cookie_secure
+
     def production_problems(self) -> list[str]:
         """What is wrong with this configuration for a production start. Names only, never values."""
         if not self.is_production:
@@ -211,6 +243,16 @@ class Settings(BaseSettings):
             problems.append("KIRANA_LOG_LEVEL must not be DEBUG")
         if not self.rate_limit_enabled:
             problems.append("KIRANA_RATE_LIMIT_ENABLED must not be false")
+        if self.password_hash_memory_kib < 19456 or self.password_hash_time_cost < 2:
+            problems.append("KIRANA_PASSWORD_HASH_* is below the minimum cost for production")
+        if self.dev_auth_bypass:
+            problems.append("KIRANA_DEV_AUTH_BYPASS must be false")
+        if not self.cookie_secure:
+            problems.append("KIRANA_SESSION_COOKIE_SECURE must not be false")
+        if self.metrics_enabled and (
+            self.metrics_token is None or len(self.metrics_token.get_secret_value()) < 16
+        ):
+            problems.append("KIRANA_METRICS_TOKEN must be set (16+ characters) when metrics are enabled")
         return problems
 
 

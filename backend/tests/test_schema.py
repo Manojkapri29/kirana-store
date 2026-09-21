@@ -19,6 +19,11 @@ GLOBAL_TABLES = {
     "system_events",
     "backup_records",
     "restore_records",
+    "accounts",
+    "roles",
+    "role_permissions",
+    "auth_sessions",
+    "background_jobs",
 }  # not owned by a shop
 INSERT_ONLY_TABLES = ["inventory_transactions", "customer_ledger", "audit_log"]
 POSTGRES_IDENTIFIER_LIMIT = 63

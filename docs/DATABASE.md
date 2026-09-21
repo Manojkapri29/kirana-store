@@ -76,7 +76,7 @@ Global tables: `shops` (the tenants) and `units` (shared reference data).
   `allow_negative_stock` (default false), `mrp_validation_mode` (`WARN`/`BLOCK`).
   `mrp_validation_mode` has no database default so the default for new shops (Phase 3) can be chosen without a migration.
 - **`users`**: shop, email (globally unique, stored lower-case, enforced by `CHECK`), phone?, password_hash,
-  full_name, role (`OWNER`/`STAFF`), is_active. Login is built in Phase 14.
+  full_name, role (`OWNER`/`STAFF`), is_active. Since Phase 12 a row is the person's *membership* of the shop (see Migration 0015).
 
 ### Catalogue
 - **`units`**: code (unique), name, allows_decimal. Shared by every business type. Seeded by the migrations: pcs, kg,
@@ -428,4 +428,20 @@ One additive migration (tested up, down and up again; a Phase 10 database keeps 
 
 Indexes were **not** added: the hot paths were checked with `EXPLAIN QUERY PLAN` (see `PRODUCTION.md`) and already use existing
 indexes. `docs/POSTGRES_MIGRATION_CHECKLIST.md` lists what changes when PostgreSQL replaces SQLite.
+
+## Migration 0015 (Phase 12)
+
+Additive, offline-renderable SQL for the data steps, tested up, down and up again and on a Phase 11 database with data:
+
+| Change | Detail |
+|---|---|
+| `accounts` | one sign-in identity per email: Argon2id hash, status, failed-login count, pause time, last login |
+| `users` (now the membership) | + `account_id`, `role_id`, `status` (`INVITED/ACTIVE/SUSPENDED/REMOVED`), `invited_by`, `joined_at`, `removed_at`, `last_active_at`; the global unique email became `UNIQUE (shop_id, email)` and `UNIQUE (account_id, shop_id)`, so one person can belong to several shops |
+| `roles`, `role_permissions` | system roles are global rows (`shop_id` NULL, unique code); custom roles belong to a shop; six system roles are seeded with their default permissions |
+| `invitations` | token **hash** only; status; expiry; composite FK to the inviter |
+| `auth_sessions` | token hash, CSRF hash, account, chosen membership, idle and absolute times, revocation |
+| `background_jobs` | the job queue: type, idempotency key (unique per type), status, attempts, next run, safe error |
+
+Every existing user becomes an account and a membership (OWNER stays OWNER; STAFF becomes CASHIER; an inactive user becomes SUSPENDED). Nothing is deleted.
+Downgrade removes the new structures and is **refused while one email belongs to more than one shop**. No new indexes beyond those the queries use.
 

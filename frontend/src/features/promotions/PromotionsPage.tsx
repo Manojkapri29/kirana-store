@@ -48,7 +48,7 @@ export function PromotionsPage() {
     setOffset(0)
   }
   const addButton = (
-    <LinkButton to="/promotions/new">
+    <LinkButton to="/promotions/new" requires="PROMOTION_CREATE">
       <Plus aria-hidden="true" className="size-5" />
       {t('promotions.add')}
     </LinkButton>

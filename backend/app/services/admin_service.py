@@ -7,7 +7,7 @@ account status needs a time-limited, reasoned support grant that a SUPER_ADMIN c
 counts and health, not rows of business data.
 
 Identity today is a per-administrator secret token (`X-Admin-Token`) that is shown once when created and stored only as a
-SHA-256 hash. Shop login does not exist yet (Phase 14); when it does, administrators move to it without changing anything else
+SHA-256 hash. Administrators stay separate from shop sign-in (their own token, permissions and audit log)
 here.
 """
 

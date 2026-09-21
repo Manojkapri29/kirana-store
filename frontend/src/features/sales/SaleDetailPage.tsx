@@ -104,11 +104,11 @@ export function SaleDetailPage() {
                 <Pencil aria-hidden="true" className="size-5" />
                 {t('common.edit')}
               </LinkButton>
-              <Button disabled={s.items.length === 0} onClick={() => setPanel(panel === 'post' ? null : 'post')}>
+              <Button requires="SALE_POST" disabled={s.items.length === 0} onClick={() => setPanel(panel === 'post' ? null : 'post')}>
                 <CircleCheck aria-hidden="true" className="size-5" />
                 {t('sales.detail.post')}
               </Button>
-              <Button variant="danger" onClick={() => setPanel(panel === 'void' ? null : 'void')}>
+              <Button requires="SALE_VOID" variant="danger" onClick={() => setPanel(panel === 'void' ? null : 'void')}>
                 <Ban aria-hidden="true" className="size-5" />
                 {t('sales.detail.discard')}
               </Button>
@@ -121,13 +121,13 @@ export function SaleDetailPage() {
             </LinkButton>
           )}
           {s.status === 'POSTED' && (
-            <Button variant="danger" onClick={() => setPanel(panel === 'void' ? null : 'void')}>
+            <Button requires="SALE_VOID" variant="danger" onClick={() => setPanel(panel === 'void' ? null : 'void')}>
               <Ban aria-hidden="true" className="size-5" />
               {t('sales.detail.void')}
             </Button>
           )}
           {s.status === 'VOID' && s.invoice_no && !s.replaced_by_id && (
-            <Button loading={correct.isPending} onClick={() => correct.mutate()}>
+            <Button requires="SALE_VOID" loading={correct.isPending} onClick={() => correct.mutate()}>
               <Copy aria-hidden="true" className="size-5" />
               {t('sales.detail.correct')}
             </Button>

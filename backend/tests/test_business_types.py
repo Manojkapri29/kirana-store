@@ -395,6 +395,7 @@ class TestNoBusinessSpecificCodeInTheCore:
         )
 
         assert readers == [
+            "account_cli.py",  # the operator tool that sets up a shop and its first owner
             "api/v1/reference.py",  # the shop endpoints and the business-type list
             "models/shop.py",  # the column and the reference table
             "schemas/catalog.py",  # their JSON shapes

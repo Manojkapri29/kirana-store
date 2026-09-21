@@ -234,7 +234,7 @@ class TestPaginationConvention:
 class TestOpenApiHasNoSecrets:
     def test_docs_describe_the_api_and_hold_no_configuration_values(self, client_a):
         spec = client_a.get("/openapi.json").text
-        for word in ("secret_key", "api_key=", "sk-", "password", "KIRANA_"):
+        for word in ("secret_key", "api_key=", "sk-", "KIRANA_", "argon2"):
             assert word.lower() not in spec.lower().replace("secret_key_hint", ""), word
 
 

@@ -7,6 +7,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { getBackupStatus, getBusinessHealth, getOverview, getUsage } from '@/api/account'
 import { Alert, Badge, QueryError, Spinner } from '@/components/ui'
 import { localIsoDate } from '@/lib/dates'
+import { useCan } from '@/features/auth/authContext'
 import { formatDateTime, formatMoney } from '@/lib/format'
 
 const today = () => localIsoDate()
@@ -113,6 +114,7 @@ function UsagePanel() {
 
 export function DashboardPage() {
   const { t } = useTranslation()
+  const can = useCan()
   const navigate = useNavigate()
   const [question, setQuestion] = useState('')
   const ask = (event: FormEvent) => {
@@ -147,21 +149,21 @@ export function DashboardPage() {
         </div>
       </form>
 
-      <TodaySummary />
+      {can('REPORT_VIEW') && <TodaySummary />}
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <HealthPanel />
-        <UsagePanel />
+        {can('REPORT_VIEW') && <HealthPanel />}
+        {can('SUBSCRIPTION_VIEW') && <UsagePanel />}
       </section>
 
-      <Alert tone="info">
+      {can('REPORT_VIEW') && <Alert tone="info">
         <p className="text-sm">
           {t('dashboard.moreInInsights')}{' '}
           <Link to="/insights" className="font-medium underline">
             {t('nav.insights')}
           </Link>
         </p>
-      </Alert>
+      </Alert>}
     </div>
   )
 }

@@ -9,13 +9,14 @@ from sqlalchemy.sql import expression
 from app.db.types import UTCDateTime
 from app.models.base import (
     Base,
+    IdType,
     TimestampMixin,
     enum_type,
     id_column,
     not_blank,
     shop_id_column,
 )
-from app.models.enums import AccountStatus, Language, MrpValidationMode, UserRole
+from app.models.enums import AccountStatus, Language, MembershipStatus, MrpValidationMode, UserRole
 
 
 class BusinessType(Base):
@@ -83,11 +84,19 @@ class Shop(TimestampMixin, Base):
 
 
 class User(TimestampMixin, Base):
-    """A person who can log in to one shop. Authentication itself arrives in Phase 14."""
+    """A person's MEMBERSHIP of one shop (see `app/models/access.py`): who they are there, their role, and their status.
+
+    The sign-in identity (email, password) is the `accounts` row this points at, so one person can belong to several
+    shops. Every shop table's `created_by` points here, so history survives a person leaving: membership is REMOVED, never
+    deleted. `role` (OWNER/STAFF) is the coarse legacy label, kept in step with `role_id`, which decides what the person
+    may do."""
 
     __tablename__ = "users"
     __table_args__ = (
-        UniqueConstraint("email"),
+        UniqueConstraint(
+            "shop_id", "email"
+        ),  # a person appears once per shop (the same email may be in several shops)
+        UniqueConstraint("account_id", "shop_id"),
         UniqueConstraint("shop_id", "id"),  # target of tenant foreign keys (created_by)
         not_blank("full_name"),
         # Emails are stored lower-case so uniqueness is case-insensitive without dialect-specific SQL.
@@ -102,4 +111,17 @@ class User(TimestampMixin, Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(200))
     role: Mapped[UserRole] = mapped_column(enum_type(UserRole, "role"), default=UserRole.OWNER)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=expression.true())
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=expression.true()
+    )  # True while status is ACTIVE
+    account_id: Mapped[int | None] = mapped_column(IdType, ForeignKey("accounts.id"))
+    role_id: Mapped[int | None] = mapped_column(IdType, ForeignKey("roles.id"))
+    status: Mapped[MembershipStatus] = mapped_column(
+        enum_type(MembershipStatus, "membership_status"),
+        default=MembershipStatus.ACTIVE,
+        server_default="ACTIVE",
+    )
+    invited_by: Mapped[int | None] = mapped_column(IdType)
+    joined_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    removed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    last_active_at: Mapped[datetime | None] = mapped_column(UTCDateTime)

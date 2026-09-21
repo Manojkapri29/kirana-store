@@ -5,13 +5,19 @@ Every database test runs against a SQLite file that was created by the real Alem
 test session; each test gets its own private copy of the migrated file.
 """
 
+import os
 import shutil
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-import pytest
-from alembic import command
+# Argon2 at its production cost takes ~100 ms a hash; tests hash a lot, so they use the cheapest legal setting.
+# (Set before the application is imported: importing it reads the settings.)
+os.environ.setdefault("KIRANA_PASSWORD_HASH_TIME_COST", "1")
+os.environ.setdefault("KIRANA_PASSWORD_HASH_MEMORY_KIB", "1024")
+
+import pytest  # noqa: E402
+from alembic import command  # noqa: E402
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text, update
@@ -26,7 +32,7 @@ from app.db.engine import create_db_engine
 from app.main import create_app
 from app.models import Category, Shop, User
 from app.models.enums import UserRole
-from tests import factories
+from tests import factories  # noqa: E402
 
 
 def alembic_config(database_url: str) -> Config:
@@ -225,3 +231,65 @@ def give_plan(session_factory: sessionmaker[Session]):
             entitlement_service.assign_plan(new_session, tenant.shop.id, code, **kwargs)
 
     return _give
+
+
+# --- Real sign-in (no dependency override): the application exactly as it runs -------------------------------------------
+
+
+@pytest.fixture
+def real_client(monkeypatch: pytest.MonkeyPatch, session_factory: sessionmaker[Session]):
+    """A factory of API clients that use the real session-cookie authentication. Each client is its own browser."""
+    monkeypatch.setattr(session_module, "get_session_factory", lambda: session_factory)
+    clients: list[TestClient] = []
+
+    def _make() -> TestClient:
+        client = TestClient(create_app())
+        clients.append(client)
+        return client
+
+    yield _make
+    for client in clients:
+        client.close()
+
+
+class SignedIn(TestClient):
+    """A client that has signed in: it sends the CSRF header on its own, like the app does."""
+
+
+@pytest.fixture
+def sign_in(real_client):
+    def _sign_in(
+        email: str, password: str = factories.PASSWORD, shop_user_id: int | None = None
+    ) -> TestClient:
+        client = real_client()
+        response = client.post("/api/v1/auth/login", json={"email": email, "password": password})
+        assert response.status_code == 200, response.text
+        body = response.json()
+        client.headers["X-CSRF-Token"] = body["csrf_token"]
+        if shop_user_id is not None and body["active_user_id"] != shop_user_id:
+            chosen = client.post("/api/v1/auth/select-shop", json={"user_id": shop_user_id})
+            assert chosen.status_code == 200, chosen.text
+        client.session_info = body  # type: ignore[attr-defined]
+        return client
+
+    return _sign_in
+
+
+@pytest.fixture
+def staff_of(session_factory):
+    """Create a member of a shop with a system role and return their email: staff_of(tenant_a, "CASHIER")."""
+
+    def _make(tenant: Tenant, role_code: str, email: str | None = None, status: str = "ACTIVE") -> str:
+        with session_factory() as s, s.begin():
+            account, _ = factories.make_login(s, tenant.shop, role_code, email, status=status)
+            return account.email
+
+    return _make
+
+
+@pytest.fixture
+def owner_login(session_factory, tenant_a: Tenant) -> str:
+    """Tenant A's owner can sign in. Returns the email."""
+    with session_factory() as s, s.begin():
+        user = s.get(User, tenant_a.user.id)
+        return factories.link_owner(s, user).email

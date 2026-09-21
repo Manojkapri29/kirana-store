@@ -3,15 +3,21 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, type LinkProps } from 'react-router-dom'
 
+import { useCan } from '@/features/auth/authContext'
+
 import { buttonClasses, type ButtonVariant } from './buttonStyles'
 import { ErrorNotice } from './ErrorNotice'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
   loading?: boolean
+  /** Hide the button unless the person holds this permission. Only a convenience: the server refuses it anyway. */
+  requires?: string
 }
 
-export function Button({ variant = 'primary', loading = false, disabled, children, ...props }: ButtonProps) {
+export function Button({ variant = 'primary', loading = false, disabled, children, requires, ...props }: ButtonProps) {
+  const can = useCan()
+  if (requires && !can(requires)) return null
   return (
     <button type="button" {...props} disabled={disabled || loading} className={buttonClasses(variant)}>
       {loading && <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />}
@@ -20,7 +26,9 @@ export function Button({ variant = 'primary', loading = false, disabled, childre
   )
 }
 
-export function LinkButton({ variant = 'primary', ...props }: LinkProps & { variant?: ButtonVariant }) {
+export function LinkButton({ variant = 'primary', requires, ...props }: LinkProps & { variant?: ButtonVariant; requires?: string }) {
+  const can = useCan()
+  if (requires && !can(requires)) return null
   return <Link {...props} className={buttonClasses(variant)} />
 }
 

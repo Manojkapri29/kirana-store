@@ -48,7 +48,7 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.example .env
 alembic upgrade head        # creates backend/data/kirana.db (git-ignored)
-python -m app.seed          # optional: development shop + owner user
+python -m app.seed          # development shop + owner; PRINTS the owner's password once
 uvicorn app.main:app --reload
 ```
 
@@ -67,9 +67,9 @@ npm run dev
 In development the Vite dev server forwards `/api` and `/health` to the backend, so the browser
 needs no CORS setup. The header shows a green "Server connected" badge when the backend is reachable.
 
-There is no login yet: until Phase 14 every request acts as the development owner created by
-`python -m app.seed`, so run the seed once. The backend refuses to serve business data in production
-mode without real authentication.
+**Sign in** with `owner@dev.kirana.local` and the password the seed printed (set `KIRANA_DEV_OWNER_PASSWORD`
+before seeding to choose your own; if you lost it, delete nothing: run `python -m app.account_cli set-password
+--email owner@dev.kirana.local`). Every screen needs a sign-in; see [Authentication](docs/AUTHENTICATION.md).
 
 **Try it:** open http://localhost:5173, add a category and a product (with opening stock if you like), then
 look at Inventory and the product page. API documentation for every endpoint is at
@@ -113,10 +113,12 @@ All configuration comes from environment variables; nothing secret is committed.
 - [Architecture](docs/ARCHITECTURE.md): layers, service boundaries, ledgers, SaaS readiness
 - [Database](docs/DATABASE.md): planned schema and SQLite to PostgreSQL strategy
 - [Business rules](docs/BUSINESS_RULES.md): the approved rules every phase must follow
-- [Roadmap](docs/ROADMAP.md): Phases 1 to 16 (Phase 11 is the latest)
+- [Roadmap](docs/ROADMAP.md): Phases 1 to 16 (Phase 12 is the latest)
 - [Production](docs/PRODUCTION.md), [Security](docs/SECURITY.md), [Observability](docs/OBSERVABILITY.md)
 - [Backup and restore](docs/BACKUP_AND_RESTORE.md), [Notifications](docs/NOTIFICATIONS.md), [SaaS administration](docs/SAAS_ADMIN.md)
 - [PostgreSQL migration checklist](docs/POSTGRES_MIGRATION_CHECKLIST.md)
+- [Authentication](docs/AUTHENTICATION.md), [Roles and permissions](docs/RBAC.md), [Staff management](docs/STAFF_MANAGEMENT.md)
+- [Production deployment](docs/PRODUCTION_DEPLOYMENT.md), [Monitoring](docs/MONITORING.md), [Background jobs](docs/BACKGROUND_JOBS.md)
 
 ## What Phase 8 added
 
@@ -234,7 +236,7 @@ and reactivation with a reason, plans without payments, backups you can verify a
 an audited console at `/admin` that never shows a shop's sales or customers. See [docs/SAAS_ADMIN.md](docs/SAAS_ADMIN.md)
 and [docs/BACKUP_AND_RESTORE.md](docs/BACKUP_AND_RESTORE.md).
 
-**Not done (on purpose).** Login and passwords (Phase 14), an online store and online orders, payments and billing,
+**Not done (on purpose).** An online store and online orders, payments and billing,
 cloud backups, real email/SMS/WhatsApp providers, and PostgreSQL (a checklist only).
 
 ```bash
@@ -243,4 +245,22 @@ cd backend
 .venv/bin/python -m app.integrity_cli            # read-only data check
 .venv/bin/python -m app.admin_cli create --email ops@example.com --name "Ops" --role SUPER_ADMIN
 ```
+
+## What Phase 12 added
+
+**Several people, safely.** Sign-in (Argon2id passwords, HttpOnly session cookie, CSRF protection, idle and absolute expiry, throttling and a
+temporary pause after repeated wrong passwords), shop **memberships** (one person can belong to several shops and chooses one), six ready-made **roles**
+(Owner, Manager, Cashier, Inventory staff, Sales staff, Accountant) and your own custom ones, ~50 granular **permissions**, and **staff invitations** by
+one-time link (no email is sent: you hand the link over). The server decides everything: every route has a permission rule and a test calls every route as every role.
+The AI assistant and every export follow the same permissions. See [Authentication](docs/AUTHENTICATION.md), [RBAC](docs/RBAC.md) and
+[Staff management](docs/STAFF_MANAGEMENT.md).
+
+**Ready to deploy, and to watch.** Dockerfiles, an nginx config and a production-like compose file (unverified: no Docker was available to build them), a deployment
+guide with HTTPS, proxy, database and migration notes, optional Prometheus-format metrics, and a database-backed background-job foundation with a worker.
+See [Production deployment](docs/PRODUCTION_DEPLOYMENT.md), [Monitoring](docs/MONITORING.md) and [Background jobs](docs/BACKGROUND_JOBS.md).
+
+**Operators.** `python -m app.account_cli create-shop ...` (the first shop and owner, with a one-time password), `set-password`, `unlock`, `disable`;
+`python -m app.worker --loop --schedule`.
+
+**Not done (on purpose).** Password reset by email, MFA, ownership transfer, email delivery of invitations, an online store and orders, payments.
 

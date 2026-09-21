@@ -34,3 +34,7 @@ exports/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Deployment secrets (docker-compose.prod.yml reads backend.env; only the *.example files are committed)
+backend.env
+*.env

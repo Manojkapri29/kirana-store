@@ -31,6 +31,7 @@ from app.models import Product
 from app.services import (
     ai_dates,
     analytics_service,
+    authorization_service,
     entitlement_service,
     inventory_service,
     khata_service,
@@ -1250,6 +1251,20 @@ def _business_report(tc: ToolContext, args: PeriodArgs) -> Answer:
     return base
 
 
+# What a person must be allowed to see for the assistant to answer from that data. The assistant never widens access: a
+# tool the person could not open themselves is refused for them too. (A test lists every tool, so a new one cannot skip this.)
+TOOL_PERMISSION: dict[str, str] = {
+    "get_sales_summary": "REPORT_VIEW", "get_product_sales": "REPORT_VIEW", "get_profit_summary": "REPORT_VIEW",
+    "get_business_dashboard": "REPORT_VIEW", "get_category_performance": "REPORT_VIEW",
+    "get_declining_products": "REPORT_VIEW", "get_business_report": "REPORT_VIEW", "get_insights": "REPORT_VIEW",
+    "get_anomalies": "REPORT_VIEW", "get_inventory_status": "INVENTORY_VIEW", "get_low_stock_products": "INVENTORY_VIEW",
+    "get_slow_moving_products": "INVENTORY_VIEW", "get_reorder_recommendations": "INVENTORY_VIEW",
+    "get_customer_outstanding": "KHATA_VIEW", "get_purchase_summary": "PURCHASE_VIEW",
+    "get_purchase_suggestions": "PURCHASE_VIEW", "get_promotion_summary": "PROMOTION_VIEW",
+    "get_promotion_ideas": "PROMOTION_VIEW", "get_online_order_summary": "ONLINE_ORDER_VIEW",
+    "get_price_comparison": "PRICE_INTELLIGENCE_USE",
+}  # fmt: skip
+
 TOOLS: dict[str, Tool] = {
     tool.name: tool
     for tool in [
@@ -1407,8 +1422,9 @@ def run_tool(
         raise InvalidInputError(
             f"{'.'.join(str(p) for p in first['loc']) or 'arguments'}: {first['msg']}", field="args"
         ) from None
+    authorization_service.require(ctx, TOOL_PERMISSION[name])
     entitlement_service.require_feature(session, ctx.shop_id, tool.feature)
     return tool.run(ToolContext(session, ctx, shop_today(get_shop(session, ctx.shop_id)), language), args)
 
 
-__all__ = ["TOOLS", "Tool", "ToolContext", "run_tool", "EntitlementError"]
+__all__ = ["TOOL_PERMISSION", "TOOLS", "Tool", "ToolContext", "run_tool", "EntitlementError"]

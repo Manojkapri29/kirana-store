@@ -51,7 +51,7 @@ export function QuickSalesPage() {
     setOffset(0)
   }
   const addButton = (
-    <LinkButton to="/quick-sales/new">
+    <LinkButton to="/quick-sales/new" requires="QUICK_SALE_CREATE">
       <Plus aria-hidden="true" className="size-5" />
       {t('quickSales.add')}
     </LinkButton>

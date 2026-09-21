@@ -10,6 +10,7 @@ from app.api.v1 import (
     account,
     admin,
     ai,
+    auth,
     customers,
     exports,
     image_intelligence,
@@ -23,6 +24,7 @@ from app.api.v1 import (
     reports,
     returns,
     sales,
+    staff,
     subscription,
     suppliers,
 )
@@ -48,3 +50,6 @@ api_v1_router.include_router(ai.router)
 api_v1_router.include_router(admin.router)
 api_v1_router.include_router(account.router)
 api_v1_router.include_router(account.notifications)
+api_v1_router.include_router(auth.router)
+api_v1_router.include_router(staff.staff)
+api_v1_router.include_router(staff.roles)

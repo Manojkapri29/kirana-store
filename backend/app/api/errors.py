@@ -35,11 +35,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
-from app.core import diagnostics, observability
+from app.core import diagnostics, metrics, observability
 from app.core.diagnostics import ErrorCategory
 from app.services.errors import (
     AccountRestrictedError,
     AiServiceError,
+    AuthenticationError,
     ConflictError,
     DomainError,
     EntitlementError,
@@ -190,6 +191,8 @@ def _unexpected(
 ) -> JSONResponse:
     """A failure the user cannot fix or see the inside of: log everything, reveal only a reference."""
     category = _unexpected_category(request, category)
+    if category is ErrorCategory.DATABASE:
+        metrics.record_db_error()
     # A caller that already recorded this failure under a reference (an AI action) shows that same reference.
     preset = getattr(exc, "reference_id", None)
     reference = (
@@ -250,6 +253,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             duration_ms = round((time.perf_counter() - started) * 1000, 1)
             path = _endpoint(request)
             noisy = path.startswith("/health")
+            metrics.record_request(request.method, request.url.path, status, time.perf_counter() - started)
             observability.log_event(
                 "access", f"{request.method} {path} {status}",
                 level=logging.DEBUG if noisy else logging.INFO,
@@ -321,6 +325,11 @@ def register_error_handlers(app: FastAPI) -> None:
             extra={"account_state": exc.state},
         )
         return _respond(request, 403, body)
+
+    @app.exception_handler(AuthenticationError)
+    async def unauthenticated(request: Request, exc: AuthenticationError) -> JSONResponse:
+        body = error_body(ErrorCategory.AUTHENTICATION, exc.message, detail=exc.message)
+        return _respond(request, 401, body)
 
     @app.exception_handler(ForbiddenError)
     async def forbidden(request: Request, exc: ForbiddenError) -> JSONResponse:

@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import OwnerCtx, feature_flag, meter_export, rate_limited
+from app.api.deps import Ctx, feature_flag, meter_export, rate_limited
 from app.api.v1.products import StatusFilter, active_flag
 from app.db.session import get_session
 from app.models.enums import (
@@ -47,7 +47,7 @@ def download(file: ExportFile) -> Response:
 
 @router.get("/products")
 def export_products(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -63,7 +63,7 @@ def export_products(
 
 @router.get("/inventory")
 def export_inventory(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -86,7 +86,7 @@ def export_inventory(
 
 @router.get("/inventory-history")
 def export_inventory_history(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     product_id: int | None = None,
@@ -114,7 +114,7 @@ PurchaseStatuses = Annotated[
 
 @router.get("/purchases")
 def export_purchases(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -139,7 +139,7 @@ def export_purchases(
 
 @router.get("/purchase-items")
 def export_purchase_items(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -164,7 +164,7 @@ def export_purchase_items(
 
 @router.get("/purchases/{purchase_id}")
 def export_purchase_details(
-    purchase_id: int, ctx: OwnerCtx, session: ReadSession, fmt: Format = ExportFormat.CSV
+    purchase_id: int, ctx: Ctx, session: ReadSession, fmt: Format = ExportFormat.CSV
 ) -> Response:
     """One purchase with all its lines."""
     return download(export_datasets.export_purchase_details(session, ctx, fmt, purchase_id))
@@ -180,7 +180,7 @@ _BALANCE = {
 
 @router.get("/suppliers")
 def export_suppliers(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -192,7 +192,7 @@ def export_suppliers(
 
 @router.get("/customers")
 def export_customers(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -210,7 +210,7 @@ def export_customers(
 @router.get("/customers/{customer_id}/ledger")
 def export_customer_ledger(
     customer_id: int,
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     entry_type: CustomerLedgerEntryType | None = None,
@@ -232,7 +232,7 @@ SaleStatuses = Annotated[
 
 @router.get("/sales")
 def export_sales(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -260,7 +260,7 @@ def export_sales(
 
 @router.get("/sale-items")
 def export_sale_items(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -288,7 +288,7 @@ def export_sale_items(
 
 @router.get("/sales/{sale_id}")
 def export_sale_details(
-    sale_id: int, ctx: OwnerCtx, session: ReadSession, fmt: Format = ExportFormat.CSV
+    sale_id: int, ctx: Ctx, session: ReadSession, fmt: Format = ExportFormat.CSV
 ) -> Response:
     """One sale with all its lines."""
     return download(export_datasets.export_sale_details(session, ctx, fmt, sale_id))
@@ -296,7 +296,7 @@ def export_sale_details(
 
 @router.get("/quick-sales")
 def export_quick_sales(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -324,7 +324,7 @@ def export_quick_sales(
 
 @router.get("/promotions")
 def export_promotions(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -342,7 +342,7 @@ def export_promotions(
 
 @router.get("/promotion-usage")
 def export_promotion_usage(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     promotion_id: int | None = None,
@@ -366,7 +366,7 @@ def export_promotion_usage(
 
 @router.get("/price-history")
 def export_price_history(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     barcode: Annotated[str | None, Query(max_length=50)] = None,
@@ -380,7 +380,7 @@ def export_price_history(
 
 @router.get("/sales-summary")
 def export_sales_summary(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     date_from: date | None = None,
@@ -394,7 +394,7 @@ def export_sales_summary(
 
 @router.get("/discount-report")
 def export_discount_report(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     date_from: date | None = None,
@@ -408,7 +408,7 @@ def export_discount_report(
 
 @router.get("/sales-returns")
 def export_sales_returns(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -426,7 +426,7 @@ def export_sales_returns(
 
 @router.get("/purchase-returns")
 def export_purchase_returns(
-    ctx: OwnerCtx,
+    ctx: Ctx,
     session: ReadSession,
     fmt: Format = ExportFormat.CSV,
     q: Annotated[str | None, Query(max_length=100)] = None,

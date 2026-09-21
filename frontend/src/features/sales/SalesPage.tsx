@@ -57,7 +57,7 @@ export function SalesPage() {
   const data = sales.data
   const isFiltering = q !== '' || customerId !== null || status !== '' || paymentType !== '' || dateFrom !== '' || dateTo !== ''
   const addButton = (
-    <LinkButton to="/sales/new">
+    <LinkButton to="/sales/new" requires="SALE_CREATE">
       <Plus aria-hidden="true" className="size-5" />
       {t('sales.add')}
     </LinkButton>

@@ -65,8 +65,8 @@ proxy, configure it to pass the real client address.
 
 ## Known limitations
 
-* **No login yet.** There is no shop password or session (planned for Phase 14). Shop identity in development is the seeded
-  owner. Login and password-reset rate limiting are therefore not applicable yet; the `auth` group exists and is configured.
+* **Login exists since Phase 12** (`AUTHENTICATION.md`). There is no self-service password reset (no delivery channel): operators use
+  `account_cli set-password`. See `PRODUCTION_DEPLOYMENT.md` for the deployment guide.
 * Rate limit windows are per process (in memory).
 * SQLite is one file and one writer. It is right for a single small deployment. See `POSTGRES_MIGRATION_CHECKLIST.md`.
 * Backups are local files; there is no cloud storage provider. Copying them off the machine is your responsibility.

@@ -245,3 +245,35 @@ class DeliveryStatus(StrEnum):
     FAILED = "FAILED"
     RETRYING = "RETRYING"
     CANCELLED = "CANCELLED"
+
+
+class MembershipStatus(StrEnum):
+    """A person's standing in one shop. A membership is never deleted: REMOVED keeps the history."""
+
+    INVITED = "INVITED"
+    ACTIVE = "ACTIVE"
+    SUSPENDED = "SUSPENDED"
+    REMOVED = "REMOVED"
+
+
+class InvitationStatus(StrEnum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    REVOKED = "REVOKED"
+    EXPIRED = "EXPIRED"
+
+
+class LoginStatus(StrEnum):
+    """Whether a sign-in identity may sign in at all (separate from any shop's view of it)."""
+
+    ACTIVE = "ACTIVE"
+    DISABLED = "DISABLED"
+
+
+class JobStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    RETRYING = "RETRYING"
+    CANCELLED = "CANCELLED"

@@ -11,7 +11,10 @@ from app.models.enums import UserRole
 from app.seed import DEV_SHOP_NAME, DEV_USER_EMAIL, UNUSABLE_PASSWORD_HASH, seed_development_data
 
 # Tables that are allowed to have rows after seeding.
-SEEDED_TABLES = {"shops", "users", "units", "business_types", "plans", "plan_features", "shop_subscriptions"}
+SEEDED_TABLES = {
+    "shops", "users", "units", "business_types", "plans", "plan_features", "shop_subscriptions",
+    "accounts", "roles", "role_permissions",
+}  # fmt: skip
 
 
 def count(session, table: str) -> int:

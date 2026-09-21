@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import Ctx, OwnerCtx, feature_flag, rate_limited
+from app.api.deps import Ctx, feature_flag, rate_limited
 from app.core import diagnostics
 from app.core.config import get_settings
 from app.core.context import RequestContext
@@ -98,7 +98,7 @@ def run_tool(name: str, payload: ToolIn, ctx: Ctx) -> AnswerOut:
 @router.post(
     "/documents/extract", response_model=ExtractionOut, dependencies=[Depends(rate_limited("image"))]
 )
-def extract_document(payload: ExtractIn, ctx: OwnerCtx) -> ExtractionOut:
+def extract_document(payload: ExtractIn, ctx: Ctx) -> ExtractionOut:
     """Read a photographed invoice or stock list into rows. Nothing is stored and nothing is created."""
     with write_transaction() as session:
         result = document_intelligence_service.extract(
@@ -114,7 +114,7 @@ def extract_document(payload: ExtractIn, ctx: OwnerCtx) -> ExtractionOut:
 
 
 @router.post("/documents/match", response_model=MatchOut)
-def match_document(payload: MatchIn, ctx: OwnerCtx, session: ReadSession) -> MatchOut:
+def match_document(payload: MatchIn, ctx: Ctx, session: ReadSession) -> MatchOut:
     """Check rows (read from a photo, or typed) and match them to products. Reads only."""
     result = document_intelligence_service.match_rows(
         session, ctx, kind=payload.kind, header=payload.header, rows=payload.rows
@@ -127,7 +127,7 @@ def match_document(payload: MatchIn, ctx: OwnerCtx, session: ReadSession) -> Mat
 
 
 @router.post("/actions", response_model=ActionOut, status_code=201)
-def propose(payload: ProposeIn, ctx: OwnerCtx) -> ActionOut:
+def propose(payload: ProposeIn, ctx: Ctx) -> ActionOut:
     """Record what the AI proposes. Nothing changes until it is confirmed."""
     with write_transaction() as session:
         view = ai_action_service.propose(
@@ -137,7 +137,7 @@ def propose(payload: ProposeIn, ctx: OwnerCtx) -> ActionOut:
 
 
 @router.get("/actions", response_model=ActionListOut)
-def list_actions(ctx: OwnerCtx, session: ReadSession, status: AiActionStatus | None = None) -> ActionListOut:
+def list_actions(ctx: Ctx, session: ReadSession, status: AiActionStatus | None = None) -> ActionListOut:
     rows = ai_action_service.list_actions(session, ctx, status=status)
     return ActionListOut(
         items=[
@@ -156,30 +156,30 @@ def list_actions(ctx: OwnerCtx, session: ReadSession, status: AiActionStatus | N
 
 
 @router.get("/actions/{action_id}", response_model=ActionOut)
-def get_action(action_id: int, ctx: OwnerCtx, session: ReadSession) -> ActionOut:
+def get_action(action_id: int, ctx: Ctx, session: ReadSession) -> ActionOut:
     return ActionOut.from_view(ai_action_service.get(session, ctx, action_id))
 
 
 @router.patch("/actions/{action_id}", response_model=ActionOut)
-def edit_action(action_id: int, payload: EditIn, ctx: OwnerCtx) -> ActionOut:
+def edit_action(action_id: int, payload: EditIn, ctx: Ctx) -> ActionOut:
     with write_transaction() as session:
         return ActionOut.from_view(ai_action_service.edit(session, ctx, action_id, payload.payload))
 
 
 @router.post("/actions/{action_id}/refresh-stock", response_model=ActionOut)
-def refresh_stock(action_id: int, ctx: OwnerCtx) -> ActionOut:
+def refresh_stock(action_id: int, ctx: Ctx) -> ActionOut:
     with write_transaction() as session:
         return ActionOut.from_view(ai_action_service.refresh_stock(session, ctx, action_id))
 
 
 @router.post("/actions/{action_id}/cancel", response_model=ActionOut)
-def cancel_action(action_id: int, ctx: OwnerCtx) -> ActionOut:
+def cancel_action(action_id: int, ctx: Ctx) -> ActionOut:
     with write_transaction() as session:
         return ActionOut.from_view(ai_action_service.cancel(session, ctx, action_id))
 
 
 @router.post("/actions/{action_id}/confirm", response_model=ActionOut)
-def confirm_action(action_id: int, ctx: OwnerCtx) -> ActionOut:
+def confirm_action(action_id: int, ctx: Ctx) -> ActionOut:
     """Do what the person confirmed, through the existing service. If it fails, nothing is kept, the
     failure is
     recorded on the action (with the error reference when unexpected), and the action stays open."""

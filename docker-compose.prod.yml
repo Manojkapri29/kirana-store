@@ -1,0 +1,52 @@
+# A production-LIKE stack: backend, worker and frontend on one machine. TLS is NOT included: put a reverse proxy or load
+# balancer that terminates HTTPS in front of the `web` service (see docs/PRODUCTION_DEPLOYMENT.md). Nothing here is deployed
+# for you. Secrets come from `backend.env` (copy backend/.env.example, never commit it, never bake it into an image).
+#
+#   docker compose -f docker-compose.prod.yml --env-file /dev/null up -d --build
+services:
+  backend:
+    build: ./backend
+    env_file: ./backend.env
+    environment:
+      KIRANA_RUN_MIGRATIONS: "true"   # only this service migrates
+    volumes:
+      - kirana-data:/data
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    expose: ["8000"]
+
+  worker:
+    build: ./backend
+    env_file: ./backend.env
+    command: ["python", "-m", "app.worker", "--loop", "--schedule", "--interval", "30"]
+    volumes:
+      - kirana-data:/data
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      disable: true
+
+  web:
+    build: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"   # bound to the machine's own address: the HTTPS proxy in front is what the internet reaches
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp, /var/cache/nginx, /var/run]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  kirana-data:

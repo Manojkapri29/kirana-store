@@ -155,7 +155,15 @@ def ask(
 
     ai_usage_service.check_allowance(session, sid)
     try:
-        answer = ai_tools.run_tool(session, ctx, planned.tool, dict(planned.args), lang)
+        try:
+            answer = ai_tools.run_tool(session, ctx, planned.tool, dict(planned.args), lang)
+        except ForbiddenError:
+            # The person may not see that data: answer in words, count nothing, reveal nothing about it.
+            return AskOutcome(
+                Answer(
+                    REFUSED, planned.tool, "Assistant", "You don't have permission to see that information."
+                )
+            )
     except InvalidInputError as error:
         if error.field in ("period", "date_from", "date_to"):
             return AskOutcome(_unusable(error.message, planned.tool))

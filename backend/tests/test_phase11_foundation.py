@@ -20,6 +20,8 @@ def settings(**values):
 
 
 PROD = dict(
+    password_hash_time_cost=3,
+    password_hash_memory_kib=65536,  # the test environment lowers the cost; production must not
     environment="production",
     secret_key=KEY,
     frontend_url="https://shop.example.com",

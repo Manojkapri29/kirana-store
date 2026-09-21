@@ -89,3 +89,30 @@ def record_system_audit(
             request_id=observability.current_request_id(),
         )
     )
+
+
+def record_access_event(
+    session: Session,
+    shop_id: int,
+    user_id: int | None,
+    action: str,
+    entity_type: str,
+    entity_id: int | None,
+    meta: dict[str, Any] | None = None,
+) -> None:
+    """A sign-in, staff or security event in a shop's audit log: who, what, about whom, and safe metadata.
+
+    `meta` must never hold a password, token, hash or secret; callers pass identifiers and short facts only.
+    """
+    session.add(
+        AuditLog(
+            shop_id=shop_id,
+            user_id=user_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            action=action,
+            before_json=None,
+            after_json=to_jsonable(meta),
+            request_id=observability.current_request_id(),
+        )
+    )

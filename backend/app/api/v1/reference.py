@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import Ctx, OwnerCtx
+from app.api.deps import Ctx
 from app.db.session import get_session, write_transaction
 from app.schemas.catalog import (
     BusinessTypeOut,
@@ -45,7 +45,7 @@ def get_shop(ctx: Ctx, session: ReadSession) -> ShopOut:
 
 
 @router.patch("/shop", response_model=ShopOut)
-def update_shop(payload: ShopUpdate, ctx: OwnerCtx) -> ShopOut:
+def update_shop(payload: ShopUpdate, ctx: Ctx) -> ShopOut:
     """Change shop settings (only the business type for now). Owner only."""
     with write_transaction() as session:
         if payload.business_type is not None:

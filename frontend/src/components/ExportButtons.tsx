@@ -6,6 +6,7 @@ import { downloadExport, type ExportKind } from '@/api/exports'
 import type { Query } from '@/api/client'
 import type { ExportFormat } from '@/api/types'
 import { Alert, Button } from '@/components/ui'
+import { useCan } from '@/features/auth/authContext'
 
 interface ExportButtonsProps {
   kind: ExportKind
@@ -15,6 +16,7 @@ interface ExportButtonsProps {
 
 export function ExportButtons({ kind, filters }: ExportButtonsProps) {
   const { t } = useTranslation()
+  const can = useCan()
   const [busy, setBusy] = useState<ExportFormat | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -29,6 +31,10 @@ export function ExportButtons({ kind, filters }: ExportButtonsProps) {
       setBusy(null)
     }
   }
+
+  // Stock files need INVENTORY_EXPORT, every other file REPORT_EXPORT. (Only a convenience: the server checks it too.)
+  const needed = kind === 'inventory' || kind === 'inventory-history' ? 'INVENTORY_EXPORT' : 'REPORT_EXPORT'
+  if (!can(needed)) return null
 
   return (
     <div className="space-y-3">
