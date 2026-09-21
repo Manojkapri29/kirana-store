@@ -107,7 +107,7 @@ function SuggestionsCard() {
     },
   })
 
-  if (template.isError) return <QueryError onRetry={() => void template.refetch()} />
+  if (template.isError) return <QueryError error={template.error} onRetry={() => void template.refetch()} />
   if (!template.data) return null
 
   const categories = template.data.categories

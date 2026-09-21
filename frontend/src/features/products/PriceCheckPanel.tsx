@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '@/api/client'
+import { ErrorNotice } from '@/components/ErrorNotice'
 import { checkPrices } from '@/api/priceIntelligence'
 import type { PriceQuote, PriceResult, Product } from '@/api/types'
 import { TextField } from '@/components/fields'
@@ -64,6 +65,8 @@ export function PriceCheckPanel({ product }: { product: Product }) {
   const [state, setState] = useState('')
   const [market, setMarket] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
+  // The price service being down never stops billing: it is only a comparison.
+  const [failure, setFailure] = useState<unknown>(null)
 
   const run = useMutation({
     mutationFn: () =>
@@ -78,7 +81,7 @@ export function PriceCheckPanel({ product }: { product: Product }) {
       if (error instanceof ApiError && error.status === 403) {
         setProblem(error.message.includes('reached') ? t('priceCheck.limitReached') : t('priceCheck.planNeeded'))
       } else if (error instanceof ApiError && error.status === 422) setProblem(error.message)
-      else setProblem(t('priceCheck.failed'))
+      else setFailure(error)
     },
   })
 
@@ -95,6 +98,7 @@ export function PriceCheckPanel({ product }: { product: Product }) {
   function submit(event: FormEvent) {
     event.preventDefault()
     setProblem(null)
+    setFailure(null)
     run.mutate()
   }
 
@@ -117,6 +121,21 @@ export function PriceCheckPanel({ product }: { product: Product }) {
       </form>
 
       {problem && <Alert tone="warning">{problem}</Alert>}
+      {failure !== null && (
+        <ErrorNotice
+          error={failure}
+          context="price"
+          safeToRepeat
+          retry={() => {
+            setFailure(null)
+            run.mutate()
+          }}
+          continue={() => setFailure(null)}
+          labels={{ continue: t('recovery.actions.continueWithoutComparison') }}
+        >
+          <p className="mt-1 text-sm">{t('priceCheck.billingUnaffected')}</p>
+        </ErrorNotice>
+      )}
 
       {result && (
         <div className="space-y-3">

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 
@@ -8,6 +8,11 @@ import { getShop } from '@/api/catalog'
 import { createQuickSale, getQuickSale, postQuickSale, updateQuickSale } from '@/api/quickSales'
 import type { QuickSale, QuickSalePayload } from '@/api/types'
 import { TextAreaField, TextField } from '@/components/fields'
+import { ErrorNotice } from '@/components/ErrorNotice'
+import { RestoreBanner } from '@/components/RestoreBanner'
+import { useFailure, needsNotice } from '@/hooks/useFailure'
+import { useFormBackup } from '@/hooks/useFormBackup'
+import { useIdempotencyKey } from '@/lib/idempotency'
 import { Alert, Button, LinkButton, PageHeader, QueryError, Spinner } from '@/components/ui'
 import { checkDecimal, isZero } from '@/lib/decimal'
 import { CURRENCY_SYMBOL } from '@/lib/format'
@@ -29,7 +34,7 @@ export function QuickSaleFormPage({ mode }: { mode: 'create' | 'edit' }) {
     return (
       <div className="space-y-6">
         <PageHeader title={title} />
-        {notFound ? <Alert tone="error">{t('quickSales.detail.notFound')}</Alert> : <QueryError onRetry={() => void sale.refetch()} />}
+        {notFound ? <Alert tone="error">{t('quickSales.detail.notFound')}</Alert> : <QueryError error={sale.error} onRetry={() => void sale.refetch()} />}
         <LinkButton to="/quick-sales" variant="secondary">{t('quickSales.detail.backToList')}</LinkButton>
       </div>
     )
@@ -63,6 +68,11 @@ function Form({ sale }: { sale: QuickSale | undefined }) {
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({})
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
+  const { failure, setFailure } = useFailure()
+  const createKey = useIdempotencyKey()
+  const postKey = useIdempotencyKey()
+  const backupValue = useMemo(() => ({ amount, discount, date, note }), [amount, discount, date, note])
+  const backup = useFormBackup('quicksale.new', backupValue, { enabled: !sale })
 
   const save = useMutation({
     mutationFn: async (complete: boolean) => {
@@ -76,16 +86,25 @@ function Form({ sale }: { sale: QuickSale | undefined }) {
       let saved: QuickSale
       if (draftId !== undefined) saved = await updateQuickSale(draftId, body)
       else {
-        saved = await createQuickSale(body)
+        saved = await createQuickSale(body, { idempotencyKey: createKey.keyFor(JSON.stringify(body)) })
         setDraftId(saved.id) // a failed completion below must not create a second draft on retry
       }
-      return complete ? postQuickSale(saved.id, paymentPayload(payment)) : saved
+      if (!complete) return saved
+      const settlement = paymentPayload(payment)
+      return postQuickSale(saved.id, settlement, { idempotencyKey: postKey.keyFor(JSON.stringify({ id: saved.id, settlement })) })
     },
     onSuccess: async (saved) => {
+      createKey.renew()
+      postKey.renew()
+      backup.clear()
       await invalidateQuickSaleData(queryClient)
       void navigate(`/quick-sales/${saved.id}`)
     },
     onError: (error) => {
+      if (needsNotice(error)) {
+        setFailure(error)
+        return
+      }
       if (error instanceof ApiError) {
         setServerErrors(error.fieldErrors)
         setFormError(error.message)
@@ -95,6 +114,7 @@ function Form({ sale }: { sale: QuickSale | undefined }) {
 
   function submit(complete: boolean) {
     setFormError(null)
+    setFailure(null)
     setServerErrors({})
     const errors: Record<string, string> = {}
     const gross = checkDecimal(amount, 2)
@@ -119,7 +139,29 @@ function Form({ sale }: { sale: QuickSale | undefined }) {
       className="grid grid-cols-1 gap-6 lg:grid-cols-3"
     >
       <div className="space-y-6 lg:col-span-2">
+        {backup.restorable && (
+          <RestoreBanner
+            onRestore={() => {
+              setAmount(backup.restorable!.amount)
+              setDiscount(backup.restorable!.discount)
+              setDate(backup.restorable!.date)
+              setNote(backup.restorable!.note)
+              backup.dismiss()
+            }}
+            onDiscard={backup.clear}
+          />
+        )}
         {formError && <Alert tone="error">{formError}</Alert>}
+        {failure !== null && (
+          <ErrorNotice
+            error={failure}
+            context="checkout"
+            safeToRepeat
+            retry={() => submit(save.variables ?? false)}
+            save_draft={() => submit(false)}
+            go_back={() => void navigate('/quick-sales')}
+          />
+        )}
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <TextField
             label={t('quickSales.form.amount')}

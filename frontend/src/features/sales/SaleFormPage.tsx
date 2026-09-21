@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
@@ -10,8 +10,12 @@ import { getCustomer } from '@/api/customers'
 import { createSale, getSale, postSale, replaceSaleItems, updateSale } from '@/api/sales'
 import type { Product, Sale, SaleHeaderPayload } from '@/api/types'
 import { TextAreaField, TextField } from '@/components/fields'
+import { ErrorNotice } from '@/components/ErrorNotice'
+import { RestoreBanner } from '@/components/RestoreBanner'
+import { useFormBackup } from '@/hooks/useFormBackup'
 import { Alert, Button, LinkButton, PageHeader, QueryError, Spinner } from '@/components/ui'
 import { useEntitlements } from '@/features/subscription/useEntitlements'
+import { useIdempotencyKey } from '@/lib/idempotency'
 import { CURRENCY_SYMBOL, formatMoney, formatQuantity } from '@/lib/format'
 
 import { CustomerPicker, type PickedCustomer } from './CustomerPicker'
@@ -55,7 +59,7 @@ export function SaleFormPage({ mode }: { mode: 'create' | 'edit' }) {
     return (
       <div className="space-y-6">
         <PageHeader title={title} />
-        {notFound ? <Alert tone="error">{t('sales.detail.notFound')}</Alert> : <QueryError onRetry={() => void sale.refetch()} />}
+        {notFound ? <Alert tone="error">{t('sales.detail.notFound')}</Alert> : <QueryError error={sale.error} onRetry={() => void sale.refetch()} />}
         <LinkButton to="/sales" variant="secondary">
           {t('sales.detail.backToList')}
         </LinkButton>
@@ -99,6 +103,10 @@ function Billing({ sale }: { sale: Sale | undefined }) {
   const [serverLines, setServerLines] = useState<Record<number, Partial<Record<LineField | 'product_id', string>>>>({})
   const [serverFields, setServerFields] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
+  // A failure that is not about what was typed (connection, timeout, server, stock): shown with what to do next.
+  const [saveError, setSaveError] = useState<unknown>(null)
+  const createKey = useIdempotencyKey()
+  const postKey = useIdempotencyKey()
 
   // A customer can be asked for straight from the customer screen: /sales/new?customer=7
   const wantedId = Number(searchParams.get('customer'))
@@ -109,6 +117,12 @@ function Billing({ sale }: { sale: Sale | undefined }) {
   })
   const customer: PickedCustomer | null =
     customerChoice !== undefined ? customerChoice : wanted.data ? { id: wanted.data.id, name: wanted.data.name, phone: wanted.data.phone } : null
+
+  const backupValue = useMemo(
+    () => ({ lines, customer: customerChoice ?? null, saleDate, notes, billDiscount, coupon }),
+    [lines, customerChoice, saleDate, notes, billDiscount, coupon],
+  )
+  const backup = useFormBackup('sale.new', backupValue, { enabled: !sale })
 
   const sendable = lines.map((line, index) => ({ line, index })).filter(({ line }) => isSendable(line))
   const discountText = billDiscount.trim() === '' ? null : billDiscount.trim()
@@ -150,8 +164,17 @@ function Billing({ sale }: { sale: Sale | undefined }) {
   }
 
   function showServerError(error: unknown) {
+    setSaveError(null)
+    const typed = error instanceof ApiError && (error.category === 'validation' || error.category === 'duplicate')
+    if (!typed) {
+      setSaveError(error)
+      // The stock changed while the bill was open: re-read what is really available so the lines show it.
+      if (error instanceof ApiError && (error.category === 'insufficient_stock' || error.category === 'inventory_conflict')) {
+        void queryClient.invalidateQueries({ queryKey: ['saleCalc'] })
+      }
+    }
     if (!(error instanceof ApiError)) {
-      setFormError(t('common.genericError'))
+      setFormError(null)
       return
     }
     const nextLines: Record<number, Partial<Record<LineField | 'product_id', string>>> = {}
@@ -167,7 +190,7 @@ function Billing({ sale }: { sale: Sale | undefined }) {
     }
     setServerLines(nextLines)
     setServerFields(nextFields)
-    setFormError(error.message)
+    setFormError(typed ? error.message : null)
   }
 
   const save = useMutation({
@@ -185,13 +208,23 @@ function Billing({ sale }: { sale: Sale | undefined }) {
         await updateSale(draftId, header)
         saved = await replaceSaleItems(draftId, items)
       } else {
-        saved = await createSale({ ...header, items })
+        // The key makes a repeat of this exact request return the same draft, even if the first answer was lost.
+        saved = await createSale(
+          { ...header, items },
+          { idempotencyKey: createKey.keyFor(JSON.stringify({ header, items })) },
+        )
         setDraftId(saved.id) // a failed post below must not create a second draft on retry
       }
       if (!postAfter) return saved
-      return postSale(saved.id, paymentPayload(payment))
+      const payload = paymentPayload(payment)
+      // The same key on every retry of this post: the server posts once and returns the same sale.
+      return postSale(saved.id, payload, { idempotencyKey: postKey.keyFor(JSON.stringify({ id: saved.id, payload })) })
     },
     onSuccess: async (saved) => {
+      createKey.renew()
+      postKey.renew()
+      backup.clear()
+      // Only now has the server finished, so only now is the sale shown as done.
       await invalidateSaleData(queryClient)
       void navigate(`/sales/${saved.id}`)
     },
@@ -200,6 +233,7 @@ function Billing({ sale }: { sale: Sale | undefined }) {
 
   function submit(postAfter: boolean) {
     setFormError(null)
+    setSaveError(null)
     setServerLines({})
     setServerFields({})
     if (lines.length === 0) {
@@ -229,7 +263,36 @@ function Billing({ sale }: { sale: Sale | undefined }) {
       className="grid grid-cols-1 gap-6 lg:grid-cols-3"
     >
       <div className="space-y-6 lg:col-span-2">
+        {backup.restorable && (
+          <RestoreBanner
+            onRestore={() => {
+              const saved = backup.restorable!
+              setLines(saved.lines)
+              setCustomerChoice(saved.customer)
+              setSaleDate(saved.saleDate)
+              setNotes(saved.notes)
+              setBillDiscount(saved.billDiscount)
+              setCoupon(saved.coupon)
+              setCouponText(saved.coupon ?? '')
+              backup.dismiss()
+            }}
+            onDiscard={backup.clear}
+          />
+        )}
         {formError && <Alert tone="error">{formError}</Alert>}
+        {saveError !== null && (
+          <ErrorNotice
+            error={saveError}
+            context="checkout"
+            safeToRepeat
+            retry={() => submit(save.variables ?? true)}
+            save_draft={() => submit(false)}
+            adjust_cart={() => setSaveError(null)}
+            go_back={() => void navigate('/sales')}
+          >
+            {shortLines > 0 && <p className="mt-1 text-sm">{t('sales.form.shortWarning')}</p>}
+          </ErrorNotice>
+        )}
         {sale?.promotions_out_of_date && <Alert tone="warning">{t('billing.outOfDate')}</Alert>}
         {priced?.warnings.map((warning) => (
           <Alert key={warning} tone="warning">

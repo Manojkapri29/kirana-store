@@ -26,7 +26,7 @@ export function StockHistory({ product }: { product: Product }) {
     <section id="history" className="space-y-4">
       <h2 className="text-lg font-semibold text-slate-900">{t('history.heading')}</h2>
 
-      {history.isError && <QueryError onRetry={() => void history.refetch()} />}
+      {history.isError && <QueryError error={history.error} onRetry={() => void history.refetch()} />}
       {history.isPending && <Spinner />}
       {history.data?.total === 0 && <EmptyState title={t('history.empty')} />}
 

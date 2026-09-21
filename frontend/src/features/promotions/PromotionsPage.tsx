@@ -81,7 +81,7 @@ export function PromotionsPage() {
         </FilterSelect>
       </div>
 
-      {list.isError && <QueryError onRetry={() => void list.refetch()} />}
+      {list.isError && <QueryError error={list.error} onRetry={() => void list.refetch()} />}
       {list.isPending && <Spinner />}
       {list.error instanceof ApiError && list.error.status === 403 && <Alert tone="warning">{t('promotions.planNeeded')}</Alert>}
       {data && data.items.length === 0 && (

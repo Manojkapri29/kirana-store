@@ -716,10 +716,11 @@ class TestVoid:
         from app.models.enums import DocumentStatus, RefundMode
 
         sale = sold(client_a, [item(shelf["rice"], "2")], payment_method="CASH")
-        with session_factory() as s, s.begin():  # a return document, as Phase 9 will create it
+        with session_factory() as s, s.begin():  # a live return document
             s.add(
                 SalesReturn(
-                    shop_id=tenant_a.shop.id, sale_id=sale["id"], return_date=today_in_shop_timezone(),
+                    shop_id=tenant_a.shop.id, return_no="SRT/TEST/0001", sale_id=sale["id"],
+                    return_date=today_in_shop_timezone(),
                     refund_mode=RefundMode.CASH, total_refund=Decimal("50"), status=DocumentStatus.POSTED,
                     created_by=tenant_a.user.id,
                 )

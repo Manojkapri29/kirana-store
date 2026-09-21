@@ -69,7 +69,7 @@ export function SalesReportPage() {
         {rangeInvalid && <p role="alert" className="text-sm font-medium text-red-700">{t('reportsPage.rangeInvalid')}</p>}
       </div>
 
-      {summary.isError && <QueryError onRetry={() => void summary.refetch()} />}
+      {summary.isError && <QueryError error={summary.error} onRetry={() => void summary.refetch()} />}
       {summary.isPending && !rangeInvalid && <Spinner />}
 
       {s && (
@@ -135,7 +135,7 @@ export function SalesReportPage() {
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">{t('reportsPage.discountsHeading')}</h2>
         {advancedRefused && <Alert tone="warning">{t('reportsPage.advancedNeeded')}</Alert>}
-        {discounts.isError && !advancedRefused && <QueryError onRetry={() => void discounts.refetch()} />}
+        {discounts.isError && !advancedRefused && <QueryError error={discounts.error} onRetry={() => void discounts.refetch()} />}
         {d && (
           <>
             <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">

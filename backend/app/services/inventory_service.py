@@ -499,7 +499,9 @@ def _flush_or_conflict(session: Session) -> None:
     try:
         session.flush()
     except IntegrityError as exc:  # a concurrent duplicate that slipped past the checks above
-        raise ConflictError("This stock entry conflicts with an existing one.") from exc
+        raise ConflictError(
+            "This stock entry conflicts with an existing one.", code="duplicate_record"
+        ) from exc
 
 
 # --- Purchases: receiving stock and its cost -------------------------------------------------------
@@ -509,7 +511,8 @@ def lock_products(session: Session, shop_id: int, product_ids: Sequence[int]) ->
     """Lock several products of this shop at once, always in ascending id order.
 
     A fixed order means two transactions that touch the same products can never wait on each other in a
-    circle (a deadlock on PostgreSQL). A product of another shop, or one that does not exist, is "not found".
+    circle (a deadlock on PostgreSQL). A product of another shop, or one that does not exist, is "not
+    found".
     """
     locked: dict[int, Product] = {}
     for product_id in sorted(set(product_ids)):
@@ -576,9 +579,9 @@ def receive_purchase_line(
 def rebuild_average_cost(session: Session, shop_id: int, product_id: int) -> Decimal | None:
     """Recompute a product's average cost from its whole ledger and store it. Returns the new average.
 
-    Movements that were later reversed are left out together with their reversal, so a voided purchase leaves
-    no trace. The product must be locked by the caller. The replayed stock must equal the ledger stock; if it
-    does not, something is wrong and nothing is guessed.
+    Movements that were later reversed are left out together with their reversal, so a voided purchase
+    leaves no trace. The product must be locked by the caller. The replayed stock must equal the ledger
+    stock; if it does not, something is wrong and nothing is guessed.
     """
     t = InventoryTransaction
     rows = session.execute(
@@ -638,9 +641,10 @@ def reverse_lines(
     """Undo the stock effect of document lines (used when a purchase is voided).
 
     For every ledger row that came from one of the lines, an equal and opposite REVERSAL row is added. The
-    original rows are never touched. Reversing removes stock, so it is refused if that stock has already gone
-    (unless the shop allows negative stock). Afterwards each affected product's average cost is rebuilt from
-    its history without the cancelled movements. Everything happens in the caller's transaction.
+    original rows are never touched. Reversing removes stock, so it is refused if that stock has already
+    gone (unless the shop allows negative stock). Afterwards each affected product's average cost is
+    rebuilt from its history without the cancelled movements. Everything happens in the caller's
+    transaction.
     """
     t = InventoryTransaction
     originals = list(
@@ -666,7 +670,7 @@ def reverse_lines(
         )
     )
     if already:
-        raise ConflictError("This has already been reversed.")
+        raise ConflictError("This has already been reversed.", code="already_done")
 
     products = lock_products(session, ctx.shop_id, [o.product_id for o in originals])
     shop = get_shop(session, ctx.shop_id)
@@ -680,7 +684,8 @@ def reverse_lines(
             if quantity > 0 and available - quantity < 0:
                 raise ConflictError(
                     f"Cannot reverse: '{products[product_id].name}' has only {available} in stock, but "
-                    f"{quantity} of it would be removed. Some of it has already been sold or removed."
+                    f"{quantity} of it would be removed. Some of it has already been sold or removed.",
+                    code="inventory_conflict",
                 )
 
     today = shop_today(shop)
@@ -749,7 +754,8 @@ class StockShortage:
 
 
 def find_shortages(session: Session, shop_id: int, requested: dict[int, Decimal]) -> list[StockShortage]:
-    """Products whose requested quantity is more than the stock on hand. `requested` is the TOTAL per product
+    """Products whose requested quantity is more than the stock on hand. `requested` is the TOTAL per
+    product
     (a product on two lines counts once). Empty when the shop allows negative stock (L8).
 
     This is a check, not a lock: `issue_sale_line` repeats it under the product's lock.
@@ -814,6 +820,7 @@ def issue_sale_line(
         raise ConflictError(
             shortage_message(StockShortage(product.id, product.name, unit.code, available, quantity)),
             field="quantity",
+            code="insufficient_stock",
         )
 
     unit_cost = product.avg_cost
@@ -831,3 +838,83 @@ def issue_sale_line(
     session.add(row)
     _flush_or_conflict(session)
     return SaleIssue(row, unit_cost, costing_service.cost_of_goods(quantity, unit_cost))
+
+
+# --- Returns ---------------------------------------------------------------------------------------
+
+
+def receive_sale_return_line(
+    session: Session,
+    ctx: RequestContext,
+    *,
+    product: Product,
+    quantity: Decimal,
+    sales_return_item_id: int,
+    unit_cost: Decimal | None,
+    txn_date: date,
+) -> InventoryTransaction:
+    """Put returned goods back on the shelf (one SALE_RETURN ledger row) at the cost of the line they were
+    sold
+    from, then rebuild the product's average cost. `product` must already be locked. An unknown cost stays
+    unknown. The product may since have been deactivated: a customer can still bring it back."""
+    if product.shop_id != ctx.shop_id:
+        raise NotFoundError("Product not found")
+    if quantity <= 0:
+        raise InvalidInputError("The quantity must be greater than zero.", field="quantity")
+    row = InventoryTransaction(
+        shop_id=ctx.shop_id,
+        product_id=product.id,
+        txn_type=InventoryTxnType.SALE_RETURN,
+        qty_delta=quantity,
+        unit_cost=unit_cost,
+        txn_date=txn_date,
+        reference_type=StockReferenceType.SALES_RETURN_ITEM,
+        reference_id=sales_return_item_id,
+        created_by=ctx.user_id,
+    )
+    session.add(row)
+    _flush_or_conflict(session)
+    rebuild_average_cost(session, ctx.shop_id, product.id)
+    return row
+
+
+def issue_purchase_return_line(
+    session: Session,
+    ctx: RequestContext,
+    *,
+    product: Product,
+    quantity: Decimal,
+    purchase_return_item_id: int,
+    unit_cost: Decimal,
+    txn_date: date,
+) -> InventoryTransaction:
+    """Send goods back to a supplier (one PURCHASE_RETURN ledger row) at the cost they came in at.
+
+    `product` must already be locked. The stock is read again here, under that lock: goods that were already
+    sold cannot be sent back (BUSINESS_RULES R3), unless the shop allows negative stock."""
+    if product.shop_id != ctx.shop_id:
+        raise NotFoundError("Product not found")
+    if quantity <= 0:
+        raise InvalidInputError("The quantity must be greater than zero.", field="quantity")
+    available = get_stock(session, ctx.shop_id, product.id)
+    if quantity > available and not get_shop(session, ctx.shop_id).allow_negative_stock:
+        unit = _unit_of(session, product)
+        raise ConflictError(
+            shortage_message(StockShortage(product.id, product.name, unit.code, available, quantity)),
+            field="quantity",
+            code="insufficient_stock",
+        )
+    row = InventoryTransaction(
+        shop_id=ctx.shop_id,
+        product_id=product.id,
+        txn_type=InventoryTxnType.PURCHASE_RETURN,
+        qty_delta=-quantity,
+        unit_cost=unit_cost,
+        txn_date=txn_date,
+        reference_type=StockReferenceType.PURCHASE_RETURN_ITEM,
+        reference_id=purchase_return_item_id,
+        created_by=ctx.user_id,
+    )
+    session.add(row)
+    _flush_or_conflict(session)
+    return row

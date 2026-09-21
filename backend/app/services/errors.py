@@ -3,12 +3,26 @@
 `field` names the input the message belongs to (for example "sku"), so a form can show it next to the field.
 """
 
+from typing import Any
+
 
 class DomainError(Exception):
-    def __init__(self, message: str, *, field: str | None = None) -> None:
+    """`code` is an optional machine-readable kind ("insufficient_stock", "duplicate_record", ...) so the API
+    layer can tell apart problems that share an HTTP status. It is never the message shown to a person."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        field: str | None = None,
+        code: str | None = None,
+        data: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.field = field
+        self.code = code
+        self.data = data  # structured facts for the screen (for example the possible duplicates)
 
 
 class NotFoundError(DomainError):
@@ -23,9 +37,15 @@ class ConflictError(DomainError):
     """
 
     def __init__(
-        self, message: str, *, field: str | None = None, errors: list[tuple[str | None, str]] | None = None
+        self,
+        message: str,
+        *,
+        field: str | None = None,
+        errors: list[tuple[str | None, str]] | None = None,
+        code: str | None = None,
+        data: dict[str, Any] | None = None,
     ) -> None:
-        super().__init__(message, field=field)
+        super().__init__(message, field=field, code=code, data=data)
         self.errors: list[tuple[str | None, str]] = errors or [(field, message)]
 
 
@@ -48,7 +68,12 @@ class InvalidInputError(DomainError):
     """
 
     def __init__(
-        self, message: str, *, field: str | None = None, errors: list[tuple[str | None, str]] | None = None
+        self,
+        message: str,
+        *,
+        field: str | None = None,
+        errors: list[tuple[str | None, str]] | None = None,
+        code: str | None = None,
     ) -> None:
-        super().__init__(message, field=field)
+        super().__init__(message, field=field, code=code)
         self.errors: list[tuple[str | None, str]] = errors or [(field, message)]

@@ -8,6 +8,11 @@ import { createCustomer, getCustomer, updateCustomer } from '@/api/customers'
 import type { Customer } from '@/api/types'
 import { buttonClasses } from '@/components/buttonStyles'
 import { TextAreaField, TextField } from '@/components/fields'
+import { ErrorNotice } from '@/components/ErrorNotice'
+import { RestoreBanner } from '@/components/RestoreBanner'
+import { useFailure, needsNotice } from '@/hooks/useFailure'
+import { useFormBackup } from '@/hooks/useFormBackup'
+import { useIdempotencyKey } from '@/lib/idempotency'
 import { Alert, Button, LinkButton, PageHeader, QueryError, Spinner } from '@/components/ui'
 import { CURRENCY_SYMBOL } from '@/lib/format'
 
@@ -39,7 +44,7 @@ export function CustomerFormPage({ mode }: { mode: 'create' | 'edit' }) {
     return (
       <div className="space-y-6">
         <PageHeader title={title} />
-        {notFound ? <Alert tone="error">{t('customers.detail.notFound')}</Alert> : <QueryError onRetry={() => void customer.refetch()} />}
+        {notFound ? <Alert tone="error">{t('customers.detail.notFound')}</Alert> : <QueryError error={customer.error} onRetry={() => void customer.refetch()} />}
         <LinkButton to="/customers" variant="secondary">
           {t('customers.detail.backToList')}
         </LinkButton>
@@ -65,6 +70,9 @@ function CustomerForm({ mode, customer }: { mode: 'create' | 'edit'; customer: C
   const [clientErrors, setClientErrors] = useState<FieldErrors>({})
   const [serverErrors, setServerErrors] = useState<Partial<Record<FieldName, string>>>({})
   const [formError, setFormError] = useState<string | null>(null)
+  const { failure, setFailure } = useFailure()
+  const idem = useIdempotencyKey()
+  const backup = useFormBackup('customer.new', values, { enabled: mode === 'create' })
 
   function setField(field: FieldName, value: string) {
     setValues((current) => ({ ...current, [field]: value }))
@@ -81,11 +89,13 @@ function CustomerForm({ mode, customer }: { mode: 'create' | 'edit'; customer: C
   const save = useMutation({
     mutationFn: () => {
       const payload = buildPayload(values)
-      return mode === 'create'
-        ? createCustomer({ ...payload, opening_balance: values.openingBalance.trim() || null })
-        : updateCustomer(customer!.id, payload)
+      if (mode !== 'create') return updateCustomer(customer!.id, payload)
+      const body = { ...payload, opening_balance: values.openingBalance.trim() || null }
+      return createCustomer(body, { idempotencyKey: idem.keyFor(JSON.stringify(body)) })
     },
     onSuccess: async (result) => {
+      idem.renew()
+      backup.clear()
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['customers'] }),
         queryClient.invalidateQueries({ queryKey: ['customer', result.customer.id] }),
@@ -94,6 +104,10 @@ function CustomerForm({ mode, customer }: { mode: 'create' | 'edit'; customer: C
       void navigate(`/customers/${result.customer.id}`, { state: { warnings: result.warnings } })
     },
     onError: (error) => {
+      if (needsNotice(error)) {
+        setFailure(error)
+        return
+      }
       if (error instanceof ApiError) {
         const mapped: Partial<Record<FieldName, string>> = {}
         for (const [apiField, message] of Object.entries(error.fieldErrors)) {
@@ -111,6 +125,7 @@ function CustomerForm({ mode, customer }: { mode: 'create' | 'edit'; customer: C
   function submit(event: FormEvent) {
     event.preventDefault()
     setFormError(null)
+    setFailure(null)
     setServerErrors({})
     const errors = validate(values, mode === 'create')
     setClientErrors(errors)
@@ -123,7 +138,19 @@ function CustomerForm({ mode, customer }: { mode: 'create' | 'edit'; customer: C
 
   return (
     <form onSubmit={submit} noValidate className="space-y-6">
+      {backup.restorable && (
+        <RestoreBanner
+          onRestore={() => {
+            setValues(backup.restorable!)
+            backup.dismiss()
+          }}
+          onDiscard={backup.clear}
+        />
+      )}
       {formError && <Alert tone="error">{formError}</Alert>}
+        {failure !== null && (
+          <ErrorNotice error={failure} context="save" safeToRepeat={true} retry={() => save.mutate()} cancel={() => void navigate('/customers')} />
+        )}
 
       <Section title={t('customers.form.contactSection')}>
         <div className="sm:col-span-2">

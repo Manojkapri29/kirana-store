@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import Ctx
+from app.api.idempotency import IdempotencyHeader, run_idempotent
 from app.db.session import get_session, write_transaction
 from app.models.enums import PaymentType, SaleStatus
 from app.schemas.quick_sale import (
@@ -60,12 +61,20 @@ def list_quick_sales(
 
 
 @router.post("", response_model=QuickSaleOut, status_code=201)
-def create_quick_sale(payload: QuickSaleCreate, ctx: Ctx) -> QuickSaleOut:
+def create_quick_sale(
+    payload: QuickSaleCreate, ctx: Ctx, idempotency_key: IdempotencyHeader = None
+) -> QuickSaleOut:
     """Start an entry (a draft). Nothing is posted until `/post`."""
-    with write_transaction() as session:
-        return QuickSaleOut.from_view(
+    return run_idempotent(
+        ctx,
+        idempotency_key,
+        "quick_sale.create",
+        payload.model_dump(mode="json"),
+        lambda session: QuickSaleOut.from_view(
             quick_sale_service.create_quick_sale(session, ctx, payload.model_dump())
-        )
+        ),
+        status_code=201,
+    )
 
 
 @router.get("/{quick_sale_id}", response_model=QuickSaleOut)
@@ -84,12 +93,18 @@ def update_quick_sale(quick_sale_id: int, payload: QuickSaleUpdate, ctx: Ctx) ->
 
 
 @router.post("/{quick_sale_id}/post", response_model=QuickSaleOut)
-def post_quick_sale(quick_sale_id: int, ctx: Ctx, payload: SalePostIn | None = None) -> QuickSaleOut:
+def post_quick_sale(
+    quick_sale_id: int, ctx: Ctx, payload: SalePostIn | None = None, idempotency_key: IdempotencyHeader = None
+) -> QuickSaleOut:
     """Post a draft: settle the payment, number it, charge any unpaid part to the customer's khata.
     With no body the entry is paid in full."""
     payment = payload or SalePostIn()
-    with write_transaction() as session:
-        return QuickSaleOut.from_view(
+    return run_idempotent(
+        ctx,
+        idempotency_key,
+        "quick_sale.post",
+        {"id": quick_sale_id, **payment.model_dump(mode="json")},
+        lambda session: QuickSaleOut.from_view(
             quick_sale_service.post_quick_sale(
                 session,
                 ctx,
@@ -98,7 +113,8 @@ def post_quick_sale(quick_sale_id: int, ctx: Ctx, payload: SalePostIn | None = N
                 payment_method=payment.payment_method,
                 payment_reference=payment.payment_reference,
             )
-        )
+        ),
+    )
 
 
 @router.post("/{quick_sale_id}/void", response_model=QuickSaleOut)

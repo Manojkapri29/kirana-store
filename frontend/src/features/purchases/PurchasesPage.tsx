@@ -131,7 +131,7 @@ export function PurchasesPage() {
         {rangeInvalid && <p role="alert" className="text-sm font-medium text-red-700">{t('purchases.filters.rangeInvalid')}</p>}
       </div>
 
-      {purchases.isError && <QueryError onRetry={() => void purchases.refetch()} />}
+      {purchases.isError && <QueryError error={purchases.error} onRetry={() => void purchases.refetch()} />}
       {purchases.isPending && !rangeInvalid && <Spinner />}
 
       {data && data.items.length === 0 && (

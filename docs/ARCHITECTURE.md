@@ -370,6 +370,42 @@ a URL, a log line or a response; the providers endpoint reports only configured 
 **Plans.** `GET /subscription` feeds the frontend `useEntitlements` hook, used only to show or hide. The server
 refuses a feature the plan lacks with HTTP 403 and `type: plan_limit`.
 
-**Design for Phase 9 (not built).** Error handling will reuse the exception-handler layer and the idempotency
-mechanism; image intelligence will sit behind the same provider pattern and reuse `product_lookup_service` for
-barcodes. See the Phase 9 entry in the roadmap.
+*(Phase 9 built what this section had planned: see below.)*
+
+## Phase 9 additions
+
+**Returns.** `sales_return_service` and `purchase_return_service` (with the pure `return_calculation`) sit beside the
+other document services: a router opens the transaction, the service checks the caps under locks, and the stock and the
+customer ledger are still written only by `inventory_service` (`receive_sale_return_line`, `issue_purchase_return_line`)
+and `khata_service` (`reverse_return_credit`, the existing credit method). A sale return is a costed receipt, so
+`costing_service` counts it. Routers: `sales-returns` and `purchase-returns` (calculate, create, get, list, void; still
+no DELETE anywhere, and a test guards that).
+
+**One error path.** `services/errors.py` (`DomainError` with a `code` and `data`) is what services raise. `api/errors.py`
+is the only place that turns any exception into an HTTP response, always in the one format
+`{success, error_code, message, category, retryable, reference_id, detail}`. An unexpected exception is classified
+(`core/diagnostics.py`), given a random reference id, written redacted to the `app.diagnostics` logger and answered with
+a plain message. A middleware assigns the `X-Request-ID` correlation id; `deps.py` remembers the shop and user on the
+request so the log entry can name them (ids only). No database table, no endpoint and no screen exposes the log.
+
+**One idempotency path.** `api/idempotency.run_idempotent` runs the work and stores the answer under the key in the
+same write transaction (`services/idempotency_service`). Creating and posting endpoints take the optional header; the
+frontend keeps one key per attempt and reuses it on retry.
+
+**Frontend recovery layer.** `api/client.ts` gives every failure a category, a timeout and the reference (a lost
+connection is a `network` error, not a crash); `lib/retryPolicy.ts` (reads only), `lib/idempotency.ts`,
+`lib/errors.ts` (`describeError`: what a person sees and can do, pure and tested), `components/ErrorNotice`,
+`components/ErrorBoundary` (around the whole app and around each page), `hooks/useFormBackup` and `useFailure`.
+Forms show a failure in `ErrorNotice`, keep their fields, and "Try again" reuses the same key.
+
+**Image intelligence.** A stateless analysis (`image_intelligence_service`) on top of: `image_validation` (magic bytes,
+type, size, pixels; standard library only), `image_providers` (a `Protocol` and a registry; **no provider is bundled**),
+`product_match_service` (duplicates: barcode, SKU, normalised name, brand, pack size), `product_lookup_service` (the
+Phase 8 barcode lookup, reused), `image_store` (a private per-shop store behind an interface, object storage later).
+The provider key is an optional `SecretStr` setting read only by the backend; the frontend never receives a key,
+a provider setting or a prompt (the status endpoint says only "configured: true or false"). The one call that creates
+data, `confirm-product`, takes the reviewed fields, re-checks duplicates and goes through `product_service`, never
+through the analysis.
+
+**Future photo uses** (invoice, stock list, shelf, damaged goods) will add analyses that return a *draft* for review;
+the confirm step and the rule that an image never moves stock stay as they are.

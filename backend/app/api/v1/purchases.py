@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import Ctx
+from app.api.idempotency import IdempotencyHeader, run_idempotent
 from app.db.session import get_session, write_transaction
 from app.models.enums import PurchaseStatus
 from app.schemas.purchase import (
@@ -70,12 +71,20 @@ def get_supplier_totals(supplier_id: int, ctx: Ctx, session: ReadSession) -> Sup
 
 
 @router.post("", response_model=PurchaseOut, status_code=201)
-def create_purchase(payload: PurchaseCreate, ctx: Ctx) -> PurchaseOut:
+def create_purchase(
+    payload: PurchaseCreate, ctx: Ctx, idempotency_key: IdempotencyHeader = None
+) -> PurchaseOut:
     """Create a draft purchase. Nothing is posted and no stock moves until `/post`."""
     header = payload.model_dump(exclude={"items"})
     items = [item.model_dump() for item in payload.items]
-    with write_transaction() as session:
-        return PurchaseOut.from_view(purchase_service.create_purchase(session, ctx, header, items))
+    return run_idempotent(
+        ctx,
+        idempotency_key,
+        "purchase.create",
+        payload.model_dump(mode="json"),
+        lambda session: PurchaseOut.from_view(purchase_service.create_purchase(session, ctx, header, items)),
+        status_code=201,
+    )
 
 
 @router.get("/{purchase_id}", response_model=PurchaseOut)
@@ -123,10 +132,15 @@ def update_item(purchase_id: int, item_id: int, payload: PurchaseItemUpdate, ctx
 
 
 @router.post("/{purchase_id}/post", response_model=PurchaseOut)
-def post_purchase(purchase_id: int, ctx: Ctx) -> PurchaseOut:
+def post_purchase(purchase_id: int, ctx: Ctx, idempotency_key: IdempotencyHeader = None) -> PurchaseOut:
     """Post a draft: number it, add the stock and update the average costs, all in one transaction."""
-    with write_transaction() as session:
-        return PurchaseOut.from_view(purchase_service.post_purchase(session, ctx, purchase_id))
+    return run_idempotent(
+        ctx,
+        idempotency_key,
+        "purchase.post",
+        {"id": purchase_id},
+        lambda session: PurchaseOut.from_view(purchase_service.post_purchase(session, ctx, purchase_id)),
+    )
 
 
 @router.post("/{purchase_id}/void", response_model=PurchaseOut)

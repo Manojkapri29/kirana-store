@@ -1,4 +1,4 @@
-import { API_V1_PREFIX, apiFetch, apiSend, type Query } from './client'
+import { API_V1_PREFIX, apiFetch, apiSend, type Query, type SendOptions } from './client'
 import type {
   LookupResult,
   Page,
@@ -25,8 +25,8 @@ export const listProducts = (params: ProductListParams) =>
 
 export const getProduct = (id: number) => apiFetch<Product>(`${BASE}/${id}`)
 
-export const createProduct = (payload: ProductCreatePayload) =>
-  apiSend<ProductSaved>('POST', BASE, payload)
+export const createProduct = (payload: ProductCreatePayload, options?: SendOptions) =>
+  apiSend<ProductSaved>('POST', BASE, payload, options)
 
 export const updateProduct = (id: number, changes: Partial<ProductPayload>) =>
   apiSend<ProductSaved>('PATCH', `${BASE}/${id}`, changes)

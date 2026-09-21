@@ -38,7 +38,7 @@ export function QuickSaleDetailPage() {
     const notFound = !validId || (sale.error instanceof ApiError && sale.error.status === 404)
     return (
       <div className="space-y-6">
-        {notFound ? <Alert tone="error">{t('quickSales.detail.notFound')}</Alert> : <QueryError onRetry={() => void sale.refetch()} />}
+        {notFound ? <Alert tone="error">{t('quickSales.detail.notFound')}</Alert> : <QueryError error={sale.error} onRetry={() => void sale.refetch()} />}
         <LinkButton to="/quick-sales" variant="secondary">{t('quickSales.detail.backToList')}</LinkButton>
       </div>
     )

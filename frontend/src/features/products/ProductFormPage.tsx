@@ -11,6 +11,11 @@ import { createProduct, getProduct, updateProduct } from '@/api/products'
 import type { Category, Product, Shop, ShopTemplate, SupplierOption, Unit } from '@/api/types'
 import { SelectField, TextField } from '@/components/fields'
 import { buttonClasses } from '@/components/buttonStyles'
+import { ErrorNotice } from '@/components/ErrorNotice'
+import { RestoreBanner } from '@/components/RestoreBanner'
+import { useFailure, needsNotice } from '@/hooks/useFailure'
+import { useFormBackup } from '@/hooks/useFormBackup'
+import { useIdempotencyKey } from '@/lib/idempotency'
 import { Alert, Button, LinkButton, PageHeader, QueryError, Spinner } from '@/components/ui'
 import { CURRENCY_SYMBOL, formatMoney } from '@/lib/format'
 
@@ -125,6 +130,9 @@ function ProductForm({
   const [clientErrors, setClientErrors] = useState<FieldErrors>({})
   const [serverErrors, setServerErrors] = useState<Partial<Record<FieldName, string>>>({})
   const [formError, setFormError] = useState<string | null>(null)
+  const { failure, setFailure } = useFailure()
+  const idem = useIdempotencyKey()
+  const backup = useFormBackup('product.new', values, { enabled: mode === 'create' })
   const [addingCategory, setAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
 
@@ -182,13 +190,18 @@ function ProductForm({
 
   const save = useMutation({
     mutationFn: async () => {
-      if (mode === 'create') return createProduct(buildCreatePayload(values))
+      if (mode === 'create') {
+        const payload = buildCreatePayload(values)
+        return createProduct(payload, { idempotencyKey: idem.keyFor(JSON.stringify(payload)) })
+      }
       const changes = buildUpdatePayload(values, product!)
       // Nothing changed: no request needed.
       if (Object.keys(changes).length === 0) return { product: product!, warnings: [] as string[] }
       return updateProduct(product!.id, changes)
     },
     onSuccess: async (result) => {
+      idem.renew()
+      backup.clear()
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['products'] }),
         queryClient.invalidateQueries({ queryKey: ['inventory'] }),
@@ -198,6 +211,10 @@ function ProductForm({
       void navigate(`/products/${result.product.id}`, { state: { warnings: result.warnings } })
     },
     onError: (error) => {
+      if (needsNotice(error)) {
+        setFailure(error)
+        return
+      }
       if (error instanceof ApiError) {
         const mapped: Partial<Record<FieldName, string>> = {}
         for (const [apiField, message] of Object.entries(error.fieldErrors)) {
@@ -216,6 +233,7 @@ function ProductForm({
   function submit(event: FormEvent) {
     event.preventDefault()
     setFormError(null)
+    setFailure(null)
     setServerErrors({})
     const errors = validate(values, unit, mode)
     setClientErrors(errors)
@@ -230,7 +248,19 @@ function ProductForm({
 
   return (
     <form onSubmit={submit} noValidate className="space-y-6">
+      {backup.restorable && (
+        <RestoreBanner
+          onRestore={() => {
+            setValues(backup.restorable!)
+            backup.dismiss()
+          }}
+          onDiscard={backup.clear}
+        />
+      )}
       {formError && <Alert tone="error">{formError}</Alert>}
+        {failure !== null && (
+          <ErrorNotice error={failure} context="save" safeToRepeat={true} retry={() => save.mutate()} cancel={() => void navigate('/products')} />
+        )}
 
       <Section title={t('products.form.basicSection')}>
         <TextField

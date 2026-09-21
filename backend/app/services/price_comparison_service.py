@@ -26,7 +26,6 @@ and marked; if nothing matches, or none was given, the result says plainly that 
 Prices are shown in the currency the source reported; they are never converted or compared across currencies.
 """
 
-import re
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -45,7 +44,12 @@ from app.models import PriceObservation, Product
 from app.services import entitlement_service, price_providers
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.price_providers import Identity, PriceProvider, ProviderUnavailable, Quote
-from app.services.product_lookup_service import barcode_variants, normalize_name
+from app.services.product_lookup_service import (  # noqa: F401  (pack_size_of stays importable from here)
+    barcode_variants,
+    name_key,
+    normalize_name,
+    pack_size_of,
+)
 
 FEATURE = "price_intelligence"
 SHOP_CURRENCY = "INR"  # the currency every price in this shop is in (see app.core.locale)
@@ -178,38 +182,9 @@ class Fetched:
 
 # --- Matching ------------------------------------------------------------------------------------
 
-_PACK = re.compile(
-    r"(\d+(?:[.,]\d+)?)\s*(kg|g|gm|gms|gram|grams|mg|l|ltr|litre|liter|ml|pcs|pc|pack)\b", re.I
-)
-_TO_BASE = {
-    "kg": ("g", Decimal(1000)), "g": ("g", Decimal(1)), "gm": ("g", Decimal(1)), "gms": ("g", Decimal(1)),
-    "gram": ("g", Decimal(1)), "grams": ("g", Decimal(1)), "mg": ("g", Decimal("0.001")),
-    "l": ("ml", Decimal(1000)), "ltr": ("ml", Decimal(1000)), "litre": ("ml", Decimal(1000)),
-    "liter": ("ml", Decimal(1000)), "ml": ("ml", Decimal(1)),
-    "pcs": ("pc", Decimal(1)), "pc": ("pc", Decimal(1)), "pack": ("pc", Decimal(1)),
-}  # fmt: skip
-
-
-def pack_size_of(*texts: str | None) -> tuple[Decimal, str] | None:
-    """A pack size such as '1 kg' or '500g' as (amount in grams / millilitres / pieces, family)."""
-    for text in texts:
-        found = _PACK.search(text or "")
-        if found:
-            family, factor = _TO_BASE[found.group(2).lower()]
-            return Decimal(found.group(1).replace(",", ".")) * factor, family
-    return None
-
-
-_NUMBER_UNIT = re.compile(r"(\d)\s+(kg|g|gm|gms|mg|l|ltr|ml|pcs|pc)\b")
-
-
-def _name_key(name: str | None) -> str:
-    """A name for comparing: no case or punctuation, and '1 kg' written like '1kg'."""
-    return _NUMBER_UNIT.sub(r"\1\2", normalize_name(name or ""))
-
 
 def _label(brand: str | None, name: str | None) -> str:
-    return _name_key(f"{brand or ''} {name or ''}")
+    return name_key(f"{brand or ''} {name or ''}")
 
 
 def match_quote(local: LocalRef | None, query_barcode: str, quote: Quote) -> Match | None:
@@ -228,7 +203,7 @@ def match_quote(local: LocalRef | None, query_barcode: str, quote: Quote) -> Mat
         return None  # a different pack size is a different product to compare against
     if not quote.product_name:
         return None
-    same_name = _name_key(quote.product_name) == _name_key(local.name)
+    same_name = name_key(quote.product_name) == name_key(local.name)
     same_brand = bool(
         local.brand and quote.brand and normalize_name(local.brand) == normalize_name(quote.brand)
     )

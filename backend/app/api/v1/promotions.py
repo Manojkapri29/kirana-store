@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import Ctx, OwnerCtx
+from app.api.idempotency import IdempotencyHeader, run_idempotent
 from app.db.session import get_session, write_transaction
 from app.models.enums import PromotionStatus, PromotionType
 from app.schemas.promotion import (
@@ -58,11 +59,19 @@ def list_promotions(
 
 
 @router.post("", response_model=PromotionOut, status_code=201)
-def create_promotion(payload: PromotionCreate, ctx: OwnerCtx) -> PromotionOut:
+def create_promotion(
+    payload: PromotionCreate, ctx: OwnerCtx, idempotency_key: IdempotencyHeader = None
+) -> PromotionOut:
     """Create an offer as a draft. It applies to nothing until it is activated."""
-    with write_transaction() as session:
-        values = payload.model_dump(exclude_none=True)
-        return PromotionOut.from_view(promotion_service.create_promotion(session, ctx, values))
+    values = payload.model_dump(exclude_none=True)
+    return run_idempotent(
+        ctx,
+        idempotency_key,
+        "promotion.create",
+        payload.model_dump(mode="json"),
+        lambda session: PromotionOut.from_view(promotion_service.create_promotion(session, ctx, values)),
+        status_code=201,
+    )
 
 
 @router.get("/usage", response_model=UsageListOut)

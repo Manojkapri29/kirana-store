@@ -83,7 +83,7 @@ export function CustomersPage() {
         {t('customers.filters.biggestFirst')}
       </label>
 
-      {customers.isError && <QueryError onRetry={() => void customers.refetch()} />}
+      {customers.isError && <QueryError error={customers.error} onRetry={() => void customers.refetch()} />}
       {customers.isPending && <Spinner />}
 
       {data && data.items.length === 0 && (

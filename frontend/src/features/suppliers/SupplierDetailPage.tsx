@@ -42,7 +42,7 @@ export function SupplierDetailPage() {
     const notFound = !validId || (supplier.error instanceof ApiError && supplier.error.status === 404)
     return (
       <div className="space-y-6">
-        {notFound ? <Alert tone="error">{t('suppliers.detail.notFound')}</Alert> : <QueryError onRetry={() => void supplier.refetch()} />}
+        {notFound ? <Alert tone="error">{t('suppliers.detail.notFound')}</Alert> : <QueryError error={supplier.error} onRetry={() => void supplier.refetch()} />}
         <LinkButton to="/suppliers" variant="secondary">
           {t('suppliers.detail.backToList')}
         </LinkButton>
@@ -164,7 +164,7 @@ function SuppliedProducts({ supplier }: { supplier: Supplier }) {
         <p className="text-sm text-slate-500">{t('suppliers.detail.productsHint')}</p>
       </div>
 
-      {products.isError && <QueryError onRetry={() => void products.refetch()} />}
+      {products.isError && <QueryError error={products.error} onRetry={() => void products.refetch()} />}
       {products.isPending && <Spinner />}
       {products.data && products.data.items.length === 0 && (
         <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-slate-600">

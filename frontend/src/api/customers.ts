@@ -1,4 +1,4 @@
-import { API_V1_PREFIX, apiFetch, apiSend, type Query } from './client'
+import { API_V1_PREFIX, apiFetch, apiSend, type Query, type SendOptions } from './client'
 import type {
   BalanceFilter,
   BalanceSummary,
@@ -32,8 +32,10 @@ export const getCustomer = (id: number) => apiFetch<Customer>(`${BASE}/${id}`)
 export const getBalance = (id: number) => apiFetch<BalanceSummary>(`${BASE}/${id}/balance`)
 
 /** Create a customer, optionally with what they already owe (an opening balance). */
-export const createCustomer = (payload: CustomerPayload & { opening_balance?: string | null }) =>
-  apiSend<CustomerSaved>('POST', BASE, payload)
+export const createCustomer = (
+  payload: CustomerPayload & { opening_balance?: string | null },
+  options?: SendOptions,
+) => apiSend<CustomerSaved>('POST', BASE, payload, options)
 
 export const updateCustomer = (id: number, changes: Partial<CustomerPayload>) =>
   apiSend<CustomerSaved>('PATCH', `${BASE}/${id}`, changes)

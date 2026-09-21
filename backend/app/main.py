@@ -11,12 +11,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.errors import register_error_handlers
 from app.api.routes import health
 from app.api.v1.router import api_v1_router
+from app.core import diagnostics
 from app.core.config import get_settings
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
+    diagnostics.configure(settings.diagnostics_log_file)
 
     app = FastAPI(
         title=settings.app_name,
@@ -32,7 +34,10 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["Content-Disposition"],  # lets the browser read export file names
+        expose_headers=[
+            "Content-Disposition",
+            "X-Request-ID",
+        ],  # export file names; the request correlation id
     )
     register_error_handlers(app)
 

@@ -18,6 +18,7 @@ from app.models.base import (
     enum_type,
     id_column,
     non_negative,
+    not_blank,
     positive,
     shop_id_column,
     tenant_fk,
@@ -144,6 +145,8 @@ class PurchaseReturn(DocumentLifecycleMixin, TimestampMixin, Base):
     __tablename__ = "purchase_returns"
     __table_args__ = (
         UniqueConstraint("shop_id", "id"),
+        UniqueConstraint("shop_id", "return_no"),
+        not_blank("return_no"),
         UniqueConstraint("replaces_id"),
         tenant_fk("purchase_id", "purchases"),
         tenant_fk("replaces_id", "purchase_returns"),
@@ -155,6 +158,7 @@ class PurchaseReturn(DocumentLifecycleMixin, TimestampMixin, Base):
 
     id: Mapped[int] = id_column()
     shop_id: Mapped[int] = shop_id_column()
+    return_no: Mapped[str] = mapped_column(String(30))  # e.g. PRT/2026-27/0001
     purchase_id: Mapped[int] = mapped_column(IdType)
     return_date: Mapped[date] = mapped_column(Date)
     credit_mode: Mapped[SupplierCreditMode] = mapped_column(enum_type(SupplierCreditMode, "credit_mode"))

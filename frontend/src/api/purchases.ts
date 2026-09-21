@@ -1,4 +1,4 @@
-import { API_V1_PREFIX, apiFetch, apiSend, type Query } from './client'
+import { API_V1_PREFIX, apiFetch, apiSend, type Query, type SendOptions } from './client'
 import type {
   Page,
   Purchase,
@@ -31,8 +31,10 @@ export const getSupplierPurchaseTotals = (supplierId: number) =>
   apiFetch<SupplierPurchaseTotals>(`${BASE}/supplier-totals/${supplierId}`)
 
 /** Create a draft with its lines. Nothing is posted and no stock moves. */
-export const createPurchase = (payload: PurchaseHeaderPayload & { items: PurchaseItemPayload[] }) =>
-  apiSend<Purchase>('POST', BASE, payload)
+export const createPurchase = (
+  payload: PurchaseHeaderPayload & { items: PurchaseItemPayload[] },
+  options?: SendOptions,
+) => apiSend<Purchase>('POST', BASE, payload, options)
 
 export const updatePurchaseHeader = (id: number, changes: Partial<PurchaseHeaderPayload>) =>
   apiSend<Purchase>('PATCH', `${BASE}/${id}`, changes)
@@ -42,7 +44,8 @@ export const replacePurchaseItems = (id: number, items: PurchaseItemPayload[]) =
   apiSend<Purchase>('PUT', `${BASE}/${id}/items`, { items })
 
 /** Post a draft: number it, add the stock and update the average costs, all at once. */
-export const postPurchase = (id: number) => apiSend<Purchase>('POST', `${BASE}/${id}/post`)
+export const postPurchase = (id: number, options?: SendOptions) =>
+  apiSend<Purchase>('POST', `${BASE}/${id}/post`, undefined, options)
 
 /** Void a posted purchase (its stock is reversed) or discard a draft. A reason is required. */
 export const voidPurchase = (id: number, reason: string) =>

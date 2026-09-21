@@ -1,4 +1,4 @@
-import { API_V1_PREFIX, apiFetch, apiSend, type Query } from './client'
+import { API_V1_PREFIX, apiFetch, apiSend, type Query, type SendOptions } from './client'
 import type { Page, Promotion, PromotionPayload, PromotionStatus, PromotionType, PromotionUsage } from './types'
 
 const BASE = `${API_V1_PREFIX}/promotions`
@@ -14,7 +14,8 @@ export interface PromotionListParams {
 
 export const listPromotions = (params: PromotionListParams) => apiFetch<Page<Promotion>>(BASE, { query: params as Query })
 export const getPromotion = (id: number) => apiFetch<Promotion>(`${BASE}/${id}`)
-export const createPromotion = (payload: PromotionPayload) => apiSend<Promotion>('POST', BASE, payload)
+export const createPromotion = (payload: PromotionPayload, options?: SendOptions) =>
+  apiSend<Promotion>('POST', BASE, payload, options)
 export const updatePromotion = (id: number, changes: PromotionPayload) => apiSend<Promotion>('PATCH', `${BASE}/${id}`, changes)
 export const setPromotionState = (id: number, action: 'activate' | 'pause' | 'expire') =>
   apiSend<Promotion>('POST', `${BASE}/${id}/${action}`)

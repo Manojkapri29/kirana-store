@@ -66,7 +66,7 @@ export function SuppliersPage() {
         </FilterSelect>
       </div>
 
-      {suppliers.isError && <QueryError onRetry={() => void suppliers.refetch()} />}
+      {suppliers.isError && <QueryError error={suppliers.error} onRetry={() => void suppliers.refetch()} />}
       {suppliers.isPending && <Spinner />}
 
       {data && data.items.length === 0 && (

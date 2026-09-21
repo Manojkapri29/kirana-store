@@ -13,8 +13,8 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 | 5 | Purchases + weighted average cost | Done |
 | 6 | Customers + Khata | Done |
 | 7 | Detailed Sales | Done |
-| 8 | Quick Sales, barcode scanning, price intelligence, offers and coupons, plans | Done, awaiting review |
-| 9 | Returns | Planned |
+| 8 | Quick Sales, barcode scanning, price intelligence, offers and coupons, plans | Done |
+| 9 | Returns, smart error recovery, smart photo capture | Done, awaiting review |
 | 10 | Inventory views + adjustments + stock count + reliability indicators | Planned |
 | ✔ | **PostgreSQL checkpoint** (after Phase 10) | Planned |
 | 11 | Expenses | Planned |
@@ -147,39 +147,42 @@ twice by simultaneous sales; a plan without a feature is refused by the server; 
 billing untouched. *Not in this phase:* online ordering, a payment gateway, real subscription billing, loyalty,
 AI agents, deployment.
 
-### Phase 9: Returns
-Sales returns and purchase returns that reference the original line, refund/credit modes, and cost
-handling. Unbilled returns use adjustments (Phase 10). A sales return refunds a line's net revenue (line total
-less its share of any offer, `sale_items.promotion_discount`), so an offer is never refunded twice.
-**Done when:** return quantity caps, proportional refunds, void rules, and history preservation are tested.
+### Phase 9: Returns, smart error recovery, smart photo capture
+Three pieces on the existing architecture (routers, services, ledgers, one idempotency mechanism):
 
-**Added requirements for Phase 9 (planned, not built).**
+* **Returns.** Sales returns and purchase returns that reference the original line, with refund modes (cash, UPI,
+  khata credit) and credit modes (cash, UPI, supplier credit), quantity caps across all live returns of a line, a
+  refund worked out by the server in proportion to what was paid (net of offers and any bill discount, cumulative
+  rounding so the last return of a line refunds the exact remainder), and the original line's cost. A sales return
+  is a costed receipt (`SALE_RETURN`), a purchase return an issue (`PURCHASE_RETURN`, checked under product locks).
+  Void by reversal with a reason; a sale or purchase with a live return cannot be voided. Numbers `SRT/...` and
+  `PRT/...` (migration `0011`). Reports show returns and net-after-returns, and profit is adjusted only when the
+  cost is known. Screens: Returns list (sales and purchase tabs, CSV/XLSX), "Return items" from a posted sale or
+  purchase with a server-calculated preview, return detail with void, and the returns made against a document.
+* **Smart error recovery.** One error format and one place that builds it (`api/errors.py`): `success`,
+  `error_code`, `message`, `category`, `retryable`, `reference_id`, plus the old `detail` so every screen keeps
+  working. Unexpected failures give the user a plain message and a reference (`ERR-YYYYMMDD-XXXXX`); the real
+  cause goes, redacted, to the internal diagnostics log (`core/diagnostics.py`). One idempotency mechanism
+  (`Idempotency-Key`) for creating and posting. Frontend: `describeError` decides what a person sees and can do,
+  `ErrorNotice` shows it, `ErrorBoundary` catches crashes, reads are retried (only when transient) and writes never
+  are, forms keep what was typed (`useFormBackup`) and retry with the same key. See BUSINESS_RULES `ER`.
+* **Smart photo capture (foundation).** Optional. Take or choose a photo; the server validates the real content
+  (magic bytes, type, size, dimensions); a provider interface for OCR or image analysis with no provider bundled, so
+  the honest answer today is "Image analysis is not configured yet."; results are Detected or Suggested, never
+  confirmed; a duplicate check before creating; a barcode goes through the Phase 8 lookup; creation only through an
+  explicit "Confirm & Create Product"; the photo is kept only if the owner asks (private, per shop, one per product;
+  migration `0012`, plan feature `image_intelligence`). A photo never changes stock, prices, orders, khata or money.
+  See BUSINESS_RULES `IM`.
 
-*1. Smart error recovery.* Normal users never see a traceback, SQL or database text, an internal path, a key or a
-server detail. Every unexpected failure is captured and logged internally with a safe reference id (for example
-`ERR-20260921-A82F`), and the user sees a plain message, the reference, and the recovery that fits (Try again,
-Save as draft, Go back, Refresh, Continue). One reusable backend error format
-(`success`, `error_code`, `message`, `reference_id`, `retryable`) built on the existing exception handlers, not
-repeated per route. Categories: validation, network, external API, timeout, database, inventory conflict,
-insufficient stock, duplicate, authentication, authorization, image upload, offer calculation, checkout. Auto-retry
-only for safe reads (search, price lookup, image metadata); never for posting a sale, deducting stock, an order, a
-payment or a khata entry unless the existing idempotency keys make the repeat harmless. Forms keep what was typed
-when a non-fatal error happens; no duplicate orders; "Success" is shown only after the backend transaction has
-committed. React error boundaries show "This section couldn't be loaded" with Retry, Go to Dashboard and Reload.
-A logging foundation records reference id, time, endpoint, method, shop, user, category, exception type, sanitised
-details and a correlation id, never passwords, keys, tokens or payment secrets. No public error-log screen.
-
-*2. Smart photo capture (image intelligence foundation).* An optional layer, never required. Take, upload or
-choose a photo; the backend validates type, size and dimensions; a provider abstraction (OCR and image analysis)
-is integrated only if a provider is safely configured, otherwise "Image analysis is not configured yet." Results
-are labelled Detected or Suggested, never confirmed; the flow is Photo, Analysis, Suggestions, Review, Confirm,
-Save. Duplicate check before creating a product from an image (barcode, SKU, normalised name, brand, pack size).
-A barcode found in an image goes through the existing Phase 8 lookup, not a second barcode system. Keys stay in
-the backend; images go to an external provider only when the user explicitly triggers analysis; images are private
-to the shop. Later: supplier invoice photo to purchase draft, handwritten stock list to adjustment draft, shelf
-photo, damaged or expired product to a suggested adjustment reason. An image never changes stock, prices, orders,
-khata or money by itself. Priority: Data Integrity > User Safety > Security > Correctness > Recovery >
-Intelligence > Convenience.
+**Done when:** return quantity caps, proportional refunds, void rules and history preservation are tested; a
+failed operation shows a reference and no internal detail; a repeated request never posts twice; a photo never
+creates or changes anything without a confirmation.
+*Not in this phase:* returns without an original document (use adjustments, Phase 10), a supplier ledger (supplier
+credit is recorded on the return only), a bundled image-analysis provider, and the future photo uses below.
+*Future, not built:* supplier invoice photo to purchase draft, handwritten stock list to adjustment draft, shelf
+photo, damaged or expired product photo to a suggested adjustment reason. Each will produce a draft for review; an
+image will never change stock by itself. Priority: Data Integrity > User Safety > Security > Correctness >
+Recovery > Intelligence > Convenience.
 
 ### Phase 10: Inventory views + adjustments + stock count + reliability indicators
 Inventory table (opening, purchased, sold, returns, adjustments, current), adjustments with reason

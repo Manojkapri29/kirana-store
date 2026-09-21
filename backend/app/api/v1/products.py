@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import Ctx
+from app.api.idempotency import IdempotencyHeader, run_idempotent
 from app.db.session import get_session, write_transaction
 from app.schemas.product import (
     LookupOut,
@@ -65,10 +66,19 @@ def list_products(
 
 
 @router.post("", response_model=ProductSaved, status_code=201)
-def create_product(payload: ProductCreate, ctx: Ctx) -> ProductSaved:
-    with write_transaction() as session:
-        result = product_service.create_product(session, ctx, payload.model_dump())
-        return ProductSaved.from_result(result)
+def create_product(
+    payload: ProductCreate, ctx: Ctx, idempotency_key: IdempotencyHeader = None
+) -> ProductSaved:
+    return run_idempotent(
+        ctx,
+        idempotency_key,
+        "product.create",
+        payload.model_dump(mode="json"),
+        lambda session: ProductSaved.from_result(
+            product_service.create_product(session, ctx, payload.model_dump())
+        ),
+        status_code=201,
+    )
 
 
 @router.get("/lookup", response_model=LookupOut)

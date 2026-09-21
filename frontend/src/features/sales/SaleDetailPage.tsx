@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Ban, CircleCheck, Copy, Pencil } from 'lucide-react'
+import { ArrowLeft, Ban, CircleCheck, Copy, Pencil, Undo2 } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -13,6 +13,7 @@ import { TextAreaField } from '@/components/fields'
 import { Alert, Button, LinkButton, QueryError, Spinner } from '@/components/ui'
 import { formatDate, formatDateTime, formatMoney, formatQuantity, NOT_SET } from '@/lib/format'
 
+import { ReturnsOfDocument } from '../returns/ReturnsOfDocument'
 import { invalidateSaleData } from './invalidate'
 import { PaymentPanel } from './PaymentPanel'
 import { SaleStatusBadge } from './SaleStatusBadge'
@@ -40,7 +41,7 @@ export function SaleDetailPage() {
     const notFound = !validId || (sale.error instanceof ApiError && sale.error.status === 404)
     return (
       <div className="space-y-6">
-        {notFound ? <Alert tone="error">{t('sales.detail.notFound')}</Alert> : <QueryError onRetry={() => void sale.refetch()} />}
+        {notFound ? <Alert tone="error">{t('sales.detail.notFound')}</Alert> : <QueryError error={sale.error} onRetry={() => void sale.refetch()} />}
         <LinkButton to="/sales" variant="secondary">
           {t('sales.detail.backToList')}
         </LinkButton>
@@ -114,6 +115,12 @@ export function SaleDetailPage() {
             </>
           )}
           {s.status === 'POSTED' && (
+            <LinkButton to={`/sales/${s.id}/return`} variant="secondary">
+              <Undo2 aria-hidden="true" className="size-5" />
+              {t('returns.returnItems')}
+            </LinkButton>
+          )}
+          {s.status === 'POSTED' && (
             <Button variant="danger" onClick={() => setPanel(panel === 'void' ? null : 'void')}>
               <Ban aria-hidden="true" className="size-5" />
               {t('sales.detail.void')}
@@ -179,6 +186,7 @@ export function SaleDetailPage() {
       </div>
 
       <ItemsSection sale={s} />
+      {s.status === 'POSTED' && <ReturnsOfDocument kind="sale" id={s.id} />}
 
       {s.status !== 'DRAFT' && (
         <div className="border-t border-slate-200 pt-4">

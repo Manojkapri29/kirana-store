@@ -33,7 +33,7 @@ from app.core.context import RequestContext
 from app.db.types import round_money, utc_now
 from app.models import Product, Purchase, PurchaseItem, Supplier, Unit, User
 from app.models.enums import PurchaseStatus, StockReferenceType
-from app.services import inventory_service, numbering_service
+from app.services import inventory_service, numbering_service, purchase_return_service
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
 from app.services.shop_service import get_shop, shop_today
@@ -750,6 +750,8 @@ def void_purchase(session: Session, ctx: RequestContext, purchase_id: int, reaso
 
     before = _snapshot(purchase)
     was_posted = purchase.status is PurchaseStatus.POSTED
+    if was_posted and purchase_return_service.has_live_returns(session, ctx.shop_id, purchase.id):
+        raise ConflictError("This purchase has returns. Void the returns first, then void the purchase.")
     if was_posted:
         item_ids = [i.id for i in _items_of(session, ctx.shop_id, purchase.id)]
         inventory_service.reverse_lines(

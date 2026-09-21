@@ -738,6 +738,26 @@ def reverse_credit_sale(
     return reverse_entry(session, ctx, entry.id, reason=reason, allow_document_entries=True)
 
 
+def reverse_return_credit(
+    session: Session,
+    ctx: RequestContext,
+    reference_id: int,
+    *,
+    reason: str,
+) -> EntryResult | None:
+    """Undo the credit a sales return gave a customer's khata (used when the return is voided).
+
+    Returns `None` when the return was refunded in cash or UPI (it never touched the khata). This is the
+    document-workflow path that is allowed to reverse a RETURN_CREDIT entry.
+    """
+    entry = _find_by_reference(
+        session, ctx.shop_id, E.RETURN_CREDIT, KhataReferenceType.SALES_RETURN, reference_id
+    )
+    if entry is None:
+        return None
+    return reverse_entry(session, ctx, entry.id, reason=reason, allow_document_entries=True)
+
+
 # --- Writing: a customer with an opening balance -------------------------------------------------
 
 

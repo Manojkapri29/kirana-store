@@ -65,7 +65,7 @@ function PlanCard({ plan }: { plan: SubscriptionPlan }) {
 export function SubscriptionPage() {
   const { t } = useTranslation()
   const query = useQuery({ queryKey: ['subscription'], queryFn: getSubscription })
-  if (query.isError) return <QueryError onRetry={() => void query.refetch()} />
+  if (query.isError) return <QueryError error={query.error} onRetry={() => void query.refetch()} />
   if (!query.data) return <Spinner />
   const s = query.data
 

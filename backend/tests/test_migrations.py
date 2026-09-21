@@ -18,12 +18,12 @@ from tests.conftest import alembic_config, sqlite_url
 EXPECTED_TABLES = {
     "audit_log", "business_types", "categories", "customer_ledger", "customers", "document_sequences",
     "expense_categories", "expenses", "idempotency_keys", "inventory_transactions", "products",
-    "plan_features", "plans", "price_observations", "promotions", "purchase_items", "purchase_return_items", "purchase_returns", "purchases", "quick_sales",
+    "plan_features", "plans", "price_observations", "product_images", "promotions", "purchase_items", "purchase_return_items", "purchase_returns", "purchases", "quick_sales",
     "sale_items", "sale_promotions", "sales", "sales_return_items", "sales_returns", "shop_subscriptions", "shops",
     "subscription_usage", "suppliers", "units", "users",
 }  # fmt: skip
 
-HEAD = "0010"  # the newest revision: the one place to change when a migration is added
+HEAD = "0012"  # the newest revision: the one place to change when a migration is added
 
 MIGRATION_FILES = sorted((BACKEND_DIR / "migrations" / "versions").glob("*.py"))
 
@@ -880,7 +880,8 @@ class TestMigration0007Subscriptions:
                 "pro",
             ]
             assert (
-                c.scalar(text("SELECT count(*) FROM plan_features")) == 27
+                c.scalar(text("SELECT count(*) FROM plan_features"))
+                == 27 + 3  # + image_intelligence per plan (0012)
             )  # 3 plans x (5 features + 4 limits)
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()

@@ -53,7 +53,7 @@ export function CustomerDetailPage() {
     const notFound = !validId || (customer.error instanceof ApiError && customer.error.status === 404)
     return (
       <div className="space-y-6">
-        {notFound ? <Alert tone="error">{t('customers.detail.notFound')}</Alert> : <QueryError onRetry={() => void customer.refetch()} />}
+        {notFound ? <Alert tone="error">{t('customers.detail.notFound')}</Alert> : <QueryError error={customer.error} onRetry={() => void customer.refetch()} />}
         <LinkButton to="/customers" variant="secondary">
           {t('customers.detail.backToList')}
         </LinkButton>
@@ -214,7 +214,7 @@ function LedgerSection({ customerId }: { customerId: number }) {
 
       {reversing && <ReverseForm customerId={customerId} entry={reversing} onDone={() => setReversing(null)} />}
 
-      {ledger.isError && <QueryError onRetry={() => void ledger.refetch()} />}
+      {ledger.isError && <QueryError error={ledger.error} onRetry={() => void ledger.refetch()} />}
       {ledger.isPending && <Spinner />}
       {ledger.data?.total === 0 && (
         <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-slate-600">

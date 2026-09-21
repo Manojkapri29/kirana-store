@@ -45,7 +45,7 @@ export function PromotionDetailPage() {
     const notFound = !validId || (promotion.error instanceof ApiError && promotion.error.status === 404)
     return (
       <div className="space-y-6">
-        {notFound ? <Alert tone="error">{t('promotions.detail.notFound')}</Alert> : <QueryError onRetry={() => void promotion.refetch()} />}
+        {notFound ? <Alert tone="error">{t('promotions.detail.notFound')}</Alert> : <QueryError error={promotion.error} onRetry={() => void promotion.refetch()} />}
         <LinkButton to="/promotions" variant="secondary">{t('promotions.detail.backToList')}</LinkButton>
       </div>
     )
@@ -154,7 +154,7 @@ export function PromotionDetailPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold text-slate-900">{t('promotions.detail.usageHeading')}</h2>
-        {usage.isError && <QueryError onRetry={() => void usage.refetch()} />}
+        {usage.isError && <QueryError error={usage.error} onRetry={() => void usage.refetch()} />}
         {usage.data && usage.data.items.length === 0 && <p className="text-slate-600">{t('promotions.detail.noUsage')}</p>}
         {usage.data && usage.data.items.length > 0 && (
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">

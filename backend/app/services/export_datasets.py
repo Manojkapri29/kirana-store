@@ -30,10 +30,12 @@ from app.services import (
     product_service,
     promotion_calculation,
     promotion_service,
+    purchase_return_service,
     purchase_service,
     quick_sale_service,
     sale_service,
     sales_report_service,
+    sales_return_service,
 )
 from app.services.export_service import Column, ExportFile, ExportFormat, Kind, render
 from app.services.inventory_service import StockStatus
@@ -289,6 +291,35 @@ DISCOUNT_REPORT_COLUMNS = [
     Column("coupon_code", "Coupon Code"),
     Column("uses", "Times Used", Kind.INTEGER),
     Column("discount", "Discount Given", Kind.MONEY),
+]
+
+SALES_RETURN_COLUMNS = [
+    Column("return_no", "Return No"),
+    Column("return_date", "Date", Kind.DATE),
+    Column("invoice_no", "Invoice No"),
+    Column("customer", "Customer"),
+    Column("status", "Status"),
+    Column("refund_mode", "Refund By"),
+    Column("items", "Items", Kind.INTEGER),
+    Column("total_refund", "Refund", Kind.MONEY),
+    Column("cogs", "Cost Of Goods Returned", Kind.MONEY),
+    Column("reason", "Reason"),
+    Column("created_by", "Created By"),
+    Column("void_reason", "Void Reason"),
+]
+
+PURCHASE_RETURN_COLUMNS = [
+    Column("return_no", "Return No"),
+    Column("return_date", "Date", Kind.DATE),
+    Column("purchase_no", "Purchase No"),
+    Column("supplier", "Supplier"),
+    Column("status", "Status"),
+    Column("credit_mode", "Credit By"),
+    Column("items", "Items", Kind.INTEGER),
+    Column("total_amount", "Credit", Kind.MONEY),
+    Column("reason", "Reason"),
+    Column("created_by", "Created By"),
+    Column("void_reason", "Void Reason"),
 ]
 
 BALANCE_LABELS = {
@@ -648,6 +679,53 @@ def _discount_report(session: Session, ctx: RequestContext, **filters: Any) -> _
     return _Dataset("discount_report", DISCOUNT_REPORT_COLUMNS, rows)
 
 
+def _sales_returns(session: Session, ctx: RequestContext, **filters: Any) -> _Dataset:
+    rows = []
+    listed, _ = sales_return_service.list_returns(session, ctx.shop_id, limit=None, **filters)
+    for row in listed:
+        view = sales_return_service.get_view(session, ctx.shop_id, row.ret.id)
+        rows.append(
+            {
+                "return_no": row.ret.return_no,
+                "return_date": row.ret.return_date,
+                "invoice_no": row.invoice_no,
+                "customer": row.customer_name,
+                "status": row.ret.status.value.title(),
+                "refund_mode": row.ret.refund_mode.value.title(),
+                "items": row.item_count,
+                "total_refund": row.ret.total_refund,
+                "cogs": view.cogs_total,
+                "reason": row.ret.reason,
+                "created_by": view.created_by_name,
+                "void_reason": row.ret.void_reason,
+            }
+        )
+    return _Dataset("sales_returns", SALES_RETURN_COLUMNS, rows)
+
+
+def _purchase_returns(session: Session, ctx: RequestContext, **filters: Any) -> _Dataset:
+    rows = []
+    listed, _ = purchase_return_service.list_returns(session, ctx.shop_id, limit=None, **filters)
+    for row in listed:
+        view = purchase_return_service.get_view(session, ctx.shop_id, row.ret.id)
+        rows.append(
+            {
+                "return_no": row.ret.return_no,
+                "return_date": row.ret.return_date,
+                "purchase_no": row.purchase_no,
+                "supplier": row.supplier_name,
+                "status": row.ret.status.value.title(),
+                "credit_mode": row.ret.credit_mode.value.replace("_", " ").title(),
+                "items": row.item_count,
+                "total_amount": row.ret.total_amount,
+                "reason": row.ret.reason,
+                "created_by": view.created_by_name,
+                "void_reason": row.ret.void_reason,
+            }
+        )
+    return _Dataset("purchase_returns", PURCHASE_RETURN_COLUMNS, rows)
+
+
 def _customers(session: Session, ctx: RequestContext, *, active: bool | None, **filters: Any) -> _Dataset:
     shop = get_shop(session, ctx.shop_id)
     accounts, _ = khata_service.list_accounts(session, ctx.shop_id, active=active, limit=None, **filters)
@@ -960,4 +1038,34 @@ def export_discount_report(
 ) -> ExportFile:
     """Discount given by offer and by coupon (needs the plan's advanced reports)."""
     dataset = _discount_report(session, ctx, date_from=date_from, date_to=date_to)
+    return _file(session, ctx, dataset, fmt)
+
+
+def export_sales_returns(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    q: str | None = None,
+    statuses: list[Any] | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> ExportFile:
+    """One row per sales return, with the refund and the cost of the goods that came back."""
+    dataset = _sales_returns(session, ctx, q=q, statuses=statuses, date_from=date_from, date_to=date_to)
+    return _file(session, ctx, dataset, fmt)
+
+
+def export_purchase_returns(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    q: str | None = None,
+    statuses: list[Any] | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> ExportFile:
+    """One row per purchase return."""
+    dataset = _purchase_returns(session, ctx, q=q, statuses=statuses, date_from=date_from, date_to=date_to)
     return _file(session, ctx, dataset, fmt)

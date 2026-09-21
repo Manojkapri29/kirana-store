@@ -16,6 +16,7 @@ scoped to the caller's shop. A code nobody has gives "Barcode not found": lookup
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import func, or_
@@ -68,6 +69,37 @@ def normalize_name(value: str) -> str:
     return " ".join(_NOT_WORD.sub(" ", folded).split())
 
 
+# --- Pack sizes and names, for matching a name across sources --------------------------------------
+_PACK = re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*(kg|g|gm|gms|gram|grams|mg|l|ltr|litre|liter|ml|pcs|pc|pack)\b", re.I
+)
+_TO_BASE = {
+    "kg": ("g", Decimal(1000)), "g": ("g", Decimal(1)), "gm": ("g", Decimal(1)), "gms": ("g", Decimal(1)),
+    "gram": ("g", Decimal(1)), "grams": ("g", Decimal(1)), "mg": ("g", Decimal("0.001")),
+    "l": ("ml", Decimal(1000)), "ltr": ("ml", Decimal(1000)), "litre": ("ml", Decimal(1000)),
+    "liter": ("ml", Decimal(1000)), "ml": ("ml", Decimal(1)),
+    "pcs": ("pc", Decimal(1)), "pc": ("pc", Decimal(1)), "pack": ("pc", Decimal(1)),
+}  # fmt: skip
+
+
+def pack_size_of(*texts: str | None) -> tuple[Decimal, str] | None:
+    """A pack size such as '1 kg' or '500g' as (amount in grams / millilitres / pieces, family)."""
+    for text in texts:
+        found = _PACK.search(text or "")
+        if found:
+            family, factor = _TO_BASE[found.group(2).lower()]
+            return Decimal(found.group(1).replace(",", ".")) * factor, family
+    return None
+
+
+_NUMBER_UNIT = re.compile(r"(\d)\s+(kg|g|gm|gms|mg|l|ltr|ml|pcs|pc)\b")
+
+
+def name_key(name: str | None) -> str:
+    """A name for comparing: no case or punctuation, and '1 kg' written like '1kg'."""
+    return _NUMBER_UNIT.sub(r"\1\2", normalize_name(name or ""))
+
+
 def barcode_variants(code: str) -> list[str]:
     """The code itself, plus its UPC-A <-> EAN-13 twin (the same product with or without a leading zero)."""
     variants = [code]
@@ -83,9 +115,13 @@ def _looks_like_a_barcode(code: str) -> bool:
     return code.isdigit() and len(code) >= 6
 
 
-def lookup(session: Session, shop_id: int, raw_code: str, *, limit: int = DEFAULT_LIMIT) -> LookupResult:
-    """Find products for a scanned or typed code, in the order above. Needs the plan's barcode feature."""
-    entitlement_service.require_feature(session, shop_id, FEATURE)
+def lookup(
+    session: Session, shop_id: int, raw_code: str, *, limit: int = DEFAULT_LIMIT, enforce_plan: bool = True
+) -> LookupResult:
+    """Find products for a scanned or typed code, in the order above. Needs the plan's barcode feature, unless
+    the caller has already checked the plan for the feature it is serving (`enforce_plan=False`)."""
+    if enforce_plan:
+        entitlement_service.require_feature(session, shop_id, FEATURE)
     code = clean_code(raw_code)
     if not code:
         raise InvalidInputError("Scan or type a barcode, SKU or product name.", field="code")

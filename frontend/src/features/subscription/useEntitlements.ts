@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { getSubscription } from '@/api/subscription'
 
-export type Feature = 'barcode_lookup' | 'promotions' | 'price_intelligence' | 'advanced_reports' | 'online_store'
+export type Feature = 'barcode_lookup' | 'promotions' | 'price_intelligence' | 'advanced_reports' | 'online_store' | 'image_intelligence'
 
 /**
  * What the shop's plan includes. This is only for showing or hiding things: the server enforces the plan on every

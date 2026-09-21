@@ -117,7 +117,7 @@ export function SalesPage() {
         )}
       </div>
 
-      {sales.isError && <QueryError onRetry={() => void sales.refetch()} />}
+      {sales.isError && <QueryError error={sales.error} onRetry={() => void sales.refetch()} />}
       {sales.isPending && !rangeInvalid && <Spinner />}
 
       {data && data.items.length === 0 && (

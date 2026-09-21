@@ -12,6 +12,8 @@ export type ExportKind =
   | 'sales'
   | 'sale-items'
   | 'quick-sales'
+  | 'sales-returns'
+  | 'purchase-returns'
   | 'promotions'
   | 'promotion-usage'
   | 'price-history'

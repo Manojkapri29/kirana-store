@@ -11,6 +11,11 @@ import { listProducts } from '@/api/products'
 import type { Promotion, PromotionAudience, PromotionScope, PromotionType } from '@/api/types'
 import { SelectField, TextAreaField, TextField } from '@/components/fields'
 import { SearchInput } from '@/components/SearchInput'
+import { ErrorNotice } from '@/components/ErrorNotice'
+import { RestoreBanner } from '@/components/RestoreBanner'
+import { useFailure, needsNotice } from '@/hooks/useFailure'
+import { useFormBackup } from '@/hooks/useFormBackup'
+import { useIdempotencyKey } from '@/lib/idempotency'
 import { Alert, Button, LinkButton, PageHeader, QueryError, Spinner } from '@/components/ui'
 import { CustomerPicker } from '@/features/sales/CustomerPicker'
 import { useEntitlements } from '@/features/subscription/useEntitlements'
@@ -98,7 +103,7 @@ export function PromotionFormPage({ mode }: { mode: 'create' | 'edit' }) {
     return (
       <div className="space-y-6">
         <PageHeader title={title} />
-        {notFound ? <Alert tone="error">{t('promotions.detail.notFound')}</Alert> : <QueryError onRetry={() => void promotion.refetch()} />}
+        {notFound ? <Alert tone="error">{t('promotions.detail.notFound')}</Alert> : <QueryError error={promotion.error} onRetry={() => void promotion.refetch()} />}
         <LinkButton to="/promotions" variant="secondary">{t('promotions.detail.backToList')}</LinkButton>
       </div>
     )
@@ -121,19 +126,29 @@ function Form({ promotion, timeZone }: { promotion: Promotion | undefined; timeZ
   const [v, setV] = useState<PromotionFormValues>(() => (promotion ? valuesFromPromotion(promotion, timeZone) : emptyPromotion()))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
+  const { failure, setFailure } = useFailure()
+  const idem = useIdempotencyKey()
+  const backup = useFormBackup('promotion.new', v, { enabled: mode === 'create' })
   const categories = useQuery({ queryKey: ['categories'], queryFn: listCategories })
   const set = (changes: Partial<PromotionFormValues>) => setV((current) => ({ ...current, ...changes }))
 
   const save = useMutation({
     mutationFn: () => {
       const payload = promotionPayload(v, mode)
-      return promotion ? updatePromotion(promotion.id, payload) : createPromotion(payload)
+      if (promotion) return updatePromotion(promotion.id, payload)
+      return createPromotion(payload, { idempotencyKey: idem.keyFor(JSON.stringify(payload)) })
     },
     onSuccess: async (saved) => {
+      idem.renew()
+      backup.clear()
       await Promise.all(['promotions', 'promotion'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })))
       void navigate(`/promotions/${saved.id}`)
     },
     onError: (error) => {
+      if (needsNotice(error)) {
+        setFailure(error)
+        return
+      }
       if (error instanceof ApiError) {
         setErrors(error.fieldErrors)
         setFormError(error.status === 403 ? t('promotions.planNeeded') : error.message)
@@ -144,6 +159,7 @@ function Form({ promotion, timeZone }: { promotion: Promotion | undefined; timeZ
   function submit(event: FormEvent) {
     event.preventDefault()
     setFormError(null)
+    setFailure(null)
     const local: Record<string, string> = {}
     for (const field of numberProblems(v)) local[field] = t('promotions.form.needNumber')
     setErrors(local)
@@ -162,7 +178,19 @@ function Form({ promotion, timeZone }: { promotion: Promotion | undefined; timeZ
   return (
     <form onSubmit={submit} noValidate className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
+        {backup.restorable && (
+          <RestoreBanner
+            onRestore={() => {
+              setV(backup.restorable!)
+              backup.dismiss()
+            }}
+            onDiscard={backup.clear}
+          />
+        )}
         {formError && <Alert tone="error">{formError}</Alert>}
+        {failure !== null && (
+          <ErrorNotice error={failure} context="save" safeToRepeat={true} retry={() => save.mutate()} cancel={() => void navigate('/promotions')} />
+        )}
         {allows('promotions') === false && <Alert tone="warning">{t('promotions.planNeeded')}</Alert>}
         {fixed && <Alert tone="info">{t('promotions.form.typeFixed')}</Alert>}
 

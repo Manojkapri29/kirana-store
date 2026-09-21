@@ -4,8 +4,9 @@ The rule (BUSINESS_RULES C1 to C6). Every unit of stock is worth the *average co
 
     new average = (old stock x old average + value received) / (old stock + quantity received)
 
-where **value received is the net cost of the goods: quantity x price, minus any discount** (a purchase line's
-`line_total`). Averages are kept to whole paise, rounded half up, so results are exact and repeatable.
+where **value received is the net cost of the goods: quantity x price, minus any discount** (a purchase
+line's `line_total`). Averages are kept to whole paise, rounded half up, so results are exact and
+repeatable.
 
 Edge cases, decided explicitly:
   * **Nothing on hand** (stock zero, or below zero): the average is simply the incoming cost. The first
@@ -42,7 +43,8 @@ def next_average_cost(
     """The average cost after receiving `quantity` units.
 
     `line_value` is the exact net value of the receipt (a purchase line's total). If only `unit_cost` is
-    known (opening stock), the value is `quantity x unit_cost`. If neither is known, the receipt has no cost.
+    known (opening stock), the value is `quantity x unit_cost`. If neither is known, the receipt has no
+    cost.
     """
     cost_known = line_value is not None or unit_cost is not None
     if not cost_known:
@@ -63,8 +65,8 @@ def next_average_cost(
 def cost_of_goods(quantity: Decimal, unit_cost: Decimal | None) -> Decimal | None:
     """Cost of goods sold for a quantity leaving stock: quantity x cost, whole paise, half up.
 
-    An unknown cost gives `None`, never 0: a sale of goods with no known cost has no known cost of goods, and
-    therefore no known profit (BUSINESS_RULES C3, F).
+    An unknown cost gives `None`, never 0: a sale of goods with no known cost has no known cost of goods,
+    and therefore no known profit (BUSINESS_RULES C3, F).
     """
     return None if unit_cost is None else round_money(quantity * unit_cost)
 
@@ -80,7 +82,10 @@ class CostEvent:
 
 
 # Movements that bring in stock at a known or unknown cost and therefore move the average.
-_COSTED_RECEIPTS = {InventoryTxnType.OPENING, InventoryTxnType.PURCHASE}
+# A sale return puts goods back at the cost of the line they were sold from (BUSINESS_RULES R2, R5), so it
+# moves
+# the average like any other receipt. A purchase return only removes stock at the cost it came in at.
+_COSTED_RECEIPTS = {InventoryTxnType.OPENING, InventoryTxnType.PURCHASE, InventoryTxnType.SALE_RETURN}
 
 
 def replay_average_cost(events: Iterable[CostEvent]) -> tuple[Decimal, Decimal | None]:

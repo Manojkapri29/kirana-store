@@ -87,7 +87,7 @@ export function QuickSalesPage() {
         {rangeInvalid && <p role="alert" className="text-sm font-medium text-red-700">{t('sales.filters.rangeInvalid')}</p>}
       </div>
 
-      {sales.isError && <QueryError onRetry={() => void sales.refetch()} />}
+      {sales.isError && <QueryError error={sales.error} onRetry={() => void sales.refetch()} />}
       {sales.isPending && !rangeInvalid && <Spinner />}
       {data && data.items.length === 0 && (
         <EmptyState

@@ -52,6 +52,11 @@ class SalesSummaryOut(BaseModel):
     # figures have no profit.
     detailed_gross_profit: Decimal | None
     detailed_sales_without_cost: int
+    # Sales returns dated in the period (BUSINESS_RULES R5): the profit above already has them taken off.
+    returns_count: int
+    returns_total: Decimal
+    net_after_returns: Decimal
+    returns_without_cost: int
     combined_profit: None = None
     combined_profit_label: str = NOT_AVAILABLE
     days: list[DayOut]
@@ -66,6 +71,10 @@ class SalesSummaryOut(BaseModel):
             combined=TotalsOut.of(s.combined),
             detailed_gross_profit=s.detailed_gross_profit,
             detailed_sales_without_cost=s.detailed_sales_without_cost,
+            returns_count=s.returns_count,
+            returns_total=s.returns_total,
+            net_after_returns=s.net_after_returns,
+            returns_without_cost=s.returns_without_cost,
             days=[
                 DayOut(
                     day=d.day,

@@ -218,7 +218,11 @@ def _ensure_unique(
             query = query.where(Product.id != exclude_id)
         owner = session.scalar(query)
         if owner is not None:
-            raise ConflictError(f"The {label} '{value}' is already used by '{owner}'.", field=column.key)
+            raise ConflictError(
+                f"The {label} '{value}' is already used by '{owner}'.",
+                field=column.key,
+                code="duplicate_record",
+            )
 
 
 def _mrp_check(mode: MrpValidationMode, mrp: Decimal | None, selling_price: Decimal) -> list[str]:
@@ -241,7 +245,9 @@ def _flush_or_conflict(session: Session) -> None:
     except IntegrityError as exc:  # a concurrent duplicate that slipped past the pre-checks
         text = str(exc.orig).lower()
         field_name = "barcode" if "barcode" in text else "sku" if "sku" in text else None
-        raise ConflictError("Another product already uses this SKU or barcode.", field=field_name) from exc
+        raise ConflictError(
+            "Another product already uses this SKU or barcode.", field=field_name, code="duplicate_record"
+        ) from exc
 
 
 # --- Writing -------------------------------------------------------------------------------------

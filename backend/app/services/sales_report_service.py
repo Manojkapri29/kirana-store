@@ -23,8 +23,8 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import QuickSale, Sale, SaleItem, SalePromotion
-from app.models.enums import SaleStatus
+from app.models import QuickSale, Sale, SaleItem, SalePromotion, SalesReturn, SalesReturnItem
+from app.models.enums import DocumentStatus, SaleStatus
 from app.services import entitlement_service
 from app.services.errors import InvalidInputError
 from app.services.shop_service import get_shop, shop_today
@@ -77,10 +77,19 @@ class SalesSummary:
     days: list[DayRow]
     detailed_gross_profit: Decimal | None  # Detailed Sales whose every line's cost is known; None if none are
     detailed_sales_without_cost: int  # Detailed sales left out of that profit because a cost was unknown
+    returns_count: int = 0  # sales returns dated in the period (live ones)
+    returns_total: Decimal = ZERO  # what they refunded
+    # returns left out of the profit adjustment because a returned item's cost was unknown
+    returns_without_cost: int = 0
 
     @property
     def combined(self) -> Totals:
         return self.detailed.plus(self.quick)
+
+    @property
+    def net_after_returns(self) -> Decimal:
+        """Net sales less what was refunded on returns (BUSINESS_RULES R5)."""
+        return self.combined.net - self.returns_total
 
 
 @dataclass(frozen=True)
@@ -249,7 +258,57 @@ def sales_summary(
     excluded = (
         session.scalar(select(func.count()).select_from(Sale).where(*costed, Sale.id.in_(unknown))) or 0
     )
-    return SalesSummary(start, end, _sum(detailed), _sum(quick), days, profit, excluded)
+
+    # Returns dated in the period: what they refunded, and what they did to profit (the refund less the
+    # cost of the goods that came back). A return whose cost is unknown is counted but leaves the profit.
+    live_returns = (
+        SalesReturn.shop_id == shop_id,
+        SalesReturn.status == DocumentStatus.POSTED,
+        SalesReturn.return_date >= start,
+        SalesReturn.return_date <= end,
+    )
+    returns_count, returns_total = session.execute(
+        select(func.count(), func.coalesce(func.sum(SalesReturn.total_refund), 0)).where(*live_returns)
+    ).one()
+    unknown_cost = (
+        select(SalesReturnItem.sales_return_id)
+        .where(SalesReturnItem.shop_id == shop_id, SalesReturnItem.cogs_amount.is_(None))
+        .scalar_subquery()
+    )
+    known_refund, known_cogs = session.execute(
+        select(
+            func.coalesce(func.sum(SalesReturn.total_refund), 0),
+            func.coalesce(func.sum(SalesReturnItem.cogs_amount), 0),
+        )
+        .join(
+            SalesReturnItem,
+            (SalesReturnItem.shop_id == SalesReturn.shop_id)
+            & (SalesReturnItem.sales_return_id == SalesReturn.id),
+        )
+        .where(*live_returns, SalesReturn.id.not_in(unknown_cost))
+    ).one()
+    without_cost = (
+        session.scalar(
+            select(func.count())
+            .select_from(SalesReturn)
+            .where(*live_returns, SalesReturn.id.in_(unknown_cost))
+        )
+        or 0
+    )
+    if profit is not None and known_refund:
+        profit = profit - (_money(known_refund) - _money(known_cogs))
+    return SalesSummary(
+        start,
+        end,
+        _sum(detailed),
+        _sum(quick),
+        days,
+        profit,
+        excluded,
+        returns_count=returns_count,
+        returns_total=_money(returns_total),
+        returns_without_cost=without_cost,
+    )
 
 
 def discount_report(

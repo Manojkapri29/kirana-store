@@ -113,7 +113,7 @@ export function InventoryPage() {
         </div>
       </div>
 
-      {inventory.isError && <QueryError onRetry={() => void inventory.refetch()} />}
+      {inventory.isError && <QueryError error={inventory.error} onRetry={() => void inventory.refetch()} />}
       {inventory.isPending && <Spinner />}
       {data && data.items.length === 0 && <EmptyState title={t('inventory.empty')} />}
 

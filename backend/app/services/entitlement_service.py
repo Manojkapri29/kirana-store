@@ -35,7 +35,14 @@ DEFAULT_PLAN_CODE = "free"
 
 # Feature switches and numeric limits the code knows how to check. A plan may carry other keys; they are
 # stored but nothing enforces them.
-FEATURES = ("barcode_lookup", "promotions", "price_intelligence", "advanced_reports", "online_store")
+FEATURES = (
+    "barcode_lookup",
+    "promotions",
+    "price_intelligence",
+    "advanced_reports",
+    "online_store",
+    "image_intelligence",
+)
 LIMITS = ("max_products", "max_users", "max_monthly_invoices", "max_price_lookups_per_month")
 
 METRIC_INVOICES = "invoices"
@@ -51,6 +58,7 @@ FEATURE_LABELS = {
     "price_intelligence": "market price checks",
     "advanced_reports": "advanced reports",
     "online_store": "the online store",
+    "image_intelligence": "photo capture and image analysis",
 }
 LIMIT_LABELS = {
     "max_products": "products",

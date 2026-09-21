@@ -44,6 +44,28 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
+    # Optional file for internal error diagnostics (JSON lines, redacted). Unset: the normal server log only.
+    diagnostics_log_file: str | None = None
+
+    # --- Photos (image intelligence). Optional. Limits protect the server; a provider is backend only. ---
+    image_max_bytes: int = Field(default=5_000_000, ge=50_000, le=15_000_000)  # the largest photo accepted
+    image_max_side: int = Field(default=8000, ge=256, le=20000)  # the longest side, in pixels
+    image_storage_dir: str = "./data/images"  # private, never served directly; relative to backend/
+    image_max_per_shop: int = Field(default=500, ge=0, le=100_000)  # photos a shop may keep in total
+    # Which image-analysis provider to use (none ship with the app). Unset means "not configured": photos can
+    # still be taken and a barcode read in the browser is still looked up, but no picture is sent anywhere.
+    image_analysis_provider: str | None = None
+    image_analysis_api_key: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("IMAGE_ANALYSIS_API_KEY", "KIRANA_IMAGE_ANALYSIS_API_KEY")
+    )
+
+    @field_validator("image_analysis_api_key", mode="before")
+    @classmethod
+    def _blank_image_key_is_unset(cls, value: object) -> object:
+        if isinstance(value, str) and value.strip() in ("", "your_api_key_here"):
+            return None
+        return value
+
     # --- External price/product providers. Backend only: none of these ever reaches the browser. ---
     # Master switch. Off means no outgoing request is ever made; every price check reports "disabled".
     external_lookups_enabled: bool = True

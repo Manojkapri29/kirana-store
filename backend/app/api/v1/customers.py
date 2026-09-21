@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import Ctx
+from app.api.idempotency import IdempotencyHeader, run_idempotent
 from app.api.v1.products import StatusFilter, active_flag
 from app.db.session import get_session, write_transaction
 from app.models.enums import CustomerLedgerEntryType
@@ -78,10 +79,13 @@ def list_customers(
 
 
 @router.post("", response_model=CustomerSaved, status_code=201)
-def create_customer(payload: CustomerCreate, ctx: Ctx) -> CustomerSaved:
+def create_customer(
+    payload: CustomerCreate, ctx: Ctx, idempotency_key: IdempotencyHeader = None
+) -> CustomerSaved:
     """Create a customer, optionally with the amount they already owe (an opening balance)."""
     data = payload.model_dump(exclude={"opening_balance", "opening_balance_date"})
-    with write_transaction() as session:
+
+    def produce(session: Session) -> CustomerSaved:
         saved, opening = khata_service.create_customer_with_opening_balance(
             session,
             ctx,
@@ -91,6 +95,10 @@ def create_customer(payload: CustomerCreate, ctx: Ctx) -> CustomerSaved:
         )
         account = khata_service.get_account(session, ctx.shop_id, saved.customer.id)
         return CustomerSaved.from_result(account, saved, opening)
+
+    return run_idempotent(
+        ctx, idempotency_key, "customer.create", payload.model_dump(mode="json"), produce, status_code=201
+    )
 
 
 @router.get("/{customer_id}", response_model=CustomerOut)

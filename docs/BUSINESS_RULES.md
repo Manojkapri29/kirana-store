@@ -118,21 +118,31 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
   customer and dates. Exports cover the sale list (with payment, cost of goods and profit, empty where unknown),
   every sold line, and one sale. Product history and a customer's khata link back to the invoice.
 
-## R. Returns
+## R. Returns (Phase 9, implemented)
 
-- **R1.** Formal returns reference the original sale or purchase **line**. Cumulative returned quantity
-  cannot exceed the original quantity.
-- **R2.** A sales return adds stock back (`SALE_RETURN`) at the **original line's cost**. The refund is
-  proportional to the original line total (discount included); the final return of a line refunds the exact
-  remainder so no rounding difference is left. Refund modes: cash, UPI, or reduce the customer's khata
-  (only if the sale had a customer).
-- **R3.** A purchase return removes stock (`PURCHASE_RETURN`) at the original cost. It cannot exceed the
-  quantity purchased, nor the stock currently on hand. Credit modes: cash, UPI, or supplier credit.
+- **R1.** Formal returns reference the original sale or purchase **line**. The quantity returned across all live
+  (not void) returns of a line cannot exceed the quantity on that line.
+- **R2.** A sales return adds stock back (`SALE_RETURN`) at the **original line's cost** and rebuilds the average
+  cost. The refund is the line's net revenue (line total less its offer share and its share of any bill
+  discount) in proportion to the quantity; the refund is rounded cumulatively, so the last return of a line
+  refunds the exact remainder and the refunds of a line never exceed what it earned. Refund modes: cash, UPI, or
+  reduce the customer's khata (needs a customer on the sale).
+- **R2a.** A cash or UPI refund cannot exceed the money actually received for that sale less what was already
+  refunded that way. The rest can only go to the khata.
+- **R3.** A purchase return removes stock (`PURCHASE_RETURN`) at the original cost. It cannot exceed the quantity
+  purchased, the quantity still returnable, or the stock on hand (goods already sold cannot be sent back); the
+  stock check is made under the product locks. Credit modes: cash, UPI, or supplier credit (recorded on the
+  return; there is no supplier ledger yet).
 - **R4.** A return date cannot be before the original document or in the future.
-- **R5.** Returns adjust average cost, and profit uses revenue and COGS **net of returns**. Purchase
-  reports show net purchases.
+- **R5.** Profit and reports use revenue and cost net of returns; a return whose cost is unknown does not invent
+  a profit. Purchase reports show net purchases.
 - **R6.** An **unbilled** return, or any stock correction, is an `ADJUSTMENT` with an explicit reason code
-  (see A1). It is never recorded as a generic adjustment when a specific reason exists.
+  (see A1).
+- **R7.** Void is a reversal with a reason. It puts the stock back the other way and takes back any khata credit;
+  the return and its number stay. A sale or purchase that has a live return cannot be voided (void the return
+  first). Nothing about a return edits or deletes the original document.
+- **R8.** Creating a return accepts an idempotency key: repeating the same request (a double tap, a lost answer)
+  returns the same return and never refunds twice; simultaneous full returns of one line cannot both succeed.
 
 ## A. Adjustments and stock count
 
@@ -444,6 +454,8 @@ need business logic in services, which arrive in later phases.
 | E1 void needs a reason; a row is reversed once | E1 edit = void + new document; audit entries |
 | | P2 MRP warn/block |
 | | F1-F4 profit, X1-X4 exports |
+| R7 a return number is unique per shop and not blank; the idempotency key is unique per shop | R1-R4 return caps, refunds and dates, R7 void rules, R8 repeats |
+| IM7 one kept photo per product (unique), a valid hash, positive size | ER1-ER9 error handling, IM1-IM6 image rules |
 
 ## API conventions (Phase 3)
 
@@ -539,3 +551,68 @@ need business logic in services, which arrive in later phases.
   cost is known; Combined has no profit and says "Not Available".
 - **RP3.** Offer analytics read the frozen snapshots, so history never changes. Discount analysis needs the plan's
   advanced reports.
+
+## ER. Error handling and recovery (Phase 9, implemented)
+
+- **ER1.** A normal user never sees a traceback, SQL or database text, an internal path, a key, a token, a
+  connection detail or any server detail. An expected problem (validation, a missing record, a conflict, a plan
+  limit) shows its own plain message; an unexpected failure shows only "Something went wrong while completing
+  this action." and a reference.
+- **ER2.** Every unexpected failure gets a safe reference id (`ERR-YYYYMMDD-XXXXX`: random, no database id, no
+  person or shop). The real exception is written to the internal diagnostics log under that id with the time,
+  endpoint (numeric ids masked), HTTP method, shop and user ids, category, exception type, redacted details and
+  the request's correlation id (`X-Request-ID`). Passwords, keys, tokens, database addresses, paths, e-mail
+  addresses and long digit runs (phone, card numbers) are redacted before anything is written. There is no screen
+  that shows the log.
+- **ER3.** One error format from one place: `success:false`, `error_code`, `message`, `category`, `retryable`,
+  `reference_id`, and `detail` (kept so screens can place a message beside the input it belongs to). Categories:
+  validation, not found, conflict, duplicate, insufficient stock, inventory conflict, authentication,
+  authorization, plan limit, network, external API, timeout, database, image upload, offer calculation, checkout,
+  unexpected. Not every error is recoverable: a screen offers only the recovery that fits.
+- **ER4.** Only **reads** are repeated automatically (search, lookup, price check, list, image details), only when
+  the failure can pass by itself (network, timeout, an outside service), and at most twice. A **write** (posting a
+  sale, moving stock, a payment, a khata entry, a return, an order) is never repeated automatically and is offered
+  as "Try again" only when it carries an idempotency key, so the server does the work once. A validation, stock or
+  duplicate problem is never retried.
+- **ER5.** Idempotency: a create or post may carry an `Idempotency-Key`. The key row is written in the same
+  transaction as the work, so a failed attempt leaves nothing behind and a successful one is remembered with its
+  answer. The same key with a different request is refused; a repeat returns the stored answer
+  (`Idempotent-Replay: true`).
+- **ER6.** Data is never thrown away by an error. A form keeps what was typed, says so, and lets the person try
+  again; an unsaved form is also backed up in the browser (form fields only, for a day) and offered back after a
+  crash or reload. Nothing is restored silently.
+- **ER7.** "Success" (or a saved or completed page) is shown only after the server has answered that the
+  transaction was committed. A lost connection is shown as a failure to confirm, never as success.
+- **ER8.** A part of a screen that crashes is replaced by "This section couldn't be loaded." with Try again, Go
+  to Dashboard and Reload; it never shows the error.
+- **ER9.** Outside services never break the shop's work: a barcode service that is down offers manual entry, a
+  price service that is down offers "Continue without comparison", and billing continues either way. A stock
+  conflict at checkout shows the updated available quantity and lets the cart be adjusted.
+
+## IM. Photo capture and image intelligence (Phase 9, implemented)
+
+- **IM1.** Image intelligence is optional and never required: a shop can always add a product by hand. It is a plan
+  feature (`image_intelligence`), enforced by the backend.
+- **IM2.** A photo is validated by its real content, not its name or declared type: JPEG, PNG or WebP only,
+  a size limit, a pixel limit, and a disguised program or a broken file is refused.
+- **IM3.** Analysing a photo changes nothing and stores nothing. Every result is labelled **Detected** (read from
+  the picture or a barcode) or **Suggested** (a guess), never confirmed, and is shown for review. A barcode is
+  checked (its checksum) and looked up through the same Phase 8 lookup as scanning; there is no second barcode
+  system.
+- **IM4.** A product is created from a photo only through an explicit confirmation of the reviewed boxes
+  ("Confirm & Create Product"), never from the suggestions directly. Before creating, the server looks for a
+  duplicate (barcode, SKU, normalised name, brand, pack size). "Possible existing product found" is shown, an
+  exact barcode or SKU match blocks creation, and a possible match needs the person to say it is a different
+  product. A photo never creates a stock movement (no opening stock here).
+- **IM5.** A photo never changes stock, prices, purchase price, cost, orders, khata, money or an adjustment, and
+  it never changes an existing product. If uncertain, the app asks; it never silently decides.
+- **IM6.** Nothing is sent outside without the person's explicit action, a configured provider and a need. The
+  picture goes to an analysis provider only when the person ticks that; product lookup sends only the barcode.
+  No provider is bundled: until one is configured the answer is "Image analysis is not configured yet." and
+  everything else works. A provider's key is a backend setting, never in the frontend, a response, a log or Git.
+- **IM7.** A photo is kept only if the owner chooses to keep it: one per product, private to the shop (never
+  public, never served by address, fetched only through the API for the owning shop), with a per-shop limit. The
+  database holds only its details; the file lives in a private store that can later be object storage.
+- **IM8.** Future uses (not built): a supplier invoice photo to a purchase draft, a handwritten stock list to an
+  adjustment draft, a shelf photo, a damaged or expired product photo to a suggested adjustment reason. Each will
+  produce a draft that a person reviews; none will change stock by itself.

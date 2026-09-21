@@ -10,14 +10,17 @@ import { getProduct, setProductActive } from '@/api/products'
 import type { Product } from '@/api/types'
 import { Alert, Badge, Button, LinkButton, QueryError, Spinner } from '@/components/ui'
 import { StockStatusBadge } from '@/features/inventory/StockStatusBadge'
+import { useEntitlements } from '@/features/subscription/useEntitlements'
 import { formatMoney, formatQuantity, NOT_SET } from '@/lib/format'
 
 import { OpeningStockForm } from './OpeningStockForm'
 import { PriceCheckPanel } from './PriceCheckPanel'
+import { ProductPhotoSection } from './ProductPhotoSection'
 import { StockHistory } from './StockHistory'
 
 export function ProductDetailPage() {
   const { t } = useTranslation()
+  const { allows } = useEntitlements()
   const queryClient = useQueryClient()
   const location = useLocation()
   const productId = Number(useParams().id)
@@ -47,7 +50,7 @@ export function ProductDetailPage() {
     const notFound = !validId || (product.error instanceof ApiError && product.error.status === 404)
     return (
       <div className="space-y-6">
-        {notFound ? <Alert tone="error">{t('products.detail.notFound')}</Alert> : <QueryError onRetry={() => void product.refetch()} />}
+        {notFound ? <Alert tone="error">{t('products.detail.notFound')}</Alert> : <QueryError error={product.error} onRetry={() => void product.refetch()} />}
         <LinkButton to="/products" variant="secondary">
           {t('products.detail.backToList')}
         </LinkButton>
@@ -114,6 +117,7 @@ export function ProductDetailPage() {
 
       {hasNoHistory && p.is_active && <OpeningStockForm product={p} />}
       <PriceCheckPanel product={p} />
+      {allows('image_intelligence') !== false && <ProductPhotoSection product={p} />}
       <StockHistory product={p} />
     </div>
   )

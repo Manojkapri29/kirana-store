@@ -45,7 +45,7 @@ export function SupplierPurchases({ supplierId, canBuy }: { supplierId: number; 
         </p>
       )}
 
-      {purchases.isError && <QueryError onRetry={() => void purchases.refetch()} />}
+      {purchases.isError && <QueryError error={purchases.error} onRetry={() => void purchases.refetch()} />}
       {purchases.isPending && <Spinner />}
       {purchases.data?.total === 0 && (
         <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-slate-600">

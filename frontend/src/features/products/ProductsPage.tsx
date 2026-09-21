@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { Camera, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
@@ -13,6 +13,7 @@ import { Pagination } from '@/components/Pagination'
 import { SearchInput } from '@/components/SearchInput'
 import { Badge, EmptyState, LinkButton, PageHeader, QueryError, Spinner } from '@/components/ui'
 import { StockStatusBadge } from '@/features/inventory/StockStatusBadge'
+import { useEntitlements } from '@/features/subscription/useEntitlements'
 import { useDebounced } from '@/hooks/useDebounced'
 import { useOpenOnSingleMatch } from '@/hooks/useOpenOnSingleMatch'
 import { formatMoney, formatQuantity } from '@/lib/format'
@@ -21,6 +22,7 @@ const PAGE_SIZE = 25
 
 export function ProductsPage() {
   const { t } = useTranslation()
+  const { allows } = useEntitlements()
 
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -53,10 +55,18 @@ export function ProductsPage() {
         title={t('products.title')}
         subtitle={t('products.subtitle')}
         actions={
-          <LinkButton to="/products/new">
-            <Plus aria-hidden="true" className="size-5" />
-            {t('products.add')}
-          </LinkButton>
+          <>
+            {allows('image_intelligence') !== false && (
+              <LinkButton to="/products/from-photo" variant="secondary">
+                <Camera aria-hidden="true" className="size-5" />
+                {t('photo.addFromPhoto')}
+              </LinkButton>
+            )}
+            <LinkButton to="/products/new">
+              <Plus aria-hidden="true" className="size-5" />
+              {t('products.add')}
+            </LinkButton>
+          </>
         }
       />
 
@@ -94,7 +104,7 @@ export function ProductsPage() {
         <p className="text-sm text-slate-500">{t('products.searchHint')}</p>
       </div>
 
-      {products.isError && <QueryError onRetry={() => void products.refetch()} />}
+      {products.isError && <QueryError error={products.error} onRetry={() => void products.refetch()} />}
       {products.isPending && <Spinner />}
 
       {data && data.items.length === 0 && (

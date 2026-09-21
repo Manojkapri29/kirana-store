@@ -11,6 +11,7 @@ from app.api.v1.products import StatusFilter, active_flag
 from app.db.session import get_session
 from app.models.enums import (
     CustomerLedgerEntryType,
+    DocumentStatus,
     InventoryTxnType,
     PaymentType,
     PromotionStatus,
@@ -386,4 +387,40 @@ def export_discount_report(
     """Discount given by offer and coupon over a period (needs the plan's advanced reports)."""
     return download(
         export_datasets.export_discount_report(session, ctx, fmt, date_from=date_from, date_to=date_to)
+    )
+
+
+@router.get("/sales-returns")
+def export_sales_returns(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    status: Annotated[list[DocumentStatus] | None, Query()] = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    """One row per sales return."""
+    return download(
+        export_datasets.export_sales_returns(
+            session, ctx, fmt, q=q, statuses=status, date_from=date_from, date_to=date_to
+        )
+    )
+
+
+@router.get("/purchase-returns")
+def export_purchase_returns(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    status: Annotated[list[DocumentStatus] | None, Query()] = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    """One row per purchase return."""
+    return download(
+        export_datasets.export_purchase_returns(
+            session, ctx, fmt, q=q, statuses=status, date_from=date_from, date_to=date_to
+        )
     )

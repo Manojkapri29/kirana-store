@@ -6,10 +6,15 @@ import { CustomersPage } from '@/features/customers/CustomersPage'
 import { InventoryPage } from '@/features/inventory/InventoryPage'
 import { ProductDetailPage } from '@/features/products/ProductDetailPage'
 import { ProductFormPage } from '@/features/products/ProductFormPage'
+import { ProductFromPhotoPage } from '@/features/products/ProductFromPhotoPage'
 import { ProductsPage } from '@/features/products/ProductsPage'
 import { PromotionDetailPage } from '@/features/promotions/PromotionDetailPage'
 import { PromotionFormPage } from '@/features/promotions/PromotionFormPage'
 import { PromotionsPage } from '@/features/promotions/PromotionsPage'
+import { PurchaseReturnFormPage } from '@/features/returns/PurchaseReturnFormPage'
+import { ReturnDetailPage } from '@/features/returns/ReturnDetailPage'
+import { ReturnsPage } from '@/features/returns/ReturnsPage'
+import { SalesReturnFormPage } from '@/features/returns/SalesReturnFormPage'
 import { SalesReportPage } from '@/features/reports/SalesReportPage'
 import { QuickSaleDetailPage } from '@/features/quickSales/QuickSaleDetailPage'
 import { QuickSaleFormPage } from '@/features/quickSales/QuickSaleFormPage'
@@ -39,6 +44,7 @@ export function App() {
         <Route index element={<DashboardPage />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="products/new" element={<ProductFormPage mode="create" />} />
+        <Route path="products/from-photo" element={<ProductFromPhotoPage />} />
         <Route path="products/:id" element={<ProductDetailPage />} />
         <Route path="products/:id/edit" element={<ProductFormPage mode="edit" />} />
         <Route path="inventory" element={<InventoryPage />} />
@@ -46,10 +52,15 @@ export function App() {
         <Route path="purchases/new" element={<PurchaseFormPage mode="create" />} />
         <Route path="purchases/:id" element={<PurchaseDetailPage />} />
         <Route path="purchases/:id/edit" element={<PurchaseFormPage mode="edit" />} />
+        <Route path="purchases/:id/return" element={<PurchaseReturnFormPage />} />
+        <Route path="returns" element={<ReturnsPage />} />
+        <Route path="returns/sales/:id" element={<ReturnDetailPage kind="sales" />} />
+        <Route path="returns/purchases/:id" element={<ReturnDetailPage kind="purchases" />} />
         <Route path="sales" element={<SalesPage />} />
         <Route path="sales/new" element={<SaleFormPage mode="create" />} />
         <Route path="sales/:id" element={<SaleDetailPage />} />
         <Route path="sales/:id/edit" element={<SaleFormPage mode="edit" />} />
+        <Route path="sales/:id/return" element={<SalesReturnFormPage />} />
         <Route path="quick-sales" element={<QuickSalesPage />} />
         <Route path="quick-sales/new" element={<QuickSaleFormPage mode="create" />} />
         <Route path="quick-sales/:id" element={<QuickSaleDetailPage />} />

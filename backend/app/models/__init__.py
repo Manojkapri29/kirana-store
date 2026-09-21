@@ -7,7 +7,7 @@ from app.models.expenses import Expense, ExpenseCategory
 from app.models.inventory import InventoryTransaction
 from app.models.khata import CustomerLedgerEntry
 from app.models.parties import Customer, Supplier
-from app.models.pricing import PriceObservation
+from app.models.pricing import PriceObservation, ProductImage
 from app.models.promotion import Promotion, SalePromotion
 from app.models.purchasing import Purchase, PurchaseItem, PurchaseReturn, PurchaseReturnItem
 from app.models.sales import QuickSale, Sale, SaleItem, SalesReturn, SalesReturnItem
@@ -31,6 +31,7 @@ __all__ = [
     "PlanFeature",
     "PriceObservation",
     "Product",
+    "ProductImage",
     "Promotion",
     "Purchase",
     "PurchaseItem",

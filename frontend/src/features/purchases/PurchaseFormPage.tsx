@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
@@ -15,6 +15,11 @@ import {
 import { listSupplierOptions } from '@/api/suppliers'
 import type { Purchase } from '@/api/types'
 import { SelectField, TextAreaField, TextField } from '@/components/fields'
+import { ErrorNotice } from '@/components/ErrorNotice'
+import { RestoreBanner } from '@/components/RestoreBanner'
+import { useFailure, needsNotice } from '@/hooks/useFailure'
+import { useFormBackup } from '@/hooks/useFormBackup'
+import { useIdempotencyKey } from '@/lib/idempotency'
 import { Alert, Button, LinkButton, PageHeader, QueryError, Spinner } from '@/components/ui'
 import { CURRENCY_SYMBOL, formatMoney, formatQuantity } from '@/lib/format'
 import { paiseToText } from '@/lib/money'
@@ -73,7 +78,7 @@ export function PurchaseFormPage({ mode }: { mode: 'create' | 'edit' }) {
     return (
       <div className="space-y-6">
         <PageHeader title={title} />
-        {notFound ? <Alert tone="error">{t('purchases.detail.notFound')}</Alert> : <QueryError onRetry={() => void purchase.refetch()} />}
+        {notFound ? <Alert tone="error">{t('purchases.detail.notFound')}</Alert> : <QueryError error={purchase.error} onRetry={() => void purchase.refetch()} />}
         <LinkButton to="/purchases" variant="secondary">
           {t('purchases.detail.backToList')}
         </LinkButton>
@@ -117,6 +122,11 @@ function PurchaseForm({ purchase }: { purchase: Purchase | undefined }) {
   const [serverHeader, setServerHeader] = useState<Partial<Record<HeaderField, string>>>({})
   const [serverLines, setServerLines] = useState<Record<number, Partial<Record<LineField, string>>>>({})
   const [formError, setFormError] = useState<string | null>(null)
+  const { failure, setFailure } = useFailure()
+  const createKey = useIdempotencyKey()
+  const postKey = useIdempotencyKey()
+  const backupValue = useMemo(() => ({ header, lines }), [header, lines])
+  const backup = useFormBackup('purchase.new', backupValue, { enabled: !purchase })
 
   const total = grandTotalPaise(lines)
 
@@ -158,8 +168,8 @@ function PurchaseForm({ purchase }: { purchase: Purchase | undefined }) {
   }
 
   function showServerError(error: unknown) {
-    if (!(error instanceof ApiError)) {
-      setFormError(t('common.genericError'))
+    if (needsNotice(error) || !(error instanceof ApiError)) {
+      setFailure(error)
       return
     }
     const nextHeader: Partial<Record<HeaderField, string>> = {}
@@ -186,17 +196,23 @@ function PurchaseForm({ purchase }: { purchase: Purchase | undefined }) {
         await updatePurchaseHeader(purchase.id, headerPayload(header))
         saved = await replacePurchaseItems(purchase.id, itemPayloads(lines))
       } else {
-        saved = await createPurchase({ ...headerPayload(header), items: itemPayloads(lines) })
+        const body = { ...headerPayload(header), items: itemPayloads(lines) }
+        // The key makes a repeat of this exact request return the same draft, even if the first answer was lost.
+        saved = await createPurchase(body, { idempotencyKey: createKey.keyFor(JSON.stringify(body)) })
       }
       if (!postAfter) return { purchase: saved, postError: null as string | null }
       try {
-        return { purchase: await postPurchase(saved.id), postError: null as string | null }
+        const posted = await postPurchase(saved.id, { idempotencyKey: postKey.keyFor(String(saved.id)) })
+        return { purchase: posted, postError: null as string | null }
       } catch (error) {
         // The draft is saved; only the posting failed. Say so, and show the draft.
         return { purchase: saved, postError: error instanceof ApiError ? error.message : t('common.genericError') }
       }
     },
     onSuccess: async ({ purchase: saved, postError }) => {
+      createKey.renew()
+      postKey.renew()
+      backup.clear()
       await invalidatePurchaseData(queryClient)
       void navigate(`/purchases/${saved.id}`, { state: postError ? { postError } : undefined })
     },
@@ -205,6 +221,7 @@ function PurchaseForm({ purchase }: { purchase: Purchase | undefined }) {
 
   function submit(postAfter: boolean) {
     setFormError(null)
+    setFailure(null)
     setServerHeader({})
     setServerLines({})
 
@@ -233,7 +250,27 @@ function PurchaseForm({ purchase }: { purchase: Purchase | undefined }) {
       noValidate
       className="space-y-6"
     >
+      {backup.restorable && (
+        <RestoreBanner
+          onRestore={() => {
+            setHeader(backup.restorable!.header)
+            setLines(backup.restorable!.lines)
+            backup.dismiss()
+          }}
+          onDiscard={backup.clear}
+        />
+      )}
       {formError && <Alert tone="error">{formError}</Alert>}
+      {failure !== null && (
+        <ErrorNotice
+          error={failure}
+          context="save"
+          safeToRepeat
+          retry={() => submit(save.variables ?? false)}
+          save_draft={() => submit(false)}
+          cancel={() => void navigate('/purchases')}
+        />
+      )}
 
       <Section title={t('purchases.form.headerSection')}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

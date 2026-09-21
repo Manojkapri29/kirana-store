@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 
 from app.core.config import get_settings
 from app.core.context import RequestContext
@@ -27,7 +27,17 @@ def get_request_context() -> RequestContext:
     return context
 
 
-Ctx = Annotated[RequestContext, Depends(get_request_context)]
+def _context_for_request(
+    request: Request, context: Annotated[RequestContext, Depends(get_request_context)]
+) -> RequestContext:
+    """The request's context, also remembered on the request so error diagnostics can name the shop and user
+    (ids only: never a name or a contact detail)."""
+    request.state.shop_id = context.shop_id
+    request.state.user_id = context.user_id
+    return context
+
+
+Ctx = Annotated[RequestContext, Depends(_context_for_request)]
 
 
 def require_owner(ctx: Ctx) -> RequestContext:

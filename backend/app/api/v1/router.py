@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     customers,
     exports,
+    image_intelligence,
     inventory,
     price_intelligence,
     products,
@@ -17,6 +18,7 @@ from app.api.v1 import (
     quick_sales,
     reference,
     reports,
+    returns,
     sales,
     subscription,
     suppliers,
@@ -30,6 +32,9 @@ api_v1_router.include_router(customers.router)
 api_v1_router.include_router(inventory.router)
 api_v1_router.include_router(purchases.router)
 api_v1_router.include_router(sales.router)
+api_v1_router.include_router(returns.sales_returns)
+api_v1_router.include_router(returns.purchase_returns)
+api_v1_router.include_router(image_intelligence.router)
 api_v1_router.include_router(price_intelligence.router)
 api_v1_router.include_router(promotions.router)
 api_v1_router.include_router(quick_sales.router)

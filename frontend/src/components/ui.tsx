@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, type LinkProps } from 'react-router-dom'
 
 import { buttonClasses, type ButtonVariant } from './buttonStyles'
+import { ErrorNotice } from './ErrorNotice'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
@@ -69,16 +70,9 @@ export function Spinner() {
   )
 }
 
-export function QueryError({ onRetry }: { onRetry: () => void }) {
-  const { t } = useTranslation()
-  return (
-    <Alert tone="error">
-      <p>{t('common.loadError')}</p>
-      <button type="button" onClick={onRetry} className="mt-2 font-medium underline">
-        {t('common.tryAgain')}
-      </button>
-    </Alert>
-  )
+/** A failed read. Shows the friendly notice (never the raw error); `Try again` repeats the read, which is safe. */
+export function QueryError({ onRetry, error }: { onRetry: () => void; error?: unknown }) {
+  return <ErrorNotice error={error ?? new Error('load')} context="search" retry={onRetry} />
 }
 
 export function EmptyState({ title, hint, action }: { title: string; hint?: string; action?: ReactNode }) {

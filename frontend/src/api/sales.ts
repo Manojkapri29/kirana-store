@@ -1,4 +1,4 @@
-import { API_V1_PREFIX, apiFetch, apiSend, type Query } from './client'
+import { API_V1_PREFIX, apiFetch, apiSend, type Query, type SendOptions } from './client'
 import type {
   Page,
   PaymentType,
@@ -39,8 +39,8 @@ export const calculateSale = (payload: {
 }) => apiSend<SalePreview>('POST', `${BASE}/calculate`, payload)
 
 /** Create a draft (a cart). Nothing is posted and no stock moves. */
-export const createSale = (payload: SaleHeaderPayload & { items: SaleItemPayload[] }) =>
-  apiSend<Sale>('POST', BASE, payload)
+export const createSale = (payload: SaleHeaderPayload & { items: SaleItemPayload[] }, options?: SendOptions) =>
+  apiSend<Sale>('POST', BASE, payload, options)
 
 export const updateSale = (id: number, changes: Partial<SaleHeaderPayload>) =>
   apiSend<Sale>('PATCH', `${BASE}/${id}`, changes)
@@ -50,7 +50,8 @@ export const replaceSaleItems = (id: number, items: SaleItemPayload[]) =>
   apiSend<Sale>('PUT', `${BASE}/${id}/items`, { items })
 
 /** Post a draft: settle the payment, number it, take the stock out, record the cost, charge any credit. */
-export const postSale = (id: number, payment: SalePaymentPayload) => apiSend<Sale>('POST', `${BASE}/${id}/post`, payment)
+export const postSale = (id: number, payment: SalePaymentPayload, options?: SendOptions) =>
+  apiSend<Sale>('POST', `${BASE}/${id}/post`, payment, options)
 
 /** Void a posted sale (stock and khata are reversed) or discard a draft. A reason is required. */
 export const voidSale = (id: number, reason: string) => apiSend<Sale>('POST', `${BASE}/${id}/void`, { reason })

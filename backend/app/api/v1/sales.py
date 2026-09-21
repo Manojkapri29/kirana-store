@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import Ctx
+from app.api.idempotency import IdempotencyHeader, run_idempotent
 from app.db.session import get_session, write_transaction
 from app.models.enums import PaymentType, SaleStatus
 from app.schemas.sale import (
@@ -83,12 +84,18 @@ def calculate(payload: CalculateIn, ctx: Ctx, session: ReadSession) -> PreviewOu
 
 
 @router.post("", response_model=SaleOut, status_code=201)
-def create_sale(payload: SaleCreate, ctx: Ctx) -> SaleOut:
+def create_sale(payload: SaleCreate, ctx: Ctx, idempotency_key: IdempotencyHeader = None) -> SaleOut:
     """Create a draft (a cart). Nothing is posted and no stock moves until `/post`."""
     header = payload.model_dump(exclude={"items"})
     items = [item.model_dump() for item in payload.items]
-    with write_transaction() as session:
-        return SaleOut.from_view(sale_service.create_sale(session, ctx, header, items))
+    return run_idempotent(
+        ctx,
+        idempotency_key,
+        "sale.create",
+        payload.model_dump(mode="json"),
+        lambda session: SaleOut.from_view(sale_service.create_sale(session, ctx, header, items)),
+        status_code=201,
+    )
 
 
 @router.get("/{sale_id}", response_model=SaleOut)
@@ -114,12 +121,18 @@ def replace_items(sale_id: int, payload: SaleItemsReplace, ctx: Ctx) -> SaleOut:
 
 
 @router.post("/{sale_id}/post", response_model=SaleOut)
-def post_sale(sale_id: int, ctx: Ctx, payload: SalePostIn | None = None) -> SaleOut:
+def post_sale(
+    sale_id: int, ctx: Ctx, payload: SalePostIn | None = None, idempotency_key: IdempotencyHeader = None
+) -> SaleOut:
     """Post a draft: settle the payment, number it, take the stock out, record the cost, charge any credit to
     the customer's khata. All in one transaction. With no body the sale is paid in full."""
     payment = payload or SalePostIn()
-    with write_transaction() as session:
-        return SaleOut.from_view(
+    return run_idempotent(
+        ctx,
+        idempotency_key,
+        "sale.post",
+        {"sale_id": sale_id, **payment.model_dump(mode="json")},
+        lambda session: SaleOut.from_view(
             sale_service.post_sale(
                 session,
                 ctx,
@@ -128,7 +141,8 @@ def post_sale(sale_id: int, ctx: Ctx, payload: SalePostIn | None = None) -> Sale
                 payment_method=payment.payment_method,
                 payment_reference=payment.payment_reference,
             )
-        )
+        ),
+    )
 
 
 @router.post("/{sale_id}/void", response_model=SaleOut)

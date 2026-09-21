@@ -911,7 +911,7 @@ def post_sale(
     """
     sale = _get_sale(session, ctx.shop_id, sale_id, lock=True)
     if sale.status is SaleStatus.POSTED:
-        raise ConflictError(f"This sale has already been posted ({sale.invoice_no}).")
+        raise ConflictError(f"This sale has already been posted ({sale.invoice_no}).", code="already_done")
     if sale.status is SaleStatus.VOID:
         raise ConflictError("This sale is void and cannot be posted.")
 
@@ -986,7 +986,7 @@ def post_sale(
             for index, item in enumerate(items)
             if item.product_id in shortages
         ]
-        raise ConflictError(errors[0][1], field=errors[0][0], errors=errors)
+        raise ConflictError(errors[0][1], field=errors[0][0], errors=errors, code="insufficient_stock")
 
     for item in items:
         issue = inventory_service.issue_sale_line(

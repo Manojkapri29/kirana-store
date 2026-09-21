@@ -8,6 +8,10 @@ import { createSupplier, getSupplier, updateSupplier } from '@/api/suppliers'
 import type { Supplier } from '@/api/types'
 import { buttonClasses } from '@/components/buttonStyles'
 import { TextAreaField, TextField } from '@/components/fields'
+import { ErrorNotice } from '@/components/ErrorNotice'
+import { RestoreBanner } from '@/components/RestoreBanner'
+import { useFailure, needsNotice } from '@/hooks/useFailure'
+import { useFormBackup } from '@/hooks/useFormBackup'
 import { Alert, Button, LinkButton, PageHeader, QueryError, Spinner } from '@/components/ui'
 
 import {
@@ -41,7 +45,7 @@ export function SupplierFormPage({ mode }: { mode: 'create' | 'edit' }) {
         {notFound ? (
           <Alert tone="error">{t('suppliers.detail.notFound')}</Alert>
         ) : (
-          <QueryError onRetry={() => void supplier.refetch()} />
+          <QueryError error={supplier.error} onRetry={() => void supplier.refetch()} />
         )}
         <LinkButton to="/suppliers" variant="secondary">
           {t('suppliers.detail.backToList')}
@@ -68,6 +72,8 @@ function SupplierForm({ mode, supplier }: { mode: 'create' | 'edit'; supplier: S
   const [clientErrors, setClientErrors] = useState<FieldErrors>({})
   const [serverErrors, setServerErrors] = useState<Partial<Record<FieldName, string>>>({})
   const [formError, setFormError] = useState<string | null>(null)
+  const { failure, setFailure } = useFailure()
+  const backup = useFormBackup('supplier.new', values, { enabled: mode === 'create' })
 
   function setField(field: FieldName, value: string) {
     setValues((current) => ({ ...current, [field]: value }))
@@ -85,6 +91,7 @@ function SupplierForm({ mode, supplier }: { mode: 'create' | 'edit'; supplier: S
     mutationFn: () =>
       mode === 'create' ? createSupplier(buildPayload(values)) : updateSupplier(supplier!.id, buildPayload(values)),
     onSuccess: async (result) => {
+      backup.clear()
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['suppliers'] }),
         queryClient.invalidateQueries({ queryKey: ['supplierOptions'] }),
@@ -94,6 +101,10 @@ function SupplierForm({ mode, supplier }: { mode: 'create' | 'edit'; supplier: S
       void navigate(`/suppliers/${result.supplier.id}`, { state: { warnings: result.warnings } })
     },
     onError: (error) => {
+      if (needsNotice(error)) {
+        setFailure(error)
+        return
+      }
       if (error instanceof ApiError) {
         const mapped: Partial<Record<FieldName, string>> = {}
         for (const [apiField, message] of Object.entries(error.fieldErrors)) {
@@ -111,6 +122,7 @@ function SupplierForm({ mode, supplier }: { mode: 'create' | 'edit'; supplier: S
   function submit(event: FormEvent) {
     event.preventDefault()
     setFormError(null)
+    setFailure(null)
     setServerErrors({})
     const errors = validate(values)
     setClientErrors(errors)
@@ -123,7 +135,19 @@ function SupplierForm({ mode, supplier }: { mode: 'create' | 'edit'; supplier: S
 
   return (
     <form onSubmit={submit} noValidate className="space-y-6">
+      {backup.restorable && (
+        <RestoreBanner
+          onRestore={() => {
+            setValues(backup.restorable!)
+            backup.dismiss()
+          }}
+          onDiscard={backup.clear}
+        />
+      )}
       {formError && <Alert tone="error">{formError}</Alert>}
+        {failure !== null && (
+          <ErrorNotice error={failure} context="save" safeToRepeat={mode === 'edit'} retry={() => save.mutate()} cancel={() => void navigate('/suppliers')} />
+        )}
 
       <Section title={t('suppliers.form.contactSection')}>
         <div className="sm:col-span-2">

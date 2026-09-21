@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '@/api/client'
+import { ErrorNotice } from '@/components/ErrorNotice'
 import { listProducts, lookupProduct } from '@/api/products'
 import type { LookupProduct, LookupResult, Product } from '@/api/types'
 import { SearchInput } from '@/components/SearchInput'
@@ -38,6 +39,7 @@ export function ProductSearchBox({ onPick, autoFocus, scanner }: ProductSearchBo
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
+  const [lookupFailure, setLookupFailure] = useState<{ error: unknown; text: string } | null>(null)
   const [choices, setChoices] = useState<Scanned[] | null>(null)
   const [scanned, setScanned] = useState<Scanned | null>(null)
   const q = useDebounced(search.trim(), 250)
@@ -87,7 +89,7 @@ export function ProductSearchBox({ onPick, autoFocus, scanner }: ProductSearchBo
       else setChoices(entries)
     } catch (error) {
       if (error instanceof ApiError && error.status === 403) setProblem(t('scanner.planNeeded'))
-      else setProblem(t('scanner.lookupFailed'))
+      else setLookupFailure({ error, text })
     }
   }
 
@@ -106,6 +108,7 @@ export function ProductSearchBox({ onPick, autoFocus, scanner }: ProductSearchBo
     if (!text) return
     setProblem(null)
     setChoices(null)
+    setLookupFailure(null)
     if (useScanner) await scan(text)
     else await plainEnter(text)
   }
@@ -124,6 +127,26 @@ export function ProductSearchBox({ onPick, autoFocus, scanner }: ProductSearchBo
         autoFocus={autoFocus}
       />
       {useScanner && <p className="mt-1 text-xs text-slate-500">{t('scanner.hint')}</p>}
+      {lookupFailure && (
+        <div className="mt-2">
+          <ErrorNotice
+            error={lookupFailure.error}
+            context="barcode"
+            safeToRepeat
+            retry={() => {
+              const text = lookupFailure.text
+              setLookupFailure(null)
+              void scan(text)
+            }}
+            manual_entry={() => {
+              // Billing never waits on the lookup service: fall back to searching your own products by the text.
+              const text = lookupFailure.text
+              setLookupFailure(null)
+              void plainEnter(text)
+            }}
+          />
+        </div>
+      )}
       {problem && (
         <p role="alert" className="mt-1.5 text-sm font-medium text-red-700">
           {problem}

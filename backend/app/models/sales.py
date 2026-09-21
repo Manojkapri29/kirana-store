@@ -164,6 +164,8 @@ class SalesReturn(DocumentLifecycleMixin, TimestampMixin, Base):
     __tablename__ = "sales_returns"
     __table_args__ = (
         UniqueConstraint("shop_id", "id"),
+        UniqueConstraint("shop_id", "return_no"),
+        not_blank("return_no"),
         UniqueConstraint("replaces_id"),
         tenant_fk("sale_id", "sales"),
         tenant_fk("replaces_id", "sales_returns"),
@@ -175,6 +177,7 @@ class SalesReturn(DocumentLifecycleMixin, TimestampMixin, Base):
 
     id: Mapped[int] = id_column()
     shop_id: Mapped[int] = shop_id_column()
+    return_no: Mapped[str] = mapped_column(String(30))  # e.g. SRT/2026-27/0001
     sale_id: Mapped[int] = mapped_column(IdType)
     return_date: Mapped[date] = mapped_column(Date)
     refund_mode: Mapped[RefundMode] = mapped_column(enum_type(RefundMode, "refund_mode"))

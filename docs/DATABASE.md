@@ -373,3 +373,24 @@ order must use the same `products`, `customers`, pricing and inventory as in-sto
 
 Money is integer paise, a percentage is basis points, quantities are thousandths. Every new table has `shop_id`,
 timestamps and composite (shop, id) keys; SQLite and PostgreSQL both support everything used.
+
+## Migrations 0011 and 0012 (Phase 9)
+
+* **0011 return numbers.** `sales_returns.return_no` and `purchase_returns.return_no` (`SRT/2026-27/0001`,
+  `PRT/2026-27/0001`, gapless per shop and financial year through the existing document sequence). Added as nullable,
+  backfilled for any existing row (`SRT/LEGACY/<id>`, `PRT/LEGACY/<id>`), then made NOT NULL with a unique
+  `(shop_id, return_no)` and a not-blank CHECK. The downgrade drops them again. The returns tables, their item tables and
+  the ledger transaction types (`SALE_RETURN`, `PURCHASE_RETURN`) already existed from Phase 2; nothing about the
+  original sale or purchase is changed by a return.
+* **0012 product images.** `product_images`: the one photo a shop chose to keep for a product, **metadata only**
+  (`sha256`, `content_type`, `size_bytes`, `width`, `height`, `storage_key`, `created_by`). Unique per
+  `(shop_id, product_id)` (at most one photo per product), composite tenant keys to the product and the user, positive
+  size and dimensions, a 64-character hash. The file itself is never in the database: it lives in a private image store
+  (`<shop_id>/<sha256>.<ext>`, a folder that is git-ignored and never served directly; object storage later behind the
+  same interface). Nothing creates a row from an analysis. It also adds the plan feature `image_intelligence` (on for
+  `pro`, off for the others).
+
+The idempotency table (`idempotency_keys`: shop, key, operation, request hash, stored response) predates Phase 9; the
+mechanism that uses it is now shared by every create and post (sales, quick sales, purchases, returns, products,
+customers, offers, confirmed photo products). Diagnostics are **not** stored in the database: they go to the server log
+(and optionally a private file), so there is no table a screen could read.

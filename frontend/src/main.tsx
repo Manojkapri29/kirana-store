@@ -4,20 +4,28 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 
 import { App } from '@/app/App'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { MUTATIONS_RETRY, queryRetryDelay, shouldRetryQuery } from '@/lib/retryPolicy'
 import '@/i18n'
 
 import './index.css'
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 10_000, retry: 1, refetchOnWindowFocus: false } },
+  defaultOptions: {
+    // Reading is retried a little when the failure can go away by itself; writing is never retried automatically.
+    queries: { staleTime: 10_000, retry: shouldRetryQuery, retryDelay: queryRetryDelay, refetchOnWindowFocus: false },
+    mutations: { retry: MUTATIONS_RETRY },
+  },
 })
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </ErrorBoundary>
     </QueryClientProvider>
   </StrictMode>,
 )

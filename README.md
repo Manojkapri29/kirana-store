@@ -88,6 +88,7 @@ ruff format --check .  # formatting
 npm run typecheck      # TypeScript
 npm run lint           # oxlint
 npm run build          # type-check + production build
+npm test               # unit and component tests (vitest)
 ```
 
 ## Project layout
@@ -112,7 +113,7 @@ All configuration comes from environment variables; nothing secret is committed.
 - [Architecture](docs/ARCHITECTURE.md): layers, service boundaries, ledgers, SaaS readiness
 - [Database](docs/DATABASE.md): planned schema and SQLite to PostgreSQL strategy
 - [Business rules](docs/BUSINESS_RULES.md): the approved rules every phase must follow
-- [Roadmap](docs/ROADMAP.md): Phases 1 to 16
+- [Roadmap](docs/ROADMAP.md): Phases 1 to 16 (Phase 9 is the latest)
 
 ## What Phase 8 added
 
@@ -147,3 +148,37 @@ python -m app.subscription_admin show --shop 1
 ```
 
 There is no payment processing anywhere; the plan screen says "Contact admin".
+
+## What Phase 9 added
+
+**Returns.** Take goods back from a completed sale, or send goods back to a supplier, from the sale or purchase page
+("Return items") or the new **Returns** page. The refund is worked out for you, in proportion to what was paid, and can
+be given as cash, UPI or a credit on the customer's khata. Nothing is deleted: a return can be voided, and both the return
+and the original stay on record.
+
+**Smart error recovery.** If something goes wrong, you see a plain message, what to do next and (for an unexpected
+problem) a reference such as `ERR-20260921-A82F5` to quote. The real cause is written, with secrets removed, to the
+server's log; nobody sees a stack trace. What you typed is kept, and "Try again" is offered only when repeating is safe:
+the same attempt carries a key, so a sale or return is never recorded twice. Unsaved forms are also kept in the browser for a
+day and offered back after a crash or reload. If a part of a page crashes, you get "This section couldn't be loaded."
+with Try again, Go to Dashboard and Reload.
+
+**Add a product from a photo (optional).** Take or choose a photo on **Products > Add from photo**. What the photo shows
+is offered as *Detected* or *Suggested*, checked against your existing products ("Possible existing product found"), and
+nothing is created until you review the boxes and press **Confirm & Create Product**. A photo never changes stock,
+prices or khata. You can keep the photo with the product (private to your shop) or not.
+
+Image analysis needs a provider, and **none is bundled**: until one is configured the screen says "Image analysis is not
+configured yet." and everything else (including reading a barcode in the browser and looking it up) works.
+
+### Settings added in Phase 9 (backend only)
+
+| Variable | Meaning |
+|---|---|
+| `KIRANA_DIAGNOSTICS_LOG_FILE` | Optional file for the redacted error log (JSON lines). Keep it private. |
+| `KIRANA_IMAGE_MAX_BYTES`, `KIRANA_IMAGE_MAX_SIDE` | The largest photo accepted (bytes, and pixels on the longest side). |
+| `KIRANA_IMAGE_STORAGE_DIR` | Where kept photos are stored (private, git-ignored, never served directly). |
+| `KIRANA_IMAGE_MAX_PER_SHOP` | How many photos a shop may keep. |
+| `KIRANA_IMAGE_ANALYSIS_PROVIDER`, `IMAGE_ANALYSIS_API_KEY` | For a future provider. The key stays in `backend/.env`; it is never sent to the browser or committed. |
+
+The `image_intelligence` plan feature controls who sees the photo tools (on for the example `pro` plan).
