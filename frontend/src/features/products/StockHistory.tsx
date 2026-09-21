@@ -90,6 +90,11 @@ function HistoryTable({ rows, unitCode }: { rows: InventoryTransaction[]; unitCo
                       {row.purchase_no}
                     </Link>
                   )}
+                  {row.sale_id && (
+                    <Link to={`/sales/${row.sale_id}`} className="font-medium text-emerald-800 hover:underline">
+                      {row.sale_no}
+                    </Link>
+                  )}
                   {row.reason_code && <div className="font-medium">{t(`history.reasons.${row.reason_code}`)}</div>}
                   {row.note && <div className="text-slate-600">{row.note}</div>}
                 </td>

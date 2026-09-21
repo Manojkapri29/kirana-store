@@ -60,6 +60,15 @@ def next_average_cost(
     return round_money((stock_before * avg_before + value) / (stock_before + quantity))
 
 
+def cost_of_goods(quantity: Decimal, unit_cost: Decimal | None) -> Decimal | None:
+    """Cost of goods sold for a quantity leaving stock: quantity x cost, whole paise, half up.
+
+    An unknown cost gives `None`, never 0: a sale of goods with no known cost has no known cost of goods, and
+    therefore no known profit (BUSINESS_RULES C3, F).
+    """
+    return None if unit_cost is None else round_money(quantity * unit_cost)
+
+
 @dataclass(frozen=True)
 class CostEvent:
     """One ledger movement, reduced to what costing needs."""

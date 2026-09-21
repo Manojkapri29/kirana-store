@@ -9,8 +9,9 @@ single-shop app and grow into a multi-shop SaaS.
 > The project folder and a few internal names (`kirana-store/`, the `KIRANA_` environment prefix,
 > `kirana.db`) are the original working name. They are internal only and will be renamed later.
 
-> **Status: Phase 6 of 16 (customers and khata).** You choose your type of business, manage suppliers, products
-> and categories, record opening stock, keep **customers and their khata** (opening balance, payments, advances,
+> **Status: Phase 7 of 16 (detailed sales).** You choose your type of business, manage suppliers, products
+> and categories, record opening stock, **make product-wise bills** (search or scan, discounts, cash, UPI or
+> credit; stock and profit are worked out for you), keep **customers and their khata** (opening balance, payments, advances,
 > adjustments, reversals, a full ledger history), and **record purchases**: draft a purchase, post it (the stock is added and
 > the average cost updated), void or correct it. You see current stock (In / Low / Out of stock), stock history
 > (each purchase is linked) and the average cost, and can export products, inventory, history and purchases to

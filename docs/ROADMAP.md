@@ -11,8 +11,8 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 | 3 | Products + inventory ledger core + export framework | Done |
 | 4 | Suppliers | Done |
 | 5 | Purchases + weighted average cost | Done |
-| 6 | Customers + Khata | Done, awaiting review |
-| 7 | Detailed Sales | Planned |
+| 6 | Customers + Khata | Done |
+| 7 | Detailed Sales | Done, awaiting review |
 | 8 | Quick/Daily Sales | Planned |
 | 9 | Returns | Planned |
 | 10 | Inventory views + adjustments + stock count + reliability indicators | Planned |
@@ -102,9 +102,18 @@ linked reversal or an adjustment; another shop's customers and ledger are unreac
 payment allocation to specific bills, payment reminders, and any payment gateway.
 
 ### Phase 7: Detailed Sales
-Product-wise cart, invoice numbering, oversell prevention, cost snapshot per line, paid or credit sales,
-MRP checks, and export.
-**Done when:** 50 - 5 = 45; selling 46 is rejected; two simultaneous sales of the last unit cannot both succeed.
+Product-wise billing: a cart (draft) that is posted once. Posting numbers the sale (`INV/2026-27/0001`), takes
+the stock out through `inventory_service` (overselling refused, checked under lock), records each line's cost of
+goods from the weighted average (`NULL` when unknown, so profit is "Not available" rather than a wrong number),
+and charges any unpaid part to the customer's khata through `khata_service`; all in one transaction. Paid or
+credit sales (cash, UPI, other), line and bill discounts, MRP warn or block, void by reversal, and a corrected
+copy. Screens: sale list with filters, a billing screen with product and barcode search and a payment panel
+(totals come from the server's `/sales/calculate`), and a detail page with profit and stock effect. CSV/XLSX
+exports of sales, sold items and one sale. Migration `0006`. New services: `sale_service`, `sale_calculation`.
+**Done when:** 50 - 5 = 45; selling 46 is rejected; two simultaneous sales of the last unit cannot both succeed;
+a failed posting leaves no stock, number or khata entry behind; unknown cost never becomes a zero profit.
+*Not in this phase:* Quick Sales (Phase 8), Sales Returns (Phase 9, the void guard for returns is already in
+place), tax or GST invoicing (nothing in the schema supports it), overpayment on a bill, and a printed invoice.
 
 ### Phase 8: Quick/Daily Sales
 Money-only entries (paid or credit) with a clear "stock is not reduced" notice, and export.

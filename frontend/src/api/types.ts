@@ -40,6 +40,8 @@ export interface Shop {
   language: 'en' | 'hi'
   allow_negative_stock: boolean
   mrp_validation_mode: MrpValidationMode
+  /** The shop's UPI id, when set. Shown while taking a UPI payment. */
+  upi_id: string | null
 }
 
 export interface Product {
@@ -153,6 +155,9 @@ export interface InventoryTransaction {
   /** Set when the row came from a purchase line (or from voiding one). */
   purchase_id: number | null
   purchase_no: string | null
+  /** Set when the row came from a sale line (or from voiding one). */
+  sale_id: number | null
+  sale_no: string | null
 }
 
 export interface OpeningStockPayload {
@@ -348,6 +353,8 @@ export interface LedgerEntry {
   payment_reference: string | null
   reference_type: string | null
   reference_id: number | null
+  /** The sale's invoice number, for entries that came from a sale. */
+  reference_no: string | null
   reverses_entry_id: number | null
   reversed_by_entry_id: number | null
   note: string | null
@@ -372,4 +379,145 @@ export interface BalanceSummary {
 export interface KhataEntryResult {
   entry: LedgerEntry
   balance: BalanceSummary
+}
+
+export type SaleStatus = 'DRAFT' | 'POSTED' | 'VOID'
+export type PaymentType = 'PAID' | 'CREDIT'
+
+export interface SaleInventoryEffect {
+  id: number
+  txn_type: TransactionType
+  qty_delta: string
+  txn_date: string
+}
+
+export interface SaleItem {
+  id: number
+  product_id: number
+  sku: string
+  product_name: string
+  unit_id: number
+  unit_code: string
+  unit_name: string
+  unit_allows_decimal: boolean
+  quantity: string
+  unit_price: string
+  mrp: string | null
+  discount: string
+  /** Quantity x price, before the line discount. */
+  gross: string
+  /** Net revenue of the line. */
+  line_total: string
+  /** Cost snapshot at posting. Null = unknown (never 0), and then the profit is unknown too. */
+  unit_cost: string | null
+  cogs_amount: string | null
+  profit: string | null
+  inventory_effects: SaleInventoryEffect[]
+}
+
+export interface Sale {
+  id: number
+  /** Assigned when posted, e.g. INV/2026-27/0001. A draft has none. */
+  invoice_no: string | null
+  status: SaleStatus
+  customer_id: number | null
+  customer_name: string | null
+  sale_date: string
+  notes: string | null
+  subtotal: string
+  /** An amount off the whole bill. */
+  discount: string
+  total_amount: string
+  payment_type: PaymentType | null
+  amount_paid: string | null
+  /** The part of the bill that is on the customer's khata. */
+  credit_amount: string
+  payment_method: PaymentMethod | null
+  payment_reference: string | null
+  item_count: number
+  created_by_name: string
+  created_at: string
+  updated_at: string
+  posted_at: string | null
+  posted_by_name: string | null
+  void_reason: string | null
+  voided_at: string | null
+  replaces_id: number | null
+  replaced_by_id: number | null
+  /** Null unless the sale is posted AND every line's cost was known. */
+  cogs_total: string | null
+  gross_profit: string | null
+  lines_without_cost: number
+  warnings: string[]
+  items: SaleItem[]
+}
+
+export interface SaleSummary {
+  id: number
+  invoice_no: string | null
+  status: SaleStatus
+  customer_id: number | null
+  customer_name: string | null
+  sale_date: string
+  total_amount: string
+  amount_paid: string | null
+  payment_type: PaymentType | null
+  payment_method: PaymentMethod | null
+  item_count: number
+  created_by_name: string
+  created_at: string
+}
+
+export interface SaleItemPayload {
+  product_id: number
+  quantity: string
+  /** Leave null to use the product's own price. */
+  unit_price: string | null
+  discount: string | null
+}
+
+export interface SaleHeaderPayload {
+  customer_id: number | null
+  sale_date: string
+  notes: string | null
+  discount: string | null
+}
+
+export interface SalePaymentPayload {
+  /** Null = paid in full. */
+  amount_paid: string | null
+  payment_method: PaymentMethod | null
+  payment_reference: string | null
+}
+
+export interface FieldProblem {
+  field: string
+  message: string
+}
+
+export interface SalePreviewLine {
+  product_id: number | null
+  quantity: string | null
+  unit_price: string | null
+  discount: string
+  gross: string | null
+  line_total: string | null
+  /** Stock on hand right now. */
+  available: string | null
+  /** More is wanted (across all lines of that product) than is on hand: fine for a draft, not for posting. */
+  short: boolean
+  errors: FieldProblem[]
+}
+
+/** The priced cart, exactly as posting would compute it. The screen shows these and does no arithmetic. */
+export interface SalePreview {
+  lines: SalePreviewLine[]
+  subtotal: string
+  discount: string
+  total: string
+  payment_type: PaymentType
+  paid: string
+  credit: string
+  errors: FieldProblem[]
+  warnings: string[]
 }

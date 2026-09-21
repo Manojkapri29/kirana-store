@@ -60,6 +60,63 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
 - **S6.** A Quick Sale can be voided but not returned in the MVP (void it and enter a corrected one).
 - **S7.** Exact stock is reliable **only** for products whose movements were recorded at product level.
 
+## SL. Detailed Sales (Phase 7, implemented)
+
+- **SL1. Lifecycle: DRAFT, POSTED, VOID.** A **draft** is a cart: customer (optional), date, notes, lines and an
+  optional bill discount. It has no number and no payment, is freely editable, and **never affects stock,
+  khata, revenue or cost**. **Posting** is the only step that does. A **posted** sale is never edited or
+  deleted. **Void** is the only way out (there is no DELETE): it needs a reason and keeps the record and its
+  number. A discarded draft is VOID too, with no number and no effects.
+- **SL2. Posting is atomic and happens once.** In one database transaction: the payment is settled, the sale is
+  numbered, each line takes its quantity out of the stock ledger (one negative `SALE` row per line, through
+  `inventory_service`), each line stores the product's cost at that moment, any unpaid part is charged to the
+  customer's khata (through `khata_service`), and the audit entry is written. If anything fails, nothing is kept:
+  no stock, no number, no khata entry. The sale row is locked, so two requests posting the same draft cannot both
+  succeed; the second gets a conflict.
+- **SL3. Numbers** look like `INV/2026-27/0001`: per shop, per document type, per financial year, gapless,
+  assigned at posting. Drafts have none. A voided sale keeps its number, which is never reused.
+- **SL4. No overselling.** Stock is read from the ledger, never from a stored column. Posting is refused if any
+  product's total quantity (across all its lines) is more than is on hand, unless the shop allows negative stock
+  (L8). Every short line is reported at once, by position (`items.2.quantity`). The check is repeated under each
+  product's lock (products are locked in ascending id order), so two simultaneous sales cannot both take the last
+  unit. Selling 7 of 10 is allowed; 11 of 10 is refused and writes nothing; nothing ever goes negative.
+- **SL5. Line rules.** The product must belong to the shop and be active; quantity is greater than zero (whole
+  numbers for units that cannot be split); the price is zero or more and defaults to the product's selling
+  price; a discount is an **amount**, not more than the line, so a line can reach zero but never go negative.
+  Above the product's MRP the shop's setting decides: warn (the sale is saved and shown a warning) or block (P2).
+  The MRP in force is copied onto the line (P3). Every bad field is reported at once with its line.
+- **SL6. Arithmetic** lives in one place (`sale_calculation`), in whole paise, half up:
+  `line gross = quantity x price`, `line total = gross - line discount`, `subtotal = sum of line totals`,
+  `bill total = subtotal - bill discount`. The client never supplies totals (they are refused as unknown fields);
+  the server recomputes them at every save and again when posting. The billing screen shows what
+  `/sales/calculate` returns and does no money arithmetic of its own. **There is no tax**: nothing in the
+  schema supports it yet, so it is not modelled.
+- **SL7. Cost and profit.** A line's cost of goods sold is `round(quantity x product average cost)` using the
+  average in force when the sale is posted (maintained by purchases, C1); a sale never changes the average. The
+  snapshot is never rewritten. **Unknown cost stays `NULL`, never 0**, and then so does that line's profit.
+  Sale gross profit = bill total - cost of goods, and is `NULL` unless **every** line's cost is known: a partly
+  known cost never produces a partial profit. Example: 5 kg at an average of 23.33 costs 116.65. The bill
+  discount reduces the sale's profit but is not spread over the lines, so a line's profit is before it.
+- **SL8. Payment** is chosen when posting. **Paid in full** (the default) needs a method (cash, UPI or other).
+  **Less than the total** makes a `CREDIT` sale: a customer is required, an active one, and the unpaid part is a
+  `CREDIT_SALE` on their khata referencing the sale. Paying nothing now is allowed (all on credit, no method).
+  **Paying more than the total is refused** (the sale model has no overpayment); the message says to take extra
+  money as a payment on the customer's khata, where it becomes an advance (KH4). A fully paid sale never touches
+  khata. The bill total must be greater than zero. A UPI reference is optional and the shop's UPI id is shown on
+  the screen; there is no payment gateway.
+- **SL9. Void of a posted sale** writes a `REVERSAL` ledger row per line (the goods go back), reverses the
+  `CREDIT_SALE` if there was one (the document path is allowed to, KH9), and is refused while the sale has live
+  returns (L6). It rebuilds each product's average cost from its history without the voided sale, so an
+  emptied-and-restocked shelf is treated as if the sale had never happened.
+- **SL10. Correcting a mistake:** void the sale, then "make a corrected copy": a new draft with the same
+  customer, notes, bill discount and lines (prices as billed), linked through `replaces_id`. Once per sale.
+- **SL11.** Every create, edit, post, void, discard and correction is audited with before and after values.
+  Stock is never stored on a product or a sale; the stock ledger and the khata ledger are reached only through
+  `inventory_service` and `khata_service` (architecture tests enforce it).
+- **SL12.** Search covers invoice number, customer name or phone, and notes; filters cover status, payment type,
+  customer and dates. Exports cover the sale list (with payment, cost of goods and profit, empty where unknown),
+  every sold line, and one sale. Product history and a customer's khata link back to the invoice.
+
 ## R. Returns
 
 - **R1.** Formal returns reference the original sale or purchase **line**. Cumulative returned quantity
@@ -335,6 +392,9 @@ Items marked **(open)** are deliberately undecided and will be settled in the ph
   including negative ones, are not changed. Amounts are written from exact decimals. Money columns use
   `#,##0.00`, quantity columns `#,##0.000`, dates are real Excel date cells shown as `dd/mm/yyyy`; recorded-at
   times are converted to the shop's timezone. CSV dates are ISO. Files are named like `products_2026-09-20.csv`.
+- **X8.** *(Phase 7.)* Sales (one row per sale: payment, khata part, cost of goods and gross profit, both empty
+  where unknown), Sale items (one row per line with the cost snapshot and line profit) and one sale with its
+  lines. Owner only, shop-scoped, formula-safe. The inventory-history export names the invoice for sale rows.
 - **X7.** *(Phase 6.)* Customers (name, contact details, balance, owes, advance, status) and one customer's khata
   (oldest first, with separate Debit and Credit columns and the running balance; reversals point at their
   originals). Owner only, shop-scoped, formula-safe, UTF-8 BOM in CSV.

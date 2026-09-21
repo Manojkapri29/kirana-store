@@ -66,3 +66,4 @@ class ShopOut(BaseModel):
     language: Language
     allow_negative_stock: bool
     mrp_validation_mode: MrpValidationMode
+    upi_id: str | None = None  # shown on the billing screen when a customer pays by UPI (read-only for now)

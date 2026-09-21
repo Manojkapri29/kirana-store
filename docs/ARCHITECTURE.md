@@ -131,7 +131,7 @@ type), and write stock only through `inventory_service`.
 
 | Service | Responsibility | Status |
 |---|---|---|
-| `inventory_service` | **The only reader and writer of the stock ledger, and the only place `avg_cost` is assigned.** Opening stock, adjustments, stock queries, inventory list, history (with the purchase behind each row), stock status; Phase 5 adds receiving purchase lines, reversing them, and rebuilding the average cost | Phase 3 (purchases from Phase 5; sales, returns later) |
+| `inventory_service` | **The only reader and writer of the stock ledger, and the only place `avg_cost` is assigned.** Opening stock, adjustments, stock queries, inventory list, history (with the purchase behind each row), stock status; Phase 5 adds receiving purchase lines, reversing them, and rebuilding the average cost; Phase 7 adds shortage detection and taking sale lines out with their cost of goods | Phase 3 (purchases from Phase 5, sales from Phase 7; returns later) |
 | `product_service` | Products: create, update, search, activate/deactivate; MRP setting; derives stock through `inventory_service` | Phase 3 |
 | `catalog_service` | Units and categories | Phase 3 |
 | `supplier_service` | Suppliers: create, update, search, activate/deactivate; duplicate warnings; the count of products per supplier. Generic for every business type | Phase 4 |
@@ -144,10 +144,11 @@ type), and write stock only through `inventory_service`.
 | `shop_service`, `context_service` | Shop settings and "today"; the current shop/user | Phase 3 |
 | `khata_service` | **The only reader and writer of the customer ledger.** Opening balance, payment, adjustment, reversal, credit-sale and return-credit entries (the last two are for Phases 7 and 9), balances, the customer list with balances, and history with a running balance | Phase 6 |
 | `purchase_service` | Purchases: draft, edit, post, void, correct, list and search, item rows for exports. Writes stock only through `inventory_service` | Phase 5 (returns: Phase 9) |
-| `detailed_sale_service` | Product-wise bills and sales returns | Phases 7, 9 |
+| `sale_service` | Detailed Sales: cart (draft), preview pricing, post, void, correct, list and search, item rows for exports. Writes stock only through `inventory_service` and credit only through `khata_service`. Sales returns join it in Phase 9 | Phase 7 |
+| `sale_calculation` | The arithmetic of a bill (line, subtotal, total, cost of goods, profit, payment split): pure, no database, no floats, no tax | Phase 7 |
 | `quick_sale_service` | Money-only sales. It has **no dependency on `inventory_service`**, by design | Phase 8 |
-| `costing_service` | Moving weighted average: the pure arithmetic (no database, no floats) and the replay used to rebuild `avg_cost`. Cost snapshots for COGS join it in Phase 7 | Phase 5 |
-| `numbering_service` | Document numbers (`PUR/2026-27/0001`) from the `document_sequences` table, per shop, type and financial year | Phase 5 (sales reuse it in Phase 7) |
+| `costing_service` | Moving weighted average: the pure arithmetic (no database, no floats) and the replay used to rebuild `avg_cost`. `cost_of_goods` (Phase 7) gives a sale line's cost, `None` when the cost is unknown | Phase 5 |
+| `numbering_service` | Document numbers (`PUR/2026-27/0001`) from the `document_sequences` table, per shop, type and financial year | Phase 5 (sales reuse it from Phase 7) |
 
 Other services call `inventory_service` and `khata_service`; nothing else touches their tables. For
 example the product list gets stock from `inventory_service.get_stock_map`, and exports get their rows from
@@ -240,7 +241,7 @@ a mobile charger alike. The design rule is **reuse, never duplicate**:
 
 - It uses the same `products`, units, pricing, `customers` and inventory. There is **no second inventory
   system**. Stock stays the sum of `inventory_transactions`; an accepted order becomes a normal Detailed Sale
-  through `detailed_sale_service`, which posts stock through `inventory_service`.
+  through `sale_service`, which posts stock through `inventory_service`.
 - Product presentation comes from the generic product fields; the business type may later supply storefront
   defaults (labels, categories order) through the same template seam. Business-specific pieces such as
   "Preparing" times or variants plug in as optional modules.
@@ -304,8 +305,22 @@ Migration `0004`.
 **Phase 6 (customers + khata):** customer management and the customer ledger described above, screens, exports
 and migration `0005`. Credit sales and return credit exist only as service methods, ready for later phases.
 
-**Not built yet:** supplier payments and ledger, purchase returns, sales, sales returns, expenses, dashboard
-analytics, reports, authentication, and screens for stock adjustments.
+**Phase 7 (detailed sales):** the product-wise billing workflow. `sale_service` runs the DRAFT to POSTED to VOID
+lifecycle inside the router's single write transaction. Posting locks the sale (a second post gets a conflict),
+locks the products in ascending id order, checks availability, asks `inventory_service` to take each line out and
+report its cost of goods, numbers the document, charges any credit through `khata_service`, and audits; any
+failure rolls all of it back. Voiding reverses both effects and rebuilds the average cost by replay.
+Endpoints under `/api/v1/sales` (list, calculate, create, get, patch header, replace items, post, void, correct;
+no DELETE) and `/api/v1/exports/sales`, `/sale-items`, `/sales/{id}`. **`POST /sales/calculate` prices a cart
+without saving**, so the billing screen shows the server's numbers and duplicates no arithmetic; it also reports
+stock on hand per line and the paid/credit split for an amount. Field errors inside a list use dotted paths
+(`items.2.quantity`). The UI: sale list with filters, a billing screen (product search that also takes a
+barcode scanner's typed code, cart, customer picker, bill discount, payment panel), and a detail page with the
+payment, cost and profit ("Not available" when a cost is unknown) and the stock effect. Product history and the
+customer's khata link to the invoice. Migration `0006`.
+
+**Not built yet:** supplier payments and ledger, purchase returns, sales returns, quick sales, expenses,
+dashboard analytics, reports, authentication, and screens for stock adjustments.
 
 ## Testing strategy
 

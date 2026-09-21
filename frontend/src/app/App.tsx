@@ -7,6 +7,9 @@ import { InventoryPage } from '@/features/inventory/InventoryPage'
 import { ProductDetailPage } from '@/features/products/ProductDetailPage'
 import { ProductFormPage } from '@/features/products/ProductFormPage'
 import { ProductsPage } from '@/features/products/ProductsPage'
+import { SaleDetailPage } from '@/features/sales/SaleDetailPage'
+import { SaleFormPage } from '@/features/sales/SaleFormPage'
+import { SalesPage } from '@/features/sales/SalesPage'
 import { PurchaseDetailPage } from '@/features/purchases/PurchaseDetailPage'
 import { PurchaseFormPage } from '@/features/purchases/PurchaseFormPage'
 import { PurchasesPage } from '@/features/purchases/PurchasesPage'
@@ -35,6 +38,10 @@ export function App() {
         <Route path="purchases/new" element={<PurchaseFormPage mode="create" />} />
         <Route path="purchases/:id" element={<PurchaseDetailPage />} />
         <Route path="purchases/:id/edit" element={<PurchaseFormPage mode="edit" />} />
+        <Route path="sales" element={<SalesPage />} />
+        <Route path="sales/new" element={<SaleFormPage mode="create" />} />
+        <Route path="sales/:id" element={<SaleDetailPage />} />
+        <Route path="sales/:id/edit" element={<SaleFormPage mode="edit" />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/new" element={<CustomerFormPage mode="create" />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />

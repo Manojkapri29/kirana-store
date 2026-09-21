@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy.exc import StatementError
 
+from app.db.types import utc_now
 from app.models import (
     AuditLog,
     Category,
@@ -22,7 +23,7 @@ from app.models import (
     Supplier,
     User,
 )
-from app.models.enums import DocumentStatus, PaymentMethod, PaymentType
+from app.models.enums import PaymentMethod, PaymentType, SaleStatus
 from tests import factories
 from tests.conftest import Tenant, assert_rejected, assert_sql_rejected
 from tests.factories import TODAY, make_product, product_kwargs
@@ -133,6 +134,7 @@ class TestShopIsolation:
                 shop_id=tenant_a.shop.id,
                 sale_id=sale.id,
                 product_id=foreign_product.id,
+                unit_id=foreign_product.unit_id,
                 quantity=Decimal("1"),
                 unit_price=Decimal("10"),
                 line_total=Decimal("10"),
@@ -261,7 +263,8 @@ class TestValuesMustBeValid:
 
 def cash_sale(tenant: Tenant, **overrides) -> Sale:
     fields = {
-        "shop_id": tenant.shop.id, "invoice_no": "INV-1", "sale_date": TODAY,
+        "shop_id": tenant.shop.id, "invoice_no": "INV-1", "sale_date": TODAY, "status": SaleStatus.POSTED,
+        "posted_at": utc_now(), "subtotal": Decimal("100.00"),
         "total_amount": Decimal("100.00"), "payment_type": PaymentType.PAID,
         "amount_paid": Decimal("100.00"), "payment_method": PaymentMethod.CASH,
         "created_by": tenant.user.id,
@@ -327,7 +330,7 @@ class TestSalePaymentRules:
     def test_a_quick_sale_cannot_be_zero_but_a_free_detailed_bill_can(self, session, tenant_a):
         zero = {"total_amount": Decimal("0"), "amount_paid": Decimal("0"), "payment_method": None}
         assert_rejected(session, quick_sale(tenant_a, **zero), match="total_amount_positive")
-        session.add(cash_sale(tenant_a, **zero))
+        session.add(cash_sale(tenant_a, subtotal=Decimal("0"), **zero))
         session.commit()
 
     def test_invoice_numbers_are_unique_per_shop_only(self, session, tenant_a, tenant_b):
@@ -342,15 +345,15 @@ class TestSalePaymentRules:
         assert_rejected(session, cash_sale(tenant_a, invoice_no="A/1"), match="UNIQUE")
 
     def test_a_voided_document_needs_a_reason(self, session, tenant_a):
-        assert_rejected(session, cash_sale(tenant_a, status=DocumentStatus.VOID), match="void_needs_reason")
-        session.add(cash_sale(tenant_a, status=DocumentStatus.VOID, void_reason="Entered twice"))
+        assert_rejected(session, cash_sale(tenant_a, status=SaleStatus.VOID), match="void_needs_reason")
+        session.add(cash_sale(tenant_a, status=SaleStatus.VOID, void_reason="Entered twice"))
         session.commit()
 
 
 class TestSaleLineCost:
     def line(self, tenant: Tenant, sale: Sale, product: Product, **overrides) -> SaleItem:
         fields = {
-            "shop_id": tenant.shop.id, "sale_id": sale.id, "product_id": product.id,
+            "shop_id": tenant.shop.id, "sale_id": sale.id, "product_id": product.id, "unit_id": product.unit_id,
             "quantity": Decimal("2"), "unit_price": Decimal("50"), "line_total": Decimal("100"),
         }  # fmt: skip
         fields.update(overrides)

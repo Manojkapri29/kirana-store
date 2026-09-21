@@ -150,6 +150,11 @@ export function CustomerDetailPage() {
               {t('customers.khata.addOpening')}
             </Button>
           )}
+          {c.is_active && (
+            <LinkButton to={`/sales/new?customer=${c.id}`} variant="secondary">
+              {t('customers.khata.newSale')}
+            </LinkButton>
+          )}
           <Button variant="secondary" onClick={() => setForm('adjustment')}>
             <Scale aria-hidden="true" className="size-5" />
             {t('customers.khata.addAdjustment')}
@@ -245,10 +250,16 @@ function Details({ entry }: { entry: LedgerEntry }) {
           {entry.payment_reference ? ` · ${entry.payment_reference}` : ''}
         </div>
       )}
-      {entry.reference_type && (
-        <div className="text-slate-600">
-          {t(`customers.ledger.reference.${entry.reference_type as 'SALE' | 'QUICK_SALE' | 'SALES_RETURN'}`)} #{entry.reference_id}
-        </div>
+      {entry.reference_type === 'SALE' && entry.reference_id ? (
+        <Link to={`/sales/${entry.reference_id}`} className="text-emerald-800 hover:underline">
+          {t('customers.ledger.reference.SALE')} {entry.reference_no ?? `#${entry.reference_id}`}
+        </Link>
+      ) : (
+        entry.reference_type && (
+          <div className="text-slate-600">
+            {t(`customers.ledger.reference.${entry.reference_type as 'SALE' | 'QUICK_SALE' | 'SALES_RETURN'}`)} #{entry.reference_id}
+          </div>
+        )
       )}
       {entry.reverses_entry_id && <div className="text-slate-600">{t('customers.ledger.reverses', { id: entry.reverses_entry_id })}</div>}
       {entry.note && <div className="text-slate-700">{entry.note}</div>}

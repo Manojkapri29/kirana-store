@@ -8,16 +8,16 @@ Two structurally different kinds of sale (BUSINESS_RULES S1, S2):
                           columns, so it cannot express stock movement or product profit at all. That
                           is deliberate; a test guards it.
 
-Database foundation only: the workflows that create these rows arrive in Phases 7 to 9.
+Phase 7 (`sale_service`) implements the Detailed Sale workflow. Quick Sales and returns come in Phases 8, 9.
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, Index, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.types import Money, Quantity
+from app.db.types import Money, Quantity, UTCDateTime
 from app.models.base import (
     Base,
     DocumentLifecycleMixin,
@@ -34,44 +34,85 @@ from app.models.base import (
     tenant_fk,
     void_requires_reason,
 )
-from app.models.enums import PaymentMethod, PaymentType, RefundMode
+from app.models.enums import PaymentMethod, PaymentType, RefundMode, SaleStatus
 
 
-class Sale(DocumentLifecycleMixin, TimestampMixin, Base):
-    """A Detailed Sale (a bill)."""
+class Sale(TimestampMixin, Base):
+    """A Detailed Sale (a bill).
+
+    Lifecycle (`status`): DRAFT -> POSTED -> VOID.
+      * DRAFT: a cart. No number, and no effect on stock, khata, revenue or cost. It has no payment yet.
+      * POSTED: numbered (`invoice_no`), one SALE row per line is in the stock ledger, each line carries its
+        cost snapshot, any unpaid part is on the customer's khata, and the payment is recorded.
+      * VOID: cancelled. Stock and khata effects are undone by reversal rows; the sale and its number stay.
+        A draft that is discarded is VOID too, with no number and no ledger rows.
+    A posted sale is never edited or deleted: correct it by voiding it and entering a corrected copy.
+
+    Money: `subtotal` is the sum of the line totals (each net of its own discount); `discount` is an optional
+    amount off the whole bill; `total_amount = subtotal - discount`. Payment fields are NULL on a draft.
+    """
 
     __tablename__ = "sales"
     __table_args__ = (
         UniqueConstraint("shop_id", "id"),
-        UniqueConstraint("shop_id", "invoice_no"),
+        UniqueConstraint("shop_id", "invoice_no"),  # NULL for drafts; NULLs never collide
         UniqueConstraint("replaces_id"),
         tenant_fk("customer_id", "customers"),
         tenant_fk("replaces_id", "sales"),
         tenant_fk("created_by", "users"),
+        tenant_fk("posted_by", "users"),
         Index("ix_sales_shop_date", "shop_id", "sale_date"),
         Index("ix_sales_shop_customer", "shop_id", "customer_id"),
         not_blank("invoice_no"),
         *payment_rules(),
-        void_requires_reason(),
+        non_negative("subtotal"),
+        non_negative("discount"),
+        CheckConstraint("total_amount = subtotal - discount", name="total_is_subtotal_less_discount"),
+        CheckConstraint("status <> 'VOID' OR void_reason IS NOT NULL", name="void_needs_reason"),
+        # A number and its posting time exist together, and every posted sale has them; a draft has neither.
+        CheckConstraint(
+            "(invoice_no IS NULL AND posted_at IS NULL)"
+            " OR (invoice_no IS NOT NULL AND posted_at IS NOT NULL)",
+            name="number_and_posted_at_together",
+        ),
+        CheckConstraint("status <> 'POSTED' OR invoice_no IS NOT NULL", name="posted_needs_number"),
+        CheckConstraint("status <> 'DRAFT' OR invoice_no IS NULL", name="draft_has_no_number"),
+        # A numbered sale (posted, or voided after posting) has its payment details. Only a draft, or a draft
+        # that was discarded, lacks them.
+        CheckConstraint(
+            "invoice_no IS NULL OR (payment_type IS NOT NULL AND amount_paid IS NOT NULL)",
+            name="posted_has_payment",
+        ),
     )
 
     id: Mapped[int] = id_column()
     shop_id: Mapped[int] = shop_id_column()
-    invoice_no: Mapped[str] = mapped_column(String(30))
+    invoice_no: Mapped[str | None] = mapped_column(String(30))  # e.g. INV/2026-27/0001, set when posted
+    status: Mapped[SaleStatus] = mapped_column(enum_type(SaleStatus, "status"), default=SaleStatus.DRAFT)
     sale_date: Mapped[date] = mapped_column(Date)
     customer_id: Mapped[int | None] = mapped_column(IdType)
-    total_amount: Mapped[Decimal] = mapped_column(Money)
-    payment_type: Mapped[PaymentType] = mapped_column(enum_type(PaymentType, "payment_type"))
-    amount_paid: Mapped[Decimal] = mapped_column(Money)
+    subtotal: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"), server_default="0")
+    discount: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"), server_default="0")
+    total_amount: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    payment_type: Mapped[PaymentType | None] = mapped_column(enum_type(PaymentType, "payment_type"))
+    amount_paid: Mapped[Decimal | None] = mapped_column(Money)
     payment_method: Mapped[PaymentMethod | None] = mapped_column(enum_type(PaymentMethod, "payment_method"))
     payment_reference: Mapped[str | None] = mapped_column(String(100))
     notes: Mapped[str | None] = mapped_column(Text)
+    posted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    posted_by: Mapped[int | None] = mapped_column(IdType)
+    void_reason: Mapped[str | None] = mapped_column(Text)
+    voided_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     replaces_id: Mapped[int | None] = mapped_column(IdType)
     created_by: Mapped[int] = mapped_column(IdType)
 
 
 class SaleItem(TimestampMixin, Base):
-    """One product line of a Detailed Sale. Price, MRP and cost are snapshots taken at sale time."""
+    """One product line of a Detailed Sale. Price, MRP and cost are snapshots taken at sale time.
+
+    `line_total` = round(quantity x unit_price) - discount: the net revenue of the line. `unit_cost` and
+    `cogs_amount` are NULL on a draft and whenever the product's cost was unknown at posting (never 0).
+    """
 
     __tablename__ = "sale_items"
     __table_args__ = (
@@ -95,6 +136,7 @@ class SaleItem(TimestampMixin, Base):
     shop_id: Mapped[int] = shop_id_column()
     sale_id: Mapped[int] = mapped_column(IdType)
     product_id: Mapped[int] = mapped_column(IdType)
+    unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"))
     quantity: Mapped[Decimal] = mapped_column(Quantity)
     unit_price: Mapped[Decimal] = mapped_column(Money)
     mrp: Mapped[Decimal | None] = mapped_column(Money)

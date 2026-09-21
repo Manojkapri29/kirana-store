@@ -9,6 +9,9 @@ export type ExportKind =
   | 'purchase-items'
   | `purchases/${number}` // one purchase with its lines
   | 'customers'
+  | 'sales'
+  | 'sale-items'
+  | `sales/${number}` // one sale with its lines
   | `customers/${number}/ledger` // one customer's khata
 
 /** Fetch an export and hand it to the browser as a file download. */

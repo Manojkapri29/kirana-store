@@ -40,7 +40,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
 from app.core.context import RequestContext
-from app.models import Customer, CustomerLedgerEntry, User
+from app.models import Customer, CustomerLedgerEntry, Sale, User
 from app.models.enums import CustomerLedgerEntryType, KhataReferenceType, PaymentMethod
 from app.services import customer_service
 from app.services.audit_service import record_audit
@@ -106,6 +106,7 @@ class LedgerRow:
     payment_reference: str | None
     reference_type: KhataReferenceType | None
     reference_id: int | None
+    reference_no: str | None  # the sale's invoice number, for entries that came from a sale
     reverses_entry_id: int | None  # set on a REVERSAL: the entry it undoes
     reversed_by_entry_id: int | None  # set on an entry that has been reversed
     note: str | None
@@ -268,6 +269,7 @@ def get_customer_ledger(
             row.payment_reference,
             row.reference_type,
             row.reference_id,
+            Sale.invoice_no.label("reference_no"),
             row.reverses_entry_id,
             reversal.id.label("reversed_by_entry_id"),
             row.note,
@@ -276,6 +278,14 @@ def get_customer_ledger(
         )
         .join(User, and_(User.shop_id == row.shop_id, User.id == row.created_by))
         .outerjoin(reversal, and_(reversal.shop_id == row.shop_id, reversal.reverses_entry_id == row.id))
+        .outerjoin(
+            Sale,
+            and_(
+                row.reference_type == KhataReferenceType.SALE,
+                Sale.shop_id == row.shop_id,
+                Sale.id == row.reference_id,
+            ),
+        )
         .where(row.shop_id == shop_id, row.customer_id == customer_id)
     )
     h = history.subquery()
@@ -699,6 +709,25 @@ def reverse_entry(
         reverses_entry_id=original.id,
     )
     return _result(session, ctx, customer, entry)
+
+
+def reverse_credit_sale(
+    session: Session,
+    ctx: RequestContext,
+    reference_type: KhataReferenceType,
+    reference_id: int,
+    *,
+    reason: str,
+) -> EntryResult | None:
+    """Undo the credit a sale put on a customer's khata (used when the sale is voided).
+
+    Returns `None` when the sale never charged the khata (it was paid in full). This is the document-workflow
+    path that is allowed to reverse a CREDIT_SALE entry.
+    """
+    entry = _find_by_reference(session, ctx.shop_id, E.CREDIT_SALE, reference_type, reference_id)
+    if entry is None:
+        return None
+    return reverse_entry(session, ctx, entry.id, reason=reason, allow_document_entries=True)
 
 
 # --- Writing: a customer with an opening balance -------------------------------------------------

@@ -1,7 +1,7 @@
 # Database
 
 > **Status: implemented.** Migration `0001` (Phase 2) created the schema; migration `0002` (Phase 3 extension)
-> added business types; migration `0003` (Phase 4) extended suppliers; migration `0004` (Phase 5) turned the purchase tables into a workflow; migration `0005` (Phase 6) added customer email. 24 tables. Rules are in [BUSINESS_RULES.md](BUSINESS_RULES.md);
+> added business types; migration `0003` (Phase 4) extended suppliers; migration `0004` (Phase 5) turned the purchase tables into a workflow; migration `0005` (Phase 6) added customer email; migration `0006` (Phase 7) turned the sale tables into a workflow. 24 tables. Rules are in [BUSINESS_RULES.md](BUSINESS_RULES.md);
 > the workflows that fill these tables arrive in Phases 3 to 13.
 
 ## Principles
@@ -147,12 +147,22 @@ never be deleted, tests build a fresh database per test rather than cleaning up.
 - **`purchase_return_items`**: return, the original `purchase_item`, product, quantity > 0, unit_cost, line_total.
 
 ### Sales
-- **`sales`** (Detailed Sale): invoice_no (unique per shop), sale_date, customer?, total_amount,
-  `payment_type` (`PAID`/`CREDIT`), amount_paid, payment_method?, payment_reference?, notes?.
-  `PAID` means paid = total. `CREDIT` needs a customer and paid < total. Any money received needs a method.
-- **`sale_items`**: sale, product, quantity > 0, unit_price, mrp? (snapshot), discount, line_total
-  (>= 0, which also prevents a discount above the gross), `unit_cost?` and `cogs_amount?`
-  (both set or both `NULL`).
+- **`sales`** *(reshaped by `0006`)* (Detailed Sale): `invoice_no?` (unique per shop; set when posted), `status`
+  (`DRAFT`/`POSTED`/`VOID`, no default: created as `DRAFT`), sale_date, customer?, `subtotal`, `discount` (an
+  amount off the whole bill), total_amount, `payment_type?` (`PAID`/`CREDIT`), `amount_paid?`, payment_method?,
+  payment_reference?, notes?, `posted_at?`, `posted_by?`, `void_reason?`, `voided_at?`, `replaces_id?`,
+  `created_by`.
+  - `total_amount = subtotal - discount` (a CHECK), so a bill discount above the items cannot exist.
+  - `invoice_no` and `posted_at` exist together; a `POSTED` sale must have a number; a `DRAFT` has none; a numbered
+    sale has its payment details (only a draft, or a discarded draft, lacks them); `VOID` needs a reason.
+  - The Phase 2 payment rules are unchanged and apply whenever the payment fields are set: `PAID` means paid =
+    total, `CREDIT` needs a customer and paid < total, money received needs a method. (Payment fields are `NULL`
+    on a draft, which passes them.) There is no room for overpayment.
+  - This table no longer uses the shared document-lifecycle columns.
+- **`sale_items`** *(extended by `0006`)*: sale, product, `unit_id` (the product's unit), quantity > 0, unit_price,
+  mrp? (snapshot), discount, line_total (= round(quantity x price) - discount; >= 0, which also prevents a
+  discount above the gross), `unit_cost?` and `cogs_amount?` (both set or both `NULL`; the cost snapshot taken at
+  posting, `NULL` on a draft and whenever the cost was unknown).
 - **`sales_returns`**: sale, return_date, `refund_mode` (`CASH`/`UPI`/`KHATA`), total_refund, reason?.
 - **`sales_return_items`**: return, the original `sale_item`, product, quantity > 0, refund_amount, and
   `unit_cost?`/`cogs_amount?` copied from the original line.
@@ -229,6 +239,22 @@ the insert-only ledger triggers are not touched. The downgrade drops the column,
 `customers` (foreign keys off, then `PRAGMA foreign_key_check`, as in `0002`); the ledger triggers survive
 because `customer_ledger` itself is not rebuilt. Tested against a database holding a customer with ledger
 entries: rows, balance, indexes and triggers survive upgrade, downgrade and re-upgrade.
+
+## Migration 0006: sales
+
+Turns `sales` and `sale_items` into the Phase 7 workflow (columns above). Steps: add `subtotal`, `discount`,
+`posted_at`, `posted_by`; **backfill** existing sales with `subtotal = total_amount`, `posted_at = created_at`,
+`posted_by = created_by` (any sale that already exists was posted, so it keeps its number and payment); then
+relax `invoice_no`, `payment_type` and `amount_paid` to nullable, replace the status check
+(`'POSTED','VOID'` becomes `'DRAFT','POSTED','VOID'`) and the void-reason check, add the new checks and the
+`posted_by` foreign key. `sale_items.unit_id` is filled from each line's product, then made `NOT NULL` with a foreign
+key to `units`. The table rebuilds SQLite needs run with foreign keys off, then `PRAGMA foreign_key_check` (as in
+`0002` and `0004`); on PostgreSQL it is plain `ALTER TABLE`. Every `CHECK` name in the migration is wrapped in
+`op.f(...)` and matches the name the model produces (a test compares them, because `alembic check` does not).
+The backfill is plain SQL, so `alembic upgrade --sql` also renders. Tested against a database holding a posted
+and a voided sale with a cost snapshot: rows, numbers, units and foreign keys survive, the new rules are enforced,
+downgrade and re-upgrade work. **Downgrade is refused while any `DRAFT` sale exists** (revision `0005` has no
+draft status): post or discard them first.
 
 ## Always derived, never stored
 

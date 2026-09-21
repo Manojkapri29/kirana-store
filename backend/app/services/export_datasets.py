@@ -1,4 +1,4 @@
-"""What each export contains: columns and rows for products, inventory, history, purchases and customers.
+"""What each export contains: columns and rows for products, inventory, history, purchases, sales, customers.
 
 Rows come from the domain services (never from tables directly), so the same shop scoping and the same
 stock calculation apply to exports as to the screens. The file format is handled by `export_service`.
@@ -6,19 +6,27 @@ stock calculation apply to exports as to the screens. The file format is handled
 
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
 from app.core.context import RequestContext
-from app.models.enums import CustomerLedgerEntryType, InventoryTxnType, PurchaseStatus
+from app.models.enums import (
+    CustomerLedgerEntryType,
+    InventoryTxnType,
+    PaymentType,
+    PurchaseStatus,
+    SaleStatus,
+)
 from app.services import (
     customer_service,
     inventory_service,
     khata_service,
     product_service,
     purchase_service,
+    sale_service,
 )
 from app.services.export_service import Column, ExportFile, ExportFormat, Kind, render
 from app.services.inventory_service import StockStatus
@@ -71,6 +79,7 @@ TRANSACTION_COLUMNS = [
     Column("reference_type", "Source"),
     Column("reference_id", "Source ID", Kind.INTEGER),
     Column("purchase_no", "Purchase No"),
+    Column("sale_no", "Invoice No"),
     Column("created_by", "Recorded By"),
     Column("created_at", "Recorded At", Kind.DATETIME),
 ]
@@ -136,10 +145,53 @@ CUSTOMER_LEDGER_COLUMNS = [
     Column("note", "Note"),
     Column("reference_type", "Source"),
     Column("reference_id", "Source ID", Kind.INTEGER),
+    Column("reference_no", "Source Invoice No"),
     Column("reverses", "Reverses Entry", Kind.INTEGER),
     Column("reversed_by", "Reversed By Entry", Kind.INTEGER),
     Column("created_by", "Recorded By"),
     Column("created_at", "Recorded At", Kind.DATETIME),
+]
+
+SALE_COLUMNS = [
+    Column("invoice_no", "Invoice No"),
+    Column("sale_date", "Date", Kind.DATE),
+    Column("customer", "Customer"),
+    Column("status", "Status"),
+    Column("payment_type", "Payment"),
+    Column("payment_method", "Payment Method"),
+    Column("payment_reference", "Payment Reference"),
+    Column("item_count", "Items", Kind.INTEGER),
+    Column("subtotal", "Subtotal", Kind.MONEY),
+    Column("discount", "Bill Discount", Kind.MONEY),
+    Column("total", "Total", Kind.MONEY),
+    Column("amount_paid", "Amount Paid", Kind.MONEY),
+    Column("on_khata", "On Khata (Credit)", Kind.MONEY),
+    Column("cogs", "Cost of Goods", Kind.MONEY),
+    Column("profit", "Gross Profit", Kind.MONEY),
+    Column("cost_known", "Cost Known"),
+    Column("notes", "Notes"),
+    Column("created_by", "Created By"),
+    Column("posted_at", "Posted At", Kind.DATETIME),
+    Column("void_reason", "Void Reason"),
+]
+
+SALE_ITEM_COLUMNS = [
+    Column("invoice_no", "Invoice No"),
+    Column("sale_date", "Date", Kind.DATE),
+    Column("customer", "Customer"),
+    Column("status", "Status"),
+    Column("sku", "SKU"),
+    Column("product", "Product"),
+    Column("unit", "Unit"),
+    Column("quantity", "Quantity", Kind.QUANTITY),
+    Column("unit_price", "Price", Kind.MONEY),
+    Column("mrp", "MRP", Kind.MONEY),
+    Column("discount", "Discount", Kind.MONEY),
+    Column("line_total", "Line Total", Kind.MONEY),
+    Column("unit_cost", "Unit Cost", Kind.MONEY),
+    Column("cogs", "Cost of Goods", Kind.MONEY),
+    Column("profit", "Line Profit", Kind.MONEY),
+    Column("sale_total", "Sale Total", Kind.MONEY),
 ]
 
 BALANCE_LABELS = {
@@ -234,6 +286,7 @@ def _transactions(session: Session, ctx: RequestContext, **filters: Any) -> _Dat
             "reference_type": t.reference_type.value if t.reference_type else None,
             "reference_id": t.reference_id,
             "purchase_no": t.purchase_no,
+            "sale_no": t.sale_no,
             "created_by": t.created_by_name,
             "created_at": _local(t.created_at, shop.timezone),
         }
@@ -294,6 +347,70 @@ def _purchase_items(
     return _Dataset(name, PURCHASE_ITEM_COLUMNS, rows)
 
 
+def _sales(session: Session, ctx: RequestContext, **filters: Any) -> _Dataset:
+    shop = get_shop(session, ctx.shop_id)
+    items, _ = sale_service.list_sales(session, ctx.shop_id, limit=None, **filters)
+    rows = []
+    for r in items:
+        s = r.sale
+        posted = s.invoice_no is not None
+        rows.append(
+            {
+                "invoice_no": s.invoice_no,
+                "sale_date": s.sale_date,
+                "customer": r.customer_name,
+                "status": s.status.value.title(),
+                "payment_type": None if s.payment_type is None else s.payment_type.value.title(),
+                "payment_method": None if s.payment_method is None else s.payment_method.value,
+                "payment_reference": s.payment_reference,
+                "item_count": r.item_count,
+                "subtotal": s.subtotal,
+                "discount": s.discount,
+                "total": s.total_amount,
+                "amount_paid": s.amount_paid,
+                "on_khata": None
+                if s.amount_paid is None
+                else max(s.total_amount - s.amount_paid, Decimal("0.00")),
+                "cogs": r.cogs_total,  # empty when unknown, never 0
+                "profit": r.gross_profit,
+                "cost_known": (None if not posted else ("Yes" if r.unknown_cost_lines == 0 else "No")),
+                "notes": s.notes,
+                "created_by": r.created_by_name,
+                "posted_at": None if s.posted_at is None else _local(s.posted_at, shop.timezone),
+                "void_reason": s.void_reason,
+            }
+        )
+    return _Dataset("sales", SALE_COLUMNS, rows)
+
+
+def _sale_items(
+    session: Session, ctx: RequestContext, *, name: str = "sale_items", **filters: Any
+) -> _Dataset:
+    lines = sale_service.list_item_rows(session, ctx.shop_id, **filters)
+    rows = [
+        {
+            "invoice_no": r.sale.invoice_no,
+            "sale_date": r.sale.sale_date,
+            "customer": r.customer_name,
+            "status": r.sale.status.value.title(),
+            "sku": r.product_sku,
+            "product": r.product_name,
+            "unit": r.unit_code,
+            "quantity": r.item.quantity,
+            "unit_price": r.item.unit_price,
+            "mrp": r.item.mrp,
+            "discount": r.item.discount,
+            "line_total": r.item.line_total,
+            "unit_cost": r.item.unit_cost,  # empty when unknown, never 0
+            "cogs": r.item.cogs_amount,
+            "profit": None if r.item.cogs_amount is None else r.item.line_total - r.item.cogs_amount,
+            "sale_total": r.sale.total_amount,
+        }
+        for r in lines
+    ]
+    return _Dataset(name, SALE_ITEM_COLUMNS, rows)
+
+
 def _customers(session: Session, ctx: RequestContext, *, active: bool | None, **filters: Any) -> _Dataset:
     shop = get_shop(session, ctx.shop_id)
     accounts, _ = khata_service.list_accounts(session, ctx.shop_id, active=active, limit=None, **filters)
@@ -337,6 +454,7 @@ def _customer_ledger(session: Session, ctx: RequestContext, customer_id: int, **
             "note": e.note,
             "reference_type": e.reference_type.value if e.reference_type else None,
             "reference_id": e.reference_id,
+            "reference_no": e.reference_no,
             "reverses": e.reverses_entry_id,
             "reversed_by": e.reversed_by_entry_id,
             "created_by": e.created_by_name,
@@ -447,4 +565,61 @@ def export_customer_ledger(
     dataset = _customer_ledger(
         session, ctx, customer_id, entry_type=entry_type, date_from=date_from, date_to=date_to
     )
+    return _file(session, ctx, dataset, fmt)
+
+
+def export_sales(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    q: str | None = None,
+    customer_id: int | None = None,
+    statuses: list[SaleStatus] | None = None,
+    payment_type: PaymentType | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> ExportFile:
+    dataset = _sales(
+        session,
+        ctx,
+        q=q,
+        customer_id=customer_id,
+        statuses=statuses,
+        payment_type=payment_type,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    return _file(session, ctx, dataset, fmt)
+
+
+def export_sale_items(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    q: str | None = None,
+    customer_id: int | None = None,
+    statuses: list[SaleStatus] | None = None,
+    payment_type: PaymentType | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> ExportFile:
+    dataset = _sale_items(
+        session,
+        ctx,
+        q=q,
+        customer_id=customer_id,
+        statuses=statuses,
+        payment_type=payment_type,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    return _file(session, ctx, dataset, fmt)
+
+
+def export_sale_details(session: Session, ctx: RequestContext, fmt: ExportFormat, sale_id: int) -> ExportFile:
+    """One sale with all its lines: the header fields repeat on every row, as spreadsheets prefer."""
+    sale_service.get_sale_view(session, ctx.shop_id, sale_id)  # 404 for another shop's sale
+    dataset = _sale_items(session, ctx, name=f"sale_{sale_id}", sale_id=sale_id)
     return _file(session, ctx, dataset, fmt)

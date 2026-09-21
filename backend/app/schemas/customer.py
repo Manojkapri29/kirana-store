@@ -115,6 +115,7 @@ class LedgerEntryOut(BaseModel):
     payment_reference: str | None
     reference_type: KhataReferenceType | None
     reference_id: int | None
+    reference_no: str | None
     reverses_entry_id: int | None
     reversed_by_entry_id: int | None
     note: str | None

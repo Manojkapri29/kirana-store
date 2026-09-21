@@ -16,7 +16,17 @@ class NotFoundError(DomainError):
 
 
 class ConflictError(DomainError):
-    """The request is valid but clashes with existing data or the current state (duplicate SKU, ...)."""
+    """The request is valid but clashes with existing data or the current state (duplicate SKU, ...).
+
+    When several places clash at once (three sale lines are short of stock), `errors` lists every
+    `(field, message)` pair so a screen can mark each one.
+    """
+
+    def __init__(
+        self, message: str, *, field: str | None = None, errors: list[tuple[str | None, str]] | None = None
+    ) -> None:
+        super().__init__(message, field=field)
+        self.errors: list[tuple[str | None, str]] = errors or [(field, message)]
 
 
 class InvalidInputError(DomainError):

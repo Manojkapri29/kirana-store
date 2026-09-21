@@ -84,6 +84,8 @@ class TransactionOut(BaseModel):
     created_at: datetime
     purchase_id: int | None = None  # set when the row came from a purchase line
     purchase_no: str | None = None
+    sale_id: int | None = None  # set when the row came from a sale line
+    sale_no: str | None = None
 
     @classmethod
     def from_row(cls, row: TransactionRow) -> "TransactionOut":

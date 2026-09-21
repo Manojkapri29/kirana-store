@@ -77,6 +77,15 @@ class DocumentStatus(StrEnum):
     VOID = "VOID"
 
 
+class SaleStatus(StrEnum):
+    """A sale starts as a DRAFT (a cart: no effect on stock, khata or revenue), becomes POSTED (stock goes
+    out, credit is charged to the customer's khata), and can later be VOIDED (both are reversed)."""
+
+    DRAFT = "DRAFT"
+    POSTED = "POSTED"
+    VOID = "VOID"
+
+
 class PurchaseStatus(StrEnum):
     """A purchase starts as a DRAFT (no effect on stock), becomes POSTED (stock and cost change), and can
     later be VOIDED (its stock effect is reversed). Only POSTED purchases affect inventory."""

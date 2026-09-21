@@ -61,7 +61,7 @@ def test_migration_state_is_at_head_and_matches_the_models(blank_db_url: str):
     command.upgrade(config, "head")
 
     head = ScriptDirectory.from_config(config).get_current_head()
-    assert head == "0005"
+    assert head == "0006"
     assert current_revision(blank_db_url) == head
 
     # `alembic check` raises if autogenerate would produce any change (models and DB disagree).
@@ -70,7 +70,7 @@ def test_migration_state_is_at_head_and_matches_the_models(blank_db_url: str):
 
 def test_there_is_a_single_migration_head():
     heads = ScriptDirectory.from_config(alembic_config("sqlite:///unused.db")).get_heads()
-    assert heads == ["0005"]
+    assert heads == ["0006"]
 
 
 def test_downgrade_removes_everything_and_upgrade_can_run_again(blank_db_url: str):
@@ -276,7 +276,7 @@ class TestMigration0002PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0005"
+        assert current_revision(blank_db_url) == "0006"
 
 
 class TestMigration0003PreservesData:
@@ -383,7 +383,7 @@ class TestMigration0003PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0005"
+        assert current_revision(blank_db_url) == "0006"
 
 
 class TestMigration0004PreservesData:
@@ -542,7 +542,7 @@ class TestMigration0004PreservesData:
             assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0005"
+        assert current_revision(blank_db_url) == "0006"
 
 
 class TestMigration0005PreservesData:
@@ -635,4 +635,186 @@ class TestMigration0005PreservesData:
             c.rollback()
         engine.dispose()
         command.upgrade(config, "head")
-        assert current_revision(blank_db_url) == "0005"
+        assert current_revision(blank_db_url) == "0006"
+
+
+class TestMigration0006PreservesData:
+    """0006 turns the sale tables into a workflow. Sales that already exist must survive intact."""
+
+    NOW = "'2026-09-01 10:00:00.000000'"
+
+    def seed_revision_0005(self, url: str) -> None:
+        command.upgrade(alembic_config(url), "0005")
+        engine = create_db_engine(url)
+        with engine.begin() as c:
+            c.execute(
+                text(
+                    "INSERT INTO shops (id, name, business_type, phone, address, mrp_validation_mode, created_at, updated_at)"
+                    f" VALUES (7, 'Old Shop', 'BAKERY', '9999999999', '1 Old Road', 'WARN', {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO users (id, shop_id, email, password_hash, full_name, role, is_active, created_at, updated_at)"
+                    f" VALUES (3, 7, 'o@old.local', '!', 'Old Owner', 'OWNER', 1, {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    f"INSERT INTO categories (id, shop_id, name, is_active, created_at, updated_at) VALUES (5, 7, 'Bread', 1, {self.NOW}, {self.NOW})"
+                )
+            )
+            c.execute(
+                text(
+                    "INSERT INTO products (id, shop_id, sku, name, category_id, unit_id, reorder_level, selling_price, is_active, created_at, updated_at)"
+                    f" VALUES (11, 7, 'BREAD', 'Bread', 5, 2, 0, 4000, 1, {self.NOW}, {self.NOW})"
+                )
+            )
+            for sale_id, invoice, status, reason in (
+                (21, "INV/1", "POSTED", None),
+                (22, "INV/2", "VOID", "Entered twice"),
+            ):
+                c.execute(
+                    text(
+                        "INSERT INTO sales (id, shop_id, invoice_no, sale_date, total_amount, payment_type, amount_paid,"
+                        " payment_method, created_by, status, void_reason, created_at, updated_at)"
+                        f" VALUES ({sale_id}, 7, '{invoice}', '2026-08-30', 10000, 'PAID', 10000, 'CASH', 3, '{status}',"
+                        f" {'NULL' if reason is None else repr(reason)}, '2026-08-30 09:00:00.000000', {self.NOW})"
+                    )
+                )
+            c.execute(
+                text(
+                    "INSERT INTO sale_items (id, shop_id, sale_id, product_id, quantity, unit_price, discount, line_total,"
+                    " unit_cost, cogs_amount, created_at, updated_at)"
+                    f" VALUES (31, 7, 21, 11, 2000, 5000, 0, 10000, 3000, 6000, {self.NOW}, {self.NOW})"
+                )
+            )
+        engine.dispose()
+
+    def test_existing_sales_keep_their_data_and_gain_the_new_columns(self, blank_db_url: str):
+        self.seed_revision_0005(blank_db_url)
+
+        command.upgrade(alembic_config(blank_db_url), "head")
+
+        engine = create_db_engine(blank_db_url)
+        with engine.connect() as c:
+            posted = c.execute(
+                text(
+                    "SELECT status, invoice_no, subtotal, discount, total_amount, amount_paid, posted_at, created_at, posted_by FROM sales WHERE id = 21"
+                )
+            ).one()
+            assert (
+                posted.status,
+                posted.invoice_no,
+                posted.subtotal,
+                posted.discount,
+                posted.total_amount,
+            ) == ("POSTED", "INV/1", 10000, 0, 10000)
+            assert (
+                posted.amount_paid == 10000
+                and posted.posted_at == posted.created_at
+                and posted.posted_by == 3
+            )
+            void = c.execute(text("SELECT status, invoice_no, void_reason FROM sales WHERE id = 22")).one()
+            assert tuple(void) == ("VOID", "INV/2", "Entered twice")
+            line = c.execute(
+                text(
+                    "SELECT unit_id, quantity, line_total, unit_cost, cogs_amount FROM sale_items WHERE id = 31"
+                )
+            ).one()
+            assert tuple(line) == (
+                2,
+                2000,
+                10000,
+                3000,
+                6000,
+            )  # unit copied from the product; cost snapshot intact
+            assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+        engine.dispose()
+        command.check(alembic_config(blank_db_url))
+
+    def test_new_rules_are_enforced_on_the_migrated_database(self, blank_db_url: str):
+        self.seed_revision_0005(blank_db_url)
+        command.upgrade(alembic_config(blank_db_url), "head")
+        insert = (
+            "INSERT INTO sales (shop_id, invoice_no, sale_date, subtotal, discount, total_amount, payment_type, amount_paid,"
+            " payment_method, created_by, status, posted_at, void_reason, created_at, updated_at)"
+            " VALUES (7, :no, '2026-09-01', :sub, :disc, :total, :ptype, :paid, :method, 3, :status, :posted, :reason,"
+            f" {self.NOW}, {self.NOW})"
+        )
+        draft = dict(
+            no=None,
+            sub=0,
+            disc=0,
+            total=0,
+            ptype=None,
+            paid=None,
+            method=None,
+            status="DRAFT",
+            posted=None,
+            reason=None,
+        )
+        engine = create_db_engine(blank_db_url)
+        with engine.connect() as c:
+            c.execute(text(insert), draft)  # a draft has no number and no payment
+            c.rollback()
+            for override, message in (
+                ({"sub": 100, "disc": 10, "total": 100}, "total_is_subtotal_less_discount"),
+                ({"no": "INV/9", "posted": self.NOW.strip("'"), "status": "DRAFT"}, "draft_has_no_number"),
+                ({"status": "POSTED"}, "posted_needs_number"),
+                ({"no": "INV/9", "status": "POSTED"}, "number_and_posted_at_together"),
+                ({"no": "INV/9", "status": "POSTED", "posted": self.NOW.strip("'")}, "posted_has_payment"),
+                ({"status": "VOID"}, "void_needs_reason"),
+                (
+                    {
+                        "no": "INV/1",
+                        "status": "POSTED",
+                        "posted": self.NOW.strip("'"),
+                        "ptype": "PAID",
+                        "paid": 0,
+                        "method": "CASH",
+                    },
+                    "UNIQUE|paid_means",
+                ),
+            ):
+                with pytest.raises(Exception, match=message):
+                    c.execute(text(insert), {**draft, **override})
+                c.rollback()
+            # a discarded draft (void, never numbered) is fine
+            c.execute(text(insert), {**draft, "status": "VOID", "reason": "Not needed"})
+            c.rollback()
+        engine.dispose()
+
+    def test_downgrade_is_refused_while_drafts_exist_and_works_once_they_are_gone(self, blank_db_url: str):
+        self.seed_revision_0005(blank_db_url)
+        config = alembic_config(blank_db_url)
+        command.upgrade(config, "head")
+        engine = create_db_engine(blank_db_url)
+        with engine.begin() as c:
+            c.execute(
+                text(
+                    "INSERT INTO sales (id, shop_id, sale_date, created_by, status, created_at, updated_at, total_amount)"
+                    f" VALUES (40, 7, '2026-09-01', 3, 'DRAFT', {self.NOW}, {self.NOW}, 0)"
+                )
+            )
+
+        with pytest.raises(RuntimeError, match="draft sale"):
+            command.downgrade(config, "0005")
+        assert current_revision(blank_db_url) == "0006"  # untouched
+
+        with engine.begin() as c:
+            c.execute(text("DELETE FROM sales WHERE id = 40"))
+        command.downgrade(config, "0005")
+
+        with engine.connect() as c:
+            columns = {r[1] for r in c.exec_driver_sql("PRAGMA table_info(sales)")}
+            assert columns.isdisjoint({"subtotal", "discount", "posted_at", "posted_by"})
+            assert {r[1] for r in c.exec_driver_sql("PRAGMA table_info(sale_items)")}.isdisjoint({"unit_id"})
+            assert (
+                c.scalar(text("SELECT count(*) FROM sales")) == 2
+                and c.scalar(text("SELECT count(*) FROM sale_items")) == 1
+            )
+            assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+        engine.dispose()
+        command.upgrade(config, "head")
+        assert current_revision(blank_db_url) == "0006"

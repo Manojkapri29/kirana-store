@@ -9,7 +9,13 @@ from sqlalchemy.orm import Session
 from app.api.deps import OwnerCtx
 from app.api.v1.products import StatusFilter, active_flag
 from app.db.session import get_session
-from app.models.enums import CustomerLedgerEntryType, InventoryTxnType, PurchaseStatus
+from app.models.enums import (
+    CustomerLedgerEntryType,
+    InventoryTxnType,
+    PaymentType,
+    PurchaseStatus,
+    SaleStatus,
+)
 from app.schemas.customer import BalanceFilter
 from app.services import export_datasets
 from app.services.export_service import ExportFile, ExportFormat
@@ -198,3 +204,72 @@ def export_customer_ledger(
             session, ctx, fmt, customer_id, entry_type=entry_type, date_from=date_from, date_to=date_to
         )
     )
+
+
+SaleStatuses = Annotated[
+    list[SaleStatus] | None, Query(alias="status", description="Repeat to allow several")
+]
+
+
+@router.get("/sales")
+def export_sales(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    customer_id: int | None = None,
+    statuses: SaleStatuses = None,
+    payment_type: PaymentType | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    """One row per sale, with payment, cost of goods and gross profit (empty where cost is unknown)."""
+    return download(
+        export_datasets.export_sales(
+            session,
+            ctx,
+            fmt,
+            q=q,
+            customer_id=customer_id,
+            statuses=statuses,
+            payment_type=payment_type,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    )
+
+
+@router.get("/sale-items")
+def export_sale_items(
+    ctx: OwnerCtx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    customer_id: int | None = None,
+    statuses: SaleStatuses = None,
+    payment_type: PaymentType | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    """One row per sold line, with the cost snapshot and line profit."""
+    return download(
+        export_datasets.export_sale_items(
+            session,
+            ctx,
+            fmt,
+            q=q,
+            customer_id=customer_id,
+            statuses=statuses,
+            payment_type=payment_type,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    )
+
+
+@router.get("/sales/{sale_id}")
+def export_sale_details(
+    sale_id: int, ctx: OwnerCtx, session: ReadSession, fmt: Format = ExportFormat.CSV
+) -> Response:
+    """One sale with all its lines."""
+    return download(export_datasets.export_sale_details(session, ctx, fmt, sale_id))

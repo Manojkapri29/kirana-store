@@ -35,6 +35,7 @@ def _shop_out(session: Session, shop_id: int) -> ShopOut:
         language=shop.language,
         allow_negative_stock=shop.allow_negative_stock,
         mrp_validation_mode=shop.mrp_validation_mode,
+        upi_id=shop.upi_id,
     )
 
 

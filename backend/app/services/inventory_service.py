@@ -10,8 +10,10 @@ Phase 3 implements:
     - stock queries: current stock, stock for many products, the inventory list, transaction history
     - the stock status (in stock / low stock / out of stock)
 Phase 5 adds purchases: receiving stock at a cost (`receive_purchase_line`), undoing it when a purchase
-is voided (`reverse_lines`), and the moving weighted average cost that goes with both. Sales and returns
-are added in later phases through this same module.
+is voided (`reverse_lines`), and the moving weighted average cost that goes with both.
+Phase 7 adds sales: checking availability (`find_shortages`) and taking stock out for a sale line
+(`issue_sale_line`), which also reports the cost of the goods sold. Returns are added in later phases
+through this same module.
 
 Transaction rule: nothing here commits. The caller owns the transaction (`write_transaction()`), so the
 stock check and the ledger insert always happen atomically.
@@ -36,6 +38,8 @@ from app.models import (
     Product,
     Purchase,
     PurchaseItem,
+    Sale,
+    SaleItem,
     Shop,
     Unit,
     User,
@@ -229,6 +233,8 @@ class TransactionRow:
     created_at: datetime
     purchase_id: int | None = None  # the purchase this row came from (a purchase line or its reversal)
     purchase_no: str | None = None
+    sale_id: int | None = None  # the sale this row came from (a sale line or its reversal)
+    sale_no: str | None = None
 
 
 def list_transactions(
@@ -266,6 +272,8 @@ def list_transactions(
             t.created_at,
             Purchase.id.label("purchase_id"),
             Purchase.purchase_no.label("purchase_no"),
+            Sale.id.label("sale_id"),
+            Sale.invoice_no.label("sale_no"),
         )
         .join(Product, and_(Product.shop_id == t.shop_id, Product.id == t.product_id))
         .join(User, and_(User.shop_id == t.shop_id, User.id == t.created_by))
@@ -281,6 +289,16 @@ def list_transactions(
         .outerjoin(
             Purchase, and_(Purchase.shop_id == PurchaseItem.shop_id, Purchase.id == PurchaseItem.purchase_id)
         )
+        # Rows that came from a sale line say which sale, so screens can link to it.
+        .outerjoin(
+            SaleItem,
+            and_(
+                t.reference_type == StockReferenceType.SALE_ITEM,
+                SaleItem.shop_id == t.shop_id,
+                SaleItem.id == t.reference_id,
+            ),
+        )
+        .outerjoin(Sale, and_(Sale.shop_id == SaleItem.shop_id, Sale.id == SaleItem.sale_id))
         .where(t.shop_id == shop_id)
     )
     if product_id is not None:
@@ -714,3 +732,102 @@ def entries_for_lines(
     for reference_id, txn_id, txn_type, qty_delta, txn_date in rows:
         found[reference_id].append(LedgerEntry(txn_id, txn_type, qty_delta, txn_date))
     return found
+
+
+# --- Sales: taking stock out ---------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class StockShortage:
+    """A product a sale wants more of than the shelf has."""
+
+    product_id: int
+    name: str
+    unit_code: str
+    available: Decimal
+    requested: Decimal
+
+
+def find_shortages(session: Session, shop_id: int, requested: dict[int, Decimal]) -> list[StockShortage]:
+    """Products whose requested quantity is more than the stock on hand. `requested` is the TOTAL per product
+    (a product on two lines counts once). Empty when the shop allows negative stock (L8).
+
+    This is a check, not a lock: `issue_sale_line` repeats it under the product's lock.
+    """
+    if not requested or get_shop(session, shop_id).allow_negative_stock:
+        return []
+    stock = get_stock_map(session, shop_id, list(requested))
+    rows = session.execute(
+        select(Product.id, Product.name, Unit.code)
+        .join(Unit, Unit.id == Product.unit_id)
+        .where(Product.shop_id == shop_id, Product.id.in_(list(requested)))
+    ).all()
+    return [
+        StockShortage(pid, name, code, stock[pid], requested[pid])
+        for pid, name, code in rows
+        if requested[pid] > stock[pid]
+    ]
+
+
+def shortage_message(shortage: StockShortage) -> str:
+    return (
+        f"Not enough stock of '{shortage.name}': {shortage.available} {shortage.unit_code} available, "
+        f"{shortage.requested} {shortage.unit_code} needed."
+    )
+
+
+@dataclass(frozen=True)
+class SaleIssue:
+    """What taking one sale line out of stock did, for the snapshot stored on the line."""
+
+    transaction: InventoryTransaction
+    unit_cost: Decimal | None  # the product's average cost at the moment of sale; None = unknown
+    cogs: Decimal | None  # quantity x unit_cost; None = unknown
+
+
+def issue_sale_line(
+    session: Session,
+    ctx: RequestContext,
+    *,
+    product: Product,
+    quantity: Decimal,
+    sale_item_id: int,
+    txn_date: date,
+) -> SaleIssue:
+    """Take a sold quantity out of stock (one SALE ledger row) and report its cost.
+
+    `product` must already be locked (see `lock_products`). The stock is read again here, under that lock,
+    so two simultaneous sales cannot both take the last unit. Unless the shop allows negative stock, a sale
+    of more than is on hand is refused and nothing is written. The cost is the product's current weighted
+    average (maintained by purchases, never recomputed here); a sale does not change it. An unknown cost
+    stays unknown.
+    """
+    if product.shop_id != ctx.shop_id:  # defence in depth: lock_products already scopes by shop
+        raise NotFoundError("Product not found")
+    _require_active(product)
+    if quantity <= 0:
+        raise InvalidInputError("The quantity must be greater than zero.", field="quantity")
+
+    available = get_stock(session, ctx.shop_id, product.id)
+    if quantity > available and not get_shop(session, ctx.shop_id).allow_negative_stock:
+        unit = _unit_of(session, product)
+        raise ConflictError(
+            shortage_message(StockShortage(product.id, product.name, unit.code, available, quantity)),
+            field="quantity",
+        )
+
+    unit_cost = product.avg_cost
+    row = InventoryTransaction(
+        shop_id=ctx.shop_id,
+        product_id=product.id,
+        txn_type=InventoryTxnType.SALE,
+        qty_delta=-quantity,
+        unit_cost=unit_cost,
+        txn_date=txn_date,
+        reference_type=StockReferenceType.SALE_ITEM,
+        reference_id=sale_item_id,
+        created_by=ctx.user_id,
+    )
+    session.add(row)
+    _flush_or_conflict(session)
+    return SaleIssue(row, unit_cost, costing_service.cost_of_goods(quantity, unit_cost))
