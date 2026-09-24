@@ -27,6 +27,7 @@ from app.core import observability
 from app.core.config import Settings, get_settings
 from app.core.context import RequestContext
 from app.db.types import utc_now
+from app.integrations.base import ProviderError
 from app.models import (
     NotificationDelivery,
     NotificationEvent,
@@ -98,15 +99,6 @@ _PROVIDER_SETTING = {
 # --- Providers (none is written; this is the seam) ---------------------------------------------------------------
 
 
-class ProviderError(Exception):
-    """A provider could not deliver. `retryable` says whether trying again later may work."""
-
-    def __init__(self, code: str, *, retryable: bool = True) -> None:
-        super().__init__(code)
-        self.code = code
-        self.retryable = retryable
-
-
 class NotificationProvider(Protocol):
     name: str
 
@@ -128,11 +120,15 @@ def provider_for(
     return factory() if factory else None
 
 
-def channel_status(settings: Settings | None = None) -> dict[str, bool]:
-    """Which channels can actually deliver: for the preferences screen to be honest about it."""
+def channel_status(
+    settings: Settings | None = None, session: Session | None = None, shop_id: int | None = None
+) -> dict[str, bool]:
+    """Which channels can actually deliver: for the preferences screen to be honest about it. With a session and shop it also counts
+    the provider that shop configured (Phase 17 integrations)."""
     status = {NotificationChannel.IN_APP.value: True}
     for channel in EXTERNAL:
-        status[channel.value] = provider_for(channel, settings) is not None
+        shop_provider = _shop_provider(session, shop_id, channel) if session is not None and shop_id is not None else None
+        status[channel.value] = provider_for(channel, settings) is not None or shop_provider is not None
     return status
 
 
@@ -197,7 +193,9 @@ def emit(
                 )
             )  # fmt: skip
         for channel in EXTERNAL:
-            if _wants(pref, channel) and provider_for(channel, settings) is not None:
+            if _wants(pref, channel) and (
+                provider_for(channel, settings) is not None or _shop_provider(session, shop_id, channel) is not None
+            ):
                 session.add(
                     NotificationDelivery(
                         shop_id=shop_id, event_id=event.id, user_id=user.id, channel=channel,
@@ -295,6 +293,23 @@ class DeliveryRun:
     failed: int
 
 
+def _shop_provider(session: Session, shop_id: int, channel: NotificationChannel):  # noqa: ANN202
+    """The provider this SHOP configured for the channel (Phase 17 integrations), or None."""
+    from app.models.enums import IntegrationType
+    from app.services import integration_service
+
+    found = integration_service.message_provider_for(session, shop_id, IntegrationType(channel.value))
+    return found[1] if found else None
+
+
+def _recipient_of(user: User, channel: NotificationChannel) -> str | None:
+    if channel is NotificationChannel.EMAIL:
+        return user.email
+    if channel in (NotificationChannel.SMS, NotificationChannel.WHATSAPP):
+        return user.phone
+    return f"user:{user.id}" if channel is NotificationChannel.PUSH else None
+
+
 def process_due(
     session: Session,
     *,
@@ -318,7 +333,11 @@ def process_due(
     ).all()
     attempted = sent = retrying = failed = 0
     for delivery in rows:
-        provider = (providers or {}).get(delivery.channel) or provider_for(delivery.channel, settings)
+        provider = (
+            (providers or {}).get(delivery.channel)
+            or _shop_provider(session, delivery.shop_id, delivery.channel)
+            or provider_for(delivery.channel, settings)
+        )
         event = session.get(NotificationEvent, delivery.event_id)
         user = session.get(User, delivery.user_id)
         if provider is None or event is None or user is None:
@@ -330,7 +349,7 @@ def process_due(
         delivery.provider = provider.name
         try:
             provider.send(
-                recipient=user.email if delivery.channel is NotificationChannel.EMAIL else None,
+                recipient=_recipient_of(user, delivery.channel),
                 title=event.title, message=event.message, timeout=10.0,
             )  # fmt: skip
             delivery.status, delivery.sent_at, delivery.error_code, delivery.next_attempt_at = (

@@ -513,3 +513,13 @@ registry of table reports. New services: `saved_report_service` (saved custom re
 report builder is an allowlist over provider rows: no user text is ever SQL. New tables: `saved_reports`, `report_runs` and four columns on
 `scheduled_reports` (migration `0019`). The reporting package may read ledger models; nothing in it writes.
 
+
+## Phase 17 additions: integrations
+
+`app/integrations/` holds provider adapters behind small interfaces (message, payment, storage, location); business code never imports one. The
+per-shop configuration is `integrations` (provider, non-secret settings, the NAME of an environment variable for the credential, health counters);
+`integration_service` decides whether an integration is really usable and applies the SAFE/UNSAFE retry rule; `online_payment_service` keeps payment
+evidence and a strict lifecycle and applies a captured khata payment once through `khata_service`; `webhook_service` verifies and de-duplicates inbound
+events; `messaging_service` records honest message outcomes with consent; `accounting_export_service` builds files from the finance ledger. See
+[INTEGRATIONS.md](INTEGRATIONS.md).
+

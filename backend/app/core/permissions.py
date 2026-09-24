@@ -125,12 +125,27 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "ANALYTICS_CUSTOM_REPORT": ("Analytics", "Build, save and run custom reports"),
     "ANALYTICS_EXPORT": ("Analytics", "Download analytics exports"),
     "ANALYTICS_SCHEDULE": ("Analytics", "Schedule advanced reports"),
+    "INTEGRATION_VIEW": ("Integrations", "See which integrations are set up, their status, online payments and accounting mappings"),
+    "INTEGRATION_MANAGE": ("Integrations", "Enable or disable an integration and set accounting mappings"),
+    "INTEGRATION_CONFIGURE": ("Integrations", "Choose a provider and its settings, and rotate credentials"),
+    "INTEGRATION_TEST": ("Integrations", "Test an integration's connection (nothing is sent and no money moves)"),
+    "INTEGRATION_LOGS": ("Integrations", "See the integration call log and message deliveries"),
+    "PAYMENT_INTEGRATION_MANAGE": ("Integrations", "Create, confirm, cancel and refund online payments; configure the payment provider"),
+    "NOTIFICATION_INTEGRATION_MANAGE": ("Integrations", "Configure email, SMS, WhatsApp and push providers and send messages to customers"),
+    "STORAGE_INTEGRATION_MANAGE": ("Integrations", "Test the file storage provider"),
+    "WEBHOOK_MANAGE": ("Integrations", "See webhook events and rotate a webhook address"),
 }
 
 ALL_PERMISSIONS = frozenset(PERMISSIONS)
 
 # Intentionally owner-only: a custom role can never hold these, and no default role except OWNER does.
-OWNER_ONLY_PERMISSIONS = frozenset({"ROLE_MANAGE", "BACKUP_CREATE"})
+OWNER_ONLY_PERMISSIONS = frozenset(
+    {
+        "ROLE_MANAGE", "BACKUP_CREATE",
+        # Integrations reach outside the shop and hold references to credentials: the owner decides which provider is used.
+        "INTEGRATION_MANAGE", "INTEGRATION_CONFIGURE", "STORAGE_INTEGRATION_MANAGE", "WEBHOOK_MANAGE",
+    }
+)  # fmt: skip
 
 _VIEW_ALL = {p for p in ALL_PERMISSIONS if p.endswith("_VIEW")}
 
@@ -254,6 +269,7 @@ SYSTEM_ROLES: dict[str, tuple[str, str, frozenset[str]]] = {
                 "ANALYTICS_VIEW",
                 "ANALYTICS_ADVANCED",
                 "ANALYTICS_EXPORT",
+                "INTEGRATION_VIEW",
             }
         ),
     ),
@@ -613,6 +629,39 @@ ROUTE_RULES: tuple[Rule, ...] = (
     _r("GET", "/analytics/customers/referrals", "ANALYTICS_ADVANCED", "CRM_ANALYTICS_VIEW"),
     _r("GET", "/analytics/cohorts", "ANALYTICS_ADVANCED", "CRM_ANALYTICS_VIEW"),
     _r("GET", "/analytics/insights", "ANALYTICS_ADVANCED"),
+    _r("POST", "/sync/operations"),
+    _r("GET", "/sync/operations"),
+    _r("POST", "/sync/operations/{client_op_id}/retry"),
+    _r("POST", "/sync/operations/{client_op_id}/discard"),
+    _r("GET", "/sync/snapshot/products", "PRODUCT_VIEW", "INVENTORY_VIEW"),
+    _r("GET", "/sync/snapshot/customers", "CUSTOMER_VIEW"),
+    _r("GET", "/integrations", "INTEGRATION_VIEW"),
+    _r("GET", "/integrations/dashboard", "INTEGRATION_VIEW"),
+    _r("GET", "/integrations/logs", "INTEGRATION_LOGS"),
+    _r("GET", "/integrations/webhook-events", "WEBHOOK_MANAGE"),
+    _r("GET", "/integrations/messages", "INTEGRATION_LOGS"),
+    _r("POST", "/integrations/messages", "NOTIFICATION_INTEGRATION_MANAGE"),
+    _r("POST", "/integrations/platform/storage/test", "STORAGE_INTEGRATION_MANAGE"),
+    _r("POST", "/integrations/location/distance", "INTEGRATION_VIEW"),
+    _r("POST", "/integrations/location/geocode", "INTEGRATION_VIEW"),
+    _r("GET", "/integrations/accounting/mappings", "INTEGRATION_VIEW"),
+    _r("PUT", "/integrations/accounting/mappings", "INTEGRATION_MANAGE"),
+    _r("POST", "/integrations/accounting/mappings/clear", "INTEGRATION_MANAGE"),
+    _r("GET", "/integrations/accounting/export/{kind}", "INTEGRATION_VIEW", "FINANCE_EXPORT"),
+    _r("PUT", "/integrations/{integration_type}", "INTEGRATION_CONFIGURE"),
+    _r("POST", "/integrations/{integration_type}/enable", "INTEGRATION_MANAGE"),
+    _r("POST", "/integrations/{integration_type}/disable", "INTEGRATION_MANAGE"),
+    _r("POST", "/integrations/{integration_type}/test", "INTEGRATION_TEST"),
+    _r("POST", "/integrations/{integration_type}/rotate-credentials", "INTEGRATION_CONFIGURE"),
+    _r("POST", "/integrations/{integration_type}/rotate-webhook-key", "WEBHOOK_MANAGE"),
+    _r("POST", "/payments", "PAYMENT_INTEGRATION_MANAGE"),
+    _r("GET", "/payments", "INTEGRATION_VIEW"),
+    _r("GET", "/payments/{payment_id}", "INTEGRATION_VIEW"),
+    _r("GET", "/payments/{payment_id}/events", "INTEGRATION_VIEW"),
+    _r("POST", "/payments/{payment_id}/verify", "PAYMENT_INTEGRATION_MANAGE"),
+    _r("POST", "/payments/{payment_id}/confirm", "PAYMENT_INTEGRATION_MANAGE"),
+    _r("POST", "/payments/{payment_id}/cancel", "PAYMENT_INTEGRATION_MANAGE"),
+    _r("POST", "/payments/{payment_id}/refund", "PAYMENT_INTEGRATION_MANAGE"),
     _r("GET", "/analytics/export", "ANALYTICS_EXPORT"),
     _r("GET", "/analytics/export/{report_key}", "ANALYTICS_EXPORT"),
     _r("GET", "/analytics/drill/revenue/{level}", "ANALYTICS_ADVANCED", "REPORT_VIEW"),
@@ -706,7 +755,9 @@ ROUTE_RULES: tuple[Rule, ...] = (
 
 # Routes that are deliberately outside the rules: they do not act inside a shop. (health, admin console with its own
 # token, the sign-in family, metrics.) `tests/test_rbac_routes.py` checks this list is exactly what is left over.
-UNGUARDED_PREFIXES = ("/health", "/api/v1/admin", "/api/v1/auth", "/docs", "/openapi.json", "/metrics")
+UNGUARDED_PREFIXES = (
+    "/health", "/api/v1/admin", "/api/v1/auth", "/api/v1/webhooks", "/docs", "/openapi.json", "/metrics",
+)  # fmt: skip
 
 _PARAM = re.compile(r"\{[^}]+\}")
 

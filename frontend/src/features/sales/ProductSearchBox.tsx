@@ -6,6 +6,7 @@ import { ApiError } from '@/api/client'
 import { ErrorNotice } from '@/components/ErrorNotice'
 import { listProducts, lookupProduct } from '@/api/products'
 import type { LookupProduct, LookupResult, Product } from '@/api/types'
+import { CameraScanButton } from '@/components/CameraScanner'
 import { SearchInput } from '@/components/SearchInput'
 import { useDebounced } from '@/hooks/useDebounced'
 import { isZero } from '@/lib/decimal'
@@ -115,17 +116,29 @@ export function ProductSearchBox({ onPick, autoFocus, scanner }: ProductSearchBo
 
   return (
     <div>
-      <SearchInput
-        value={search}
-        onChange={(value) => {
-          setSearch(value)
-          setProblem(null)
-          setChoices(null)
-        }}
-        onEnter={() => void onEnter()}
-        placeholder={useScanner ? t('scanner.placeholder') : t('sales.form.searchProduct')}
-        autoFocus={autoFocus}
-      />
+      <div className="flex items-stretch gap-2">
+        <SearchInput
+          value={search}
+          onChange={(value) => {
+            setSearch(value)
+            setProblem(null)
+            setChoices(null)
+          }}
+          onEnter={() => void onEnter()}
+          placeholder={useScanner ? t('scanner.placeholder') : t('sales.form.searchProduct')}
+          autoFocus={autoFocus}
+        />
+        {useScanner && (
+          <CameraScanButton
+            onCode={(code) => {
+              setSearch(code) // the camera hands the code to the very same lookup as a typed or USB-scanned one
+              setProblem(null)
+              setChoices(null)
+              void scan(code)
+            }}
+          />
+        )}
+      </div>
       {useScanner && <p className="mt-1 text-xs text-slate-500">{t('scanner.hint')}</p>}
       {lookupFailure && (
         <div className="mt-2">

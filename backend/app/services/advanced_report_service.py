@@ -37,7 +37,7 @@ from app.reporting import (
 )
 from app.reporting import finance as finance_reports
 from app.reporting.filters import CompareMode, Period, ReportFilters, ReportTable, build_filters
-from app.services import authorization_service, notification_service
+from app.services import authorization_service, messaging_service, notification_service
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError, ForbiddenError, InvalidInputError, NotFoundError
 from app.services.shop_service import get_shop, shop_today
@@ -324,10 +324,22 @@ def run(session: Session, row: ScheduledReport) -> tuple[ReportRun, bool]:
     except Exception as exc:  # noqa: BLE001
         status, error = "FAILED", str(exc)[:300]
     email = bool(row.delivery_channel)
+    title = KINDS[row.report_type][0] if row.report_type in KINDS else "Saved report"
+    emailed = "NOT_CONFIGURED"
+    if email and status == "OK":
+        # A real email goes out only if this shop has a working email integration; the body is the summary figures (counts and totals,
+        # never a name or a raw row). Otherwise the run says so: "Delivery Channel Not Configured", never "sent".
+        lines = [f"{k}: {v}" for k, v in (summary or {}).items() if not isinstance(v, dict | list)]
+        emailed = messaging_service.send_report(
+            session, row.shop_id, row.created_by, list(row.recipients or []), f"{title} - {period.label}",
+            f"{title} for {period.label}\n\n" + "\n".join(lines) + "\n\nOpen the app for the full report.", f"report:{row.id}:{key}",
+        )  # fmt: skip
+    delivery_status = "NOT_DELIVERED" if status != "OK" else ({"NOT_CONFIGURED": "NOT_CONFIGURED", "SENT": "SENT"}.get(emailed, "FAILED") if email else "STORED_IN_APP")
+    note = {"NOT_CONFIGURED": DELIVERY_NOT_CONFIGURED, "SENT": "Email sent", "FAILED": "Email could not be delivered"}.get(emailed) if email and status == "OK" else None
     fields = {
         "period_start": period.start.isoformat(), "period_end": period.end.isoformat(), "status": status,
-        "delivery_status": ("NOT_CONFIGURED" if email else "STORED_IN_APP") if status == "OK" else "NOT_DELIVERED", "error": error,
-        "summary": {**(summary or {}), **({"delivery": DELIVERY_NOT_CONFIGURED} if email and status == "OK" else {})} if summary is not None else None,
+        "delivery_status": delivery_status, "error": error,
+        "summary": {**(summary or {}), **({"delivery": note} if note else {})} if summary is not None else None,
         "generated_at": utc_now(),
     }  # fmt: skip
     if existing is not None:
@@ -345,11 +357,10 @@ def run(session: Session, row: ScheduledReport) -> tuple[ReportRun, bool]:
         run_row.summary,
     )
     if status == "OK":
-        title = KINDS[row.report_type][0] if row.report_type in KINDS else "Saved report"
         notification_service.emit_safely(
             session, row.shop_id, "SCHEDULED_REPORT_READY", title=f"{title} is ready",
             message=f"The {row.schedule.value.lower()} {title.lower()} for {period.label} is ready in the app."
-            + (f" {DELIVERY_NOT_CONFIGURED}: no email was sent." if email else ""),
+            + (f" {note}." if note else ""),
             dedupe_key=f"advanced_report:{row.id}:{key}", entity_type="scheduled_report", entity_id=row.id,
         )  # fmt: skip
     return run_row, True

@@ -22,9 +22,11 @@ from app.api.v1 import (
     finance,
     finance_reports,
     image_intelligence,
+    integrations,
     intelligence,
     inventory,
     loyalty,
+    payments,
     price_intelligence,
     products,
     promotions,
@@ -40,7 +42,9 @@ from app.api.v1 import (
     stock_counts,
     subscription,
     suppliers,
+    sync,
     tasks,
+    webhooks,
 )
 
 api_v1_router = APIRouter()
@@ -76,6 +80,10 @@ api_v1_router.include_router(crm.router)
 api_v1_router.include_router(crm_dashboard.router)
 api_v1_router.include_router(loyalty.router)
 api_v1_router.include_router(analytics.router)
+api_v1_router.include_router(integrations.router)
+api_v1_router.include_router(payments.router)
+api_v1_router.include_router(sync.router)
+api_v1_router.include_router(webhooks.router)
 api_v1_router.include_router(finance.router)
 api_v1_router.include_router(finance_reports.router)
 api_v1_router.include_router(campaigns.router)

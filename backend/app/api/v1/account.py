@@ -179,7 +179,7 @@ def refresh_alerts(ctx: Ctx) -> UnreadOut:
 def get_preferences(ctx: Ctx, session: ReadSession) -> PreferencesOut:
     return PreferencesOut(
         preferences=notification_service.get_preferences(session, ctx),
-        channels=notification_service.channel_status(get_settings()),
+        channels=notification_service.channel_status(get_settings(), session, ctx.shop_id),
     )
 
 
@@ -191,5 +191,5 @@ def set_preference(category: str, payload: PreferenceIn, ctx: Ctx) -> Preference
         notification_service.set_preference(session, ctx, category.upper(), payload.channels)
         return PreferencesOut(
             preferences=notification_service.get_preferences(session, ctx),
-            channels=notification_service.channel_status(get_settings()),
+            channels=notification_service.channel_status(get_settings(), session, ctx.shop_id),
         )

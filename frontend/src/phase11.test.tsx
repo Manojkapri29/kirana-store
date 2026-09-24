@@ -167,11 +167,12 @@ describe('account and connection banners', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('says plainly when offline, with no pretence of an offline copy', () => {
+  it('says plainly when offline what still works and what does not, and points to the offline till', () => {
     const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
-    render(<OfflineBanner />)
+    render(<MemoryRouter><OfflineBanner /></MemoryRouter>)
     expect(screen.getByText('You are offline.')).toBeInTheDocument()
-    expect(screen.getByText(/no offline copy is kept/)).toBeInTheDocument()
+    expect(screen.getByText(/Most actions need a connection/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open the offline till' })).toHaveAttribute('href', '/offline')
     online.mockRestore()
   })
 })

@@ -17,8 +17,20 @@ from sqlalchemy.orm import Session
 from app.core.context import RequestContext
 from app.db.types import utc_now
 from app.models import ApprovalRequest, Campaign, CampaignAudienceSnapshot, CampaignSend, Customer
-from app.models.enums import ApprovalStatus, CampaignSendStatus, CampaignStatus, NotificationChannel
-from app.services import approval_service, crm_segment_service, notification_service, promotion_service
+from app.models.enums import (
+    ApprovalStatus,
+    CampaignSendStatus,
+    CampaignStatus,
+    MessageKind,
+    MessageStatus,
+    NotificationChannel,
+)
+from app.services import (
+    approval_service,
+    crm_segment_service,
+    messaging_service,
+    promotion_service,
+)
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
 from app.services.shop_service import get_shop
@@ -250,7 +262,6 @@ def launch(session: Session, ctx: RequestContext, campaign_id: int, today) -> Ca
             select(Customer).where(Customer.shop_id == ctx.shop_id, Customer.id.in_(audience))
         )
     }
-    provider = notification_service.provider_for(campaign.channel)
     consent_field = CONSENT_FIELD.get(campaign.channel)
     for customer_id in audience:
         customer = customers[customer_id]
@@ -259,13 +270,34 @@ def launch(session: Session, ctx: RequestContext, campaign_id: int, today) -> Ca
                 CampaignSendStatus.SKIPPED_NO_CONSENT,
                 "Customer has not opted in to this channel",
             )
-        elif provider is None:
-            status, detail = (
-                CampaignSendStatus.NOT_CONFIGURED,
-                f"No {campaign.channel.value} provider is configured",
-            )
+        elif campaign.channel is NotificationChannel.IN_APP:
+            status, detail = CampaignSendStatus.NOT_CONFIGURED, "No IN_APP provider is configured"
         else:
-            status, detail = CampaignSendStatus.SENT, None  # never reached today: no provider exists
+            # The one delivery path: the messaging service records the honest outcome (Provider Not Configured, no contact detail, sent,
+            # failed). A campaign makes a single attempt per customer; a temporary failure is FAILED here, never a claimed success.
+            message = messaging_service.send_to_customer(
+                session, ctx, customer_id=customer_id, channel=campaign.channel, kind=MessageKind.MARKETING, purpose="CAMPAIGN",
+                body=campaign.message_template, subject=campaign.name, idempotency_key=f"campaign:{campaign.id}:{customer_id}",
+                campaign_id=campaign.id, allow_queue=False,
+            )  # fmt: skip
+            status, detail = {
+                MessageStatus.SENT: (CampaignSendStatus.SENT, None),
+                MessageStatus.NOT_CONFIGURED: (
+                    CampaignSendStatus.NOT_CONFIGURED,
+                    f"No {campaign.channel.value} provider is configured",
+                ),
+                MessageStatus.SKIPPED_NO_CONSENT: (
+                    CampaignSendStatus.SKIPPED_NO_CONSENT,
+                    "Customer has not opted in to this channel",
+                ),
+                MessageStatus.SKIPPED_NO_CONTACT: (
+                    CampaignSendStatus.FAILED,
+                    "The customer has no contact detail for this channel",
+                ),
+            }.get(
+                message.status,
+                (CampaignSendStatus.FAILED, f"The provider could not deliver ({message.error_code})"),
+            )
         session.add(
             CampaignSend(
                 shop_id=ctx.shop_id,

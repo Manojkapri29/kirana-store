@@ -26,6 +26,7 @@ GROUP_SETTINGS = {
     "admin_auth": "rate_limit_admin_auth_failures",
     "auth": "rate_limit_auth",
     "public": "rate_limit_public",
+    "webhook": "rate_limit_webhook",
 }
 _MAX_KEYS = 50_000  # a bound on memory: when exceeded, idle keys are dropped
 

@@ -126,6 +126,8 @@ All configuration comes from environment variables; nothing secret is committed.
 - Phase 15: [Finance](docs/FINANCE.md), [Ledger](docs/FINANCE_LEDGER.md), [Expenses](docs/EXPENSES.md), [Cash](docs/CASH_MANAGEMENT.md), [Profit and loss](docs/PROFIT_AND_LOSS.md), [Cash flow](docs/CASH_FLOW.md)
 - Phase 15: [Tax reporting](docs/TAX_REPORTING.md), [Period controls](docs/PERIOD_CONTROLS.md), [Reconciliation](docs/RECONCILIATION.md), [Dashboard and alerts](docs/FINANCE_DASHBOARD.md), [Finance AI tools](docs/FINANCE_AI_TOOLS.md)
 - Phase 16: [Analytics and business intelligence](docs/ANALYTICS.md), [KPI formulas and sources](docs/ANALYTICS_KPIS.md), [Cohort definitions](docs/ANALYTICS_COHORTS.md), [Report builder](docs/REPORT_BUILDER.md), [Analytics AI tools](docs/ANALYTICS_AI_TOOLS.md)
+- Phase 17: [Integrations and ecosystem](docs/INTEGRATIONS.md)
+- Phase 18: [PWA, mobile and offline](docs/PWA_OFFLINE.md)
 - Phase 14: [Retention](docs/RETENTION.md), [Referrals and consent](docs/REFERRALS.md), [CRM AI tools](docs/CRM_AI_TOOLS.md)
 
 ## What Phase 8 added

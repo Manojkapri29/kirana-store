@@ -489,3 +489,81 @@ class TaxType(StrEnum):
     VAT = "VAT"
     SALES_TAX = "SALES_TAX"
     OTHER = "OTHER"
+
+
+# --- Phase 17: integrations ---------------------------------------------------------------------------
+
+
+class IntegrationType(StrEnum):
+    PAYMENT = "PAYMENT"
+    EMAIL = "EMAIL"
+    SMS = "SMS"
+    WHATSAPP = "WHATSAPP"
+    PUSH = "PUSH"
+    STORAGE = "STORAGE"
+    MAPS = "MAPS"
+    PRODUCT_DATA = "PRODUCT_DATA"
+    ACCOUNTING = "ACCOUNTING"
+
+
+class IntegrationStatus(StrEnum):
+    NOT_CONFIGURED = "NOT_CONFIGURED"  # no provider, or its credentials are not present in the environment
+    CONFIGURED = "CONFIGURED"  # provider chosen and credentials present; nothing has failed lately
+    DISABLED = "DISABLED"
+    ERROR = "ERROR"  # configured, but the last calls failed
+
+
+class OnlinePaymentStatus(StrEnum):
+    CREATED = "CREATED"
+    PENDING = "PENDING"
+    AUTHORIZED = "AUTHORIZED"
+    CAPTURED = "CAPTURED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    REFUNDED = "REFUNDED"
+    PARTIALLY_REFUNDED = "PARTIALLY_REFUNDED"
+
+
+class OnlinePaymentMethod(StrEnum):
+    UPI = "UPI"
+    CARD = "CARD"
+    PAYMENT_LINK = "PAYMENT_LINK"
+    ONLINE_PAYMENT = "ONLINE_PAYMENT"
+    COD = "COD"
+
+
+class OnlinePaymentPurpose(StrEnum):
+    SALE_PAYMENT = "SALE_PAYMENT"  # evidence for a sale that already exists; posts nothing to any ledger
+    KHATA_PAYMENT = "KHATA_PAYMENT"  # when captured, recorded ONCE as a payment on the customer's khata
+
+
+class WebhookStatus(StrEnum):
+    RECEIVED = "RECEIVED"
+    PROCESSING = "PROCESSING"
+    PROCESSED = "PROCESSED"
+    FAILED = "FAILED"
+    IGNORED = "IGNORED"
+
+
+class MessageKind(StrEnum):
+    TRANSACTIONAL = "TRANSACTIONAL"
+    MARKETING = "MARKETING"
+
+
+class MessageStatus(StrEnum):
+    QUEUED = "QUEUED"  # a retryable failure: will be tried again
+    SENT = "SENT"
+    FAILED = "FAILED"
+    NOT_CONFIGURED = "NOT_CONFIGURED"
+    SKIPPED_NO_CONSENT = "SKIPPED_NO_CONSENT"
+    SKIPPED_NO_CONTACT = "SKIPPED_NO_CONTACT"
+
+
+# --- Phase 18: offline sync -------------------------------------------------------------------------------
+
+
+class SyncStatus(StrEnum):
+    SYNCED = "SYNCED"  # applied through the normal business service, exactly once
+    CONFLICT = "CONFLICT"  # refused as queued (no stock, changed total, closed period): a person decides
+    FAILED = "FAILED"  # invalid or not permitted: nothing was applied
+    DISCARDED = "DISCARDED"  # a person dropped a conflict or failure; nothing was applied

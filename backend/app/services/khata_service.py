@@ -522,6 +522,11 @@ def _is_live(session: Session, shop_id: int, entry_id: int) -> bool:
     )
 
 
+def entry_is_live(session: Session, shop_id: int, entry_id: int) -> bool:
+    """True if nothing has reversed this ledger entry."""
+    return _is_live(session, shop_id, entry_id)
+
+
 def record_payment(
     session: Session,
     ctx: RequestContext,

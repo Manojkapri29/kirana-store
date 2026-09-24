@@ -20,6 +20,15 @@ from app.models.finance import (
     TaxRate,
     TaxSetting,
 )
+from app.models.integrations import (
+    AccountingMapping,
+    Integration,
+    IntegrationEvent,
+    MessageDelivery,
+    OnlinePayment,
+    OnlinePaymentEvent,
+    WebhookEvent,
+)
 from app.models.inventory import InventoryTransaction
 from app.models.jobs import BackgroundJob
 from app.models.khata import CustomerLedgerEntry
@@ -43,10 +52,19 @@ from app.models.scheduled_reports import ScheduledReport
 from app.models.shop import BusinessType, Shop, User
 from app.models.stock_count import StockCount, StockCountItem
 from app.models.subscription import Plan, PlanFeature, ShopSubscription, SubscriptionUsage
+from app.models.sync import SyncOperation
 from app.models.system import AuditLog, DocumentSequence, IdempotencyKey
 from app.models.tasks import BusinessTask, TaskComment
 
 __all__ = [
+    "SyncOperation",
+    "AccountingMapping",
+    "Integration",
+    "IntegrationEvent",
+    "MessageDelivery",
+    "OnlinePayment",
+    "OnlinePaymentEvent",
+    "WebhookEvent",
     "Account",
     "ApprovalRequest",
     "AuthSession",

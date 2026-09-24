@@ -4,11 +4,18 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { getSession, logout as logoutRequest, selectShop as selectShopRequest, type SessionInfo } from '@/api/auth'
 import { ACTIVITY_EVENT, ApiError, UNAUTHORIZED_EVENT } from '@/api/client'
 
+import { signOutCleanup } from '@/offline/cleanup'
+import type { Scope } from '@/offline/db'
+
 import { AuthContext, type AuthStatus, type AuthValue } from './authContext'
 
 const WARN_AT_MINUTES = 5
 
 /** Holds who is signed in. There is no token here: the session lives in an HttpOnly cookie the page cannot read. */
+function scopeOf(session: SessionInfo | null): Scope | null {
+  return session && session.shop_id !== null && session.active_user_id !== null ? { shopId: session.shop_id, userId: session.active_user_id } : null
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient()
   const query = useQuery({
@@ -87,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     try {
+      await signOutCleanup(scopeOf(session)) // sync what waits, drop the device copies, ask before deleting unsynced work
       await logoutRequest()
     } finally {
       wasSignedIn.current = false
@@ -94,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       client.clear() // nothing of the last person stays in memory
       await client.invalidateQueries({ queryKey: ['auth', 'me'] })
     }
-  }, [client])
+  }, [client, session])
 
   const stayActive = useCallback(async () => {
     await getSession() // any call renews the idle timer on the server

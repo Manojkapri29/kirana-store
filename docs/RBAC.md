@@ -92,6 +92,14 @@ it shows (finance analytics need `FINANCE_VIEW`; customer analytics `CRM_ANALYTI
 custom report is checked against its dataset's permissions each time it is saved or run; a KPI the role may not see is hidden, not
 zeroed. The AI tools declare a primary permission plus extras (`TOOL_EXTRA_PERMISSIONS`) mirroring the route rules.
 
+## Phase 17: integration permissions
+
+`INTEGRATION_VIEW`, `INTEGRATION_MANAGE`, `INTEGRATION_CONFIGURE`, `INTEGRATION_TEST`, `INTEGRATION_LOGS`, `PAYMENT_INTEGRATION_MANAGE`,
+`NOTIFICATION_INTEGRATION_MANAGE`, `STORAGE_INTEGRATION_MANAGE`, `WEBHOOK_MANAGE`. In short: the owner holds all nine;
+the manager everything except manage, configure, storage and webhook management; the accountant view. Configuring a payment provider also needs
+`PAYMENT_INTEGRATION_MANAGE`; a messaging provider `NOTIFICATION_INTEGRATION_MANAGE`. `/api/v1/webhooks` is intentionally public (signature-verified)
+and is listed in `UNGUARDED_PREFIXES`. See [INTEGRATIONS.md](INTEGRATIONS.md).
+
 ## Adding a route or a permission
 
 1. Add the route. 2. Add its `_r(...)` line to `ROUTE_RULES`. 3. Run `pytest tests/test_rbac.py`: it names any route without a rule.

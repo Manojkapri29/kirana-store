@@ -246,6 +246,15 @@ def _notifications(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in vars(run).items() if isinstance(v, int)}
 
 
+@register("integrations.retry_messages")
+def _integration_messages(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
+    """Try customer messages that failed for a temporary reason. Safe to repeat: only QUEUED rows whose retry time has come are tried,
+    each at most once per run, and a row that was sent is never sent again."""
+    from app.services import messaging_service
+
+    return messaging_service.process_due(session)
+
+
 @register("backup.create")
 def _backup(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
     """Take a verified backup. A repeat only makes one more backup; it never damages the last one."""
@@ -294,6 +303,11 @@ def schedule_periodic(session: Session, now: datetime | None = None) -> list[Bac
         enqueue(
             session,
             "notifications.process_due",
+            idempotency_key=f"tick:{(now or utc_now()).strftime('%Y%m%d%H%M')}",
+        ),
+        enqueue(
+            session,
+            "integrations.retry_messages",
             idempotency_key=f"tick:{(now or utc_now()).strftime('%Y%m%d%H%M')}",
         ),
     ]

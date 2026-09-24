@@ -1,76 +1,82 @@
+import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
 
-import { BuilderPage } from '@/features/analytics/BuilderPage'
-import { DrillPage } from '@/features/analytics/DrillPage'
-import { ExecutivePage } from '@/features/analytics/ExecutivePage'
-import { ObservationsPage } from '@/features/analytics/InsightsPage'
-import { ReportsPage } from '@/features/analytics/ReportsPage'
-import { SavedReportsPage } from '@/features/analytics/SavedReportsPage'
-import { SchedulesPage } from '@/features/analytics/SchedulesPage'
-import { CashPage } from '@/features/finance/CashPage'
-import { ExpensesPage } from '@/features/finance/ExpensesPage'
-import { FinanceDashboardPage } from '@/features/finance/FinanceDashboardPage'
-import { FinanceReportsPage } from '@/features/finance/FinanceReportsPage'
-import { FinanceSettingsPage } from '@/features/finance/FinanceSettingsPage'
-import { LedgerPage } from '@/features/finance/LedgerPage'
-import { PeriodsPage } from '@/features/finance/PeriodsPage'
-import { ReconciliationPage } from '@/features/finance/ReconciliationPage'
-import { AutomationPage } from '@/features/crm/AutomationPage'
-import { CampaignDetailPage } from '@/features/crm/CampaignDetailPage'
-import { CampaignsPage } from '@/features/crm/CampaignsPage'
-import { CrmDashboardPage } from '@/features/crm/CrmDashboardPage'
-import { CrmSettingsPage } from '@/features/crm/CrmSettingsPage'
-import { CustomerCrmPage } from '@/features/crm/CustomerCrmPage'
-import { LoyaltyPage } from '@/features/crm/LoyaltyPage'
-import { ReactivationPage } from '@/features/crm/ReactivationPage'
-import { CustomerDetailPage } from '@/features/customers/CustomerDetailPage'
-import { CustomerFormPage } from '@/features/customers/CustomerFormPage'
-import { CustomersPage } from '@/features/customers/CustomersPage'
-import { InventoryPage } from '@/features/inventory/InventoryPage'
-import { ProductDetailPage } from '@/features/products/ProductDetailPage'
-import { ProductFormPage } from '@/features/products/ProductFormPage'
-import { ProductFromPhotoPage } from '@/features/products/ProductFromPhotoPage'
-import { ProductsPage } from '@/features/products/ProductsPage'
-import { PromotionDetailPage } from '@/features/promotions/PromotionDetailPage'
-import { PromotionFormPage } from '@/features/promotions/PromotionFormPage'
-import { PromotionsPage } from '@/features/promotions/PromotionsPage'
+import { Spinner } from '@/components/ui'
 import { AcceptInvitationPage } from '@/features/auth/AcceptInvitationPage'
 import { AuthGate } from '@/features/auth/AuthGate'
-import { ChangePasswordPage } from '@/features/auth/ChangePasswordPage'
-import { RolesPage } from '@/features/staff/RolesPage'
-import { StaffPage } from '@/features/staff/StaffPage'
-import { AdminConsolePage } from '@/features/admin/AdminConsolePage'
-import { InsightsPage } from '@/features/insights/InsightsPage'
-import { NotificationsPage } from '@/features/notifications/NotificationsPage'
-import { AssistantPage } from '@/features/assistant/AssistantPage'
-import { PurchaseReturnFormPage } from '@/features/returns/PurchaseReturnFormPage'
-import { ReturnDetailPage } from '@/features/returns/ReturnDetailPage'
-import { ReturnsPage } from '@/features/returns/ReturnsPage'
-import { SalesReturnFormPage } from '@/features/returns/SalesReturnFormPage'
-import { SalesReportPage } from '@/features/reports/SalesReportPage'
-import { QuickSaleDetailPage } from '@/features/quickSales/QuickSaleDetailPage'
-import { QuickSaleFormPage } from '@/features/quickSales/QuickSaleFormPage'
-import { QuickSalesPage } from '@/features/quickSales/QuickSalesPage'
-import { SubscriptionPage } from '@/features/subscription/SubscriptionPage'
-import { SaleDetailPage } from '@/features/sales/SaleDetailPage'
-import { SaleFormPage } from '@/features/sales/SaleFormPage'
-import { SalesPage } from '@/features/sales/SalesPage'
-import { PurchaseDetailPage } from '@/features/purchases/PurchaseDetailPage'
-import { PurchaseFormPage } from '@/features/purchases/PurchaseFormPage'
-import { PurchasesPage } from '@/features/purchases/PurchasesPage'
-import { SettingsPage } from '@/features/settings/SettingsPage'
-import { SupplierDetailPage } from '@/features/suppliers/SupplierDetailPage'
-import { SupplierFormPage } from '@/features/suppliers/SupplierFormPage'
-import { SuppliersPage } from '@/features/suppliers/SuppliersPage'
 import { AppLayout } from '@/layouts/AppLayout'
-import { ComingSoonPage } from '@/pages/ComingSoonPage'
-import { DashboardPage } from '@/pages/DashboardPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-
 import { NAV_ITEMS } from './navigation'
+
+/** Every screen is loaded when first opened, so the first page a phone downloads is small (see docs/PWA_OFFLINE.md). */
+const OfflinePage = lazy(() => import('@/features/offline/OfflinePage').then((m) => ({ default: m.OfflinePage })))
+const AdminConsolePage = lazy(() => import('@/features/admin/AdminConsolePage').then((m) => ({ default: m.AdminConsolePage })))
+const AssistantPage = lazy(() => import('@/features/assistant/AssistantPage').then((m) => ({ default: m.AssistantPage })))
+const AutomationPage = lazy(() => import('@/features/crm/AutomationPage').then((m) => ({ default: m.AutomationPage })))
+const BuilderPage = lazy(() => import('@/features/analytics/BuilderPage').then((m) => ({ default: m.BuilderPage })))
+const CampaignDetailPage = lazy(() => import('@/features/crm/CampaignDetailPage').then((m) => ({ default: m.CampaignDetailPage })))
+const CampaignsPage = lazy(() => import('@/features/crm/CampaignsPage').then((m) => ({ default: m.CampaignsPage })))
+const CashPage = lazy(() => import('@/features/finance/CashPage').then((m) => ({ default: m.CashPage })))
+const ChangePasswordPage = lazy(() => import('@/features/auth/ChangePasswordPage').then((m) => ({ default: m.ChangePasswordPage })))
+const ComingSoonPage = lazy(() => import('@/pages/ComingSoonPage').then((m) => ({ default: m.ComingSoonPage })))
+const CrmDashboardPage = lazy(() => import('@/features/crm/CrmDashboardPage').then((m) => ({ default: m.CrmDashboardPage })))
+const CrmSettingsPage = lazy(() => import('@/features/crm/CrmSettingsPage').then((m) => ({ default: m.CrmSettingsPage })))
+const CustomerCrmPage = lazy(() => import('@/features/crm/CustomerCrmPage').then((m) => ({ default: m.CustomerCrmPage })))
+const CustomerDetailPage = lazy(() => import('@/features/customers/CustomerDetailPage').then((m) => ({ default: m.CustomerDetailPage })))
+const CustomerFormPage = lazy(() => import('@/features/customers/CustomerFormPage').then((m) => ({ default: m.CustomerFormPage })))
+const CustomersPage = lazy(() => import('@/features/customers/CustomersPage').then((m) => ({ default: m.CustomersPage })))
+const DashboardPage = lazy(() => import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
+const DrillPage = lazy(() => import('@/features/analytics/DrillPage').then((m) => ({ default: m.DrillPage })))
+const ExecutivePage = lazy(() => import('@/features/analytics/ExecutivePage').then((m) => ({ default: m.ExecutivePage })))
+const ExpensesPage = lazy(() => import('@/features/finance/ExpensesPage').then((m) => ({ default: m.ExpensesPage })))
+const FinanceDashboardPage = lazy(() => import('@/features/finance/FinanceDashboardPage').then((m) => ({ default: m.FinanceDashboardPage })))
+const FinanceReportsPage = lazy(() => import('@/features/finance/FinanceReportsPage').then((m) => ({ default: m.FinanceReportsPage })))
+const FinanceSettingsPage = lazy(() => import('@/features/finance/FinanceSettingsPage').then((m) => ({ default: m.FinanceSettingsPage })))
+const InsightsPage = lazy(() => import('@/features/insights/InsightsPage').then((m) => ({ default: m.InsightsPage })))
+const IntegrationsPage = lazy(() => import('@/features/integrations/IntegrationsPage').then((m) => ({ default: m.IntegrationsPage })))
+const InventoryPage = lazy(() => import('@/features/inventory/InventoryPage').then((m) => ({ default: m.InventoryPage })))
+const LedgerPage = lazy(() => import('@/features/finance/LedgerPage').then((m) => ({ default: m.LedgerPage })))
+const LoyaltyPage = lazy(() => import('@/features/crm/LoyaltyPage').then((m) => ({ default: m.LoyaltyPage })))
+const NotificationsPage = lazy(() => import('@/features/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })))
+const ObservationsPage = lazy(() => import('@/features/analytics/InsightsPage').then((m) => ({ default: m.ObservationsPage })))
+const PeriodsPage = lazy(() => import('@/features/finance/PeriodsPage').then((m) => ({ default: m.PeriodsPage })))
+const ProductDetailPage = lazy(() => import('@/features/products/ProductDetailPage').then((m) => ({ default: m.ProductDetailPage })))
+const ProductFormPage = lazy(() => import('@/features/products/ProductFormPage').then((m) => ({ default: m.ProductFormPage })))
+const ProductFromPhotoPage = lazy(() => import('@/features/products/ProductFromPhotoPage').then((m) => ({ default: m.ProductFromPhotoPage })))
+const ProductsPage = lazy(() => import('@/features/products/ProductsPage').then((m) => ({ default: m.ProductsPage })))
+const PromotionDetailPage = lazy(() => import('@/features/promotions/PromotionDetailPage').then((m) => ({ default: m.PromotionDetailPage })))
+const PromotionFormPage = lazy(() => import('@/features/promotions/PromotionFormPage').then((m) => ({ default: m.PromotionFormPage })))
+const PromotionsPage = lazy(() => import('@/features/promotions/PromotionsPage').then((m) => ({ default: m.PromotionsPage })))
+const PurchaseDetailPage = lazy(() => import('@/features/purchases/PurchaseDetailPage').then((m) => ({ default: m.PurchaseDetailPage })))
+const PurchaseFormPage = lazy(() => import('@/features/purchases/PurchaseFormPage').then((m) => ({ default: m.PurchaseFormPage })))
+const PurchaseReturnFormPage = lazy(() => import('@/features/returns/PurchaseReturnFormPage').then((m) => ({ default: m.PurchaseReturnFormPage })))
+const PurchasesPage = lazy(() => import('@/features/purchases/PurchasesPage').then((m) => ({ default: m.PurchasesPage })))
+const QuickSaleDetailPage = lazy(() => import('@/features/quickSales/QuickSaleDetailPage').then((m) => ({ default: m.QuickSaleDetailPage })))
+const QuickSaleFormPage = lazy(() => import('@/features/quickSales/QuickSaleFormPage').then((m) => ({ default: m.QuickSaleFormPage })))
+const QuickSalesPage = lazy(() => import('@/features/quickSales/QuickSalesPage').then((m) => ({ default: m.QuickSalesPage })))
+const ReactivationPage = lazy(() => import('@/features/crm/ReactivationPage').then((m) => ({ default: m.ReactivationPage })))
+const ReconciliationPage = lazy(() => import('@/features/finance/ReconciliationPage').then((m) => ({ default: m.ReconciliationPage })))
+const ReportsPage = lazy(() => import('@/features/analytics/ReportsPage').then((m) => ({ default: m.ReportsPage })))
+const ReturnDetailPage = lazy(() => import('@/features/returns/ReturnDetailPage').then((m) => ({ default: m.ReturnDetailPage })))
+const ReturnsPage = lazy(() => import('@/features/returns/ReturnsPage').then((m) => ({ default: m.ReturnsPage })))
+const RolesPage = lazy(() => import('@/features/staff/RolesPage').then((m) => ({ default: m.RolesPage })))
+const SaleDetailPage = lazy(() => import('@/features/sales/SaleDetailPage').then((m) => ({ default: m.SaleDetailPage })))
+const SaleFormPage = lazy(() => import('@/features/sales/SaleFormPage').then((m) => ({ default: m.SaleFormPage })))
+const SalesPage = lazy(() => import('@/features/sales/SalesPage').then((m) => ({ default: m.SalesPage })))
+const SalesReportPage = lazy(() => import('@/features/reports/SalesReportPage').then((m) => ({ default: m.SalesReportPage })))
+const SalesReturnFormPage = lazy(() => import('@/features/returns/SalesReturnFormPage').then((m) => ({ default: m.SalesReturnFormPage })))
+const SavedReportsPage = lazy(() => import('@/features/analytics/SavedReportsPage').then((m) => ({ default: m.SavedReportsPage })))
+const SchedulesPage = lazy(() => import('@/features/analytics/SchedulesPage').then((m) => ({ default: m.SchedulesPage })))
+const SettingsPage = lazy(() => import('@/features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })))
+const StaffPage = lazy(() => import('@/features/staff/StaffPage').then((m) => ({ default: m.StaffPage })))
+const SubscriptionPage = lazy(() => import('@/features/subscription/SubscriptionPage').then((m) => ({ default: m.SubscriptionPage })))
+const SupplierDetailPage = lazy(() => import('@/features/suppliers/SupplierDetailPage').then((m) => ({ default: m.SupplierDetailPage })))
+const SupplierFormPage = lazy(() => import('@/features/suppliers/SupplierFormPage').then((m) => ({ default: m.SupplierFormPage })))
+const SuppliersPage = lazy(() => import('@/features/suppliers/SuppliersPage').then((m) => ({ default: m.SuppliersPage })))
 
 export function App() {
   return (
+    <Suspense fallback={<Spinner />}>
     <Routes>
       <Route path="accept-invitation" element={<AcceptInvitationPage />} />
       <Route
@@ -115,6 +121,8 @@ export function App() {
         <Route path="customers/new" element={<CustomerFormPage mode="create" />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="customers/:id/crm" element={<CustomerCrmPage />} />
+        <Route path="offline" element={<OfflinePage />} />
+        <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="analytics" element={<ExecutivePage />} />
         <Route path="analytics/reports" element={<ReportsPage />} />
         <Route path="analytics/drill" element={<DrillPage />} />
@@ -156,5 +164,6 @@ export function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
+    </Suspense>
   )
 }

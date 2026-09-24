@@ -57,6 +57,7 @@ class Settings(BaseSettings):
         default=600, ge=1
     )  # bill pricing and coupon checks (a cashier types quickly)
     rate_limit_export: int = Field(default=20, ge=1)
+    rate_limit_webhook: int = Field(default=120, ge=1)
     rate_limit_admin: int = Field(default=60, ge=1)  # internal administration
     rate_limit_admin_auth_failures: int = Field(default=10, ge=1)  # bad admin tokens per window per address
     # Sign-in attempts per window, per client address and per email (the public storefront does not exist yet).
@@ -93,6 +94,14 @@ class Settings(BaseSettings):
     notification_sms_provider: str | None = None
     notification_whatsapp_provider: str | None = None
     notification_push_provider: str | None = None
+    # --- File storage (Phase 17). "local" (default) keeps files in a private folder; "s3" uses an S3-compatible service. The credentials
+    # are ONE environment variable named here, holding `ACCESS_KEY_ID:SECRET_ACCESS_KEY` (its name must start KIRANA_INTEGRATION_).
+    storage_provider: Literal["local", "s3"] = "local"
+    storage_s3_endpoint: str | None = None
+    storage_s3_bucket: str | None = None
+    storage_s3_region: str = "us-east-1"
+    storage_s3_path_style: bool = True
+    storage_credentials_ref: str = "KIRANA_INTEGRATION_STORAGE_CREDENTIALS"
     notification_max_attempts: int = Field(default=5, ge=1, le=20)
     notification_backoff_seconds: int = Field(default=60, ge=1)
 

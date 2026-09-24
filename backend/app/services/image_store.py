@@ -24,6 +24,12 @@ class ImageStore(Protocol):
     def delete(self, key: str) -> None: ...
 
 
+def validate_key(key: str) -> None:
+    """Raises ValueError unless `key` is `<shop id>/<sha256>.<jpg|png|webp>`: shared by every store."""
+    if not _KEY.match(key):
+        raise ValueError("invalid storage key")
+
+
 def storage_key(shop_id: int, sha256: str, extension: str) -> str:
     return f"{shop_id}/{sha256}.{extension}"
 
@@ -33,8 +39,7 @@ class LocalImageStore:
         self.root = root.resolve()
 
     def _path(self, key: str) -> Path:
-        if not _KEY.match(key):
-            raise ValueError("invalid storage key")
+        validate_key(key)
         path = (self.root / key).resolve()
         if self.root not in path.parents:  # never outside the folder, whatever the key says
             raise ValueError("invalid storage key")
@@ -56,5 +61,20 @@ class LocalImageStore:
 
 
 def default_store(settings: Settings) -> ImageStore:
+    if settings.storage_provider == "s3":
+        from app.integrations.base import resolve_secret
+        from app.integrations.s3_store import S3Store
+
+        access, _, secret = (resolve_secret(settings.storage_credentials_ref) or "").partition(":")
+        if not (settings.storage_s3_endpoint and settings.storage_s3_bucket and access and secret):
+            raise RuntimeError("S3 storage is selected but is not fully configured")
+        return S3Store(
+            endpoint=settings.storage_s3_endpoint,
+            bucket=settings.storage_s3_bucket,
+            region=settings.storage_s3_region,
+            access_key=access,
+            secret=secret,
+            path_style=settings.storage_s3_path_style,
+        )
     root = Path(settings.image_storage_dir)
     return LocalImageStore(root if root.is_absolute() else BACKEND_DIR / root)
