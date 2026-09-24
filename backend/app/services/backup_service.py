@@ -20,9 +20,11 @@ FAILED outcome with a safe code, not raised.
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import sqlite3
+import tarfile
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -39,6 +41,33 @@ from app.models import BackupRecord
 from app.models.enums import BackupKind, BackupStatus
 
 MANIFEST_VERSION = 1
+IMAGE_MEMBER = re.compile(r"^\d{1,12}/[0-9a-f]{64}\.(jpg|png|webp)$")
+
+
+def images_filename(key: str) -> str:
+    return f"{key}.images.tar.gz"
+
+
+def image_folder(settings: Settings) -> Path | None:
+    """The local photo folder, or None when photos live in object storage (that has its own durability and backup)."""
+    if settings.storage_provider != "local":
+        return None
+    root = Path(settings.image_storage_dir)
+    return root if root.is_absolute() else (BACKEND_DIR / root)
+
+
+def _archive_images(folder: Path, target: Path) -> tuple[int, str]:
+    """Write every kept photo into one tar.gz (only files whose name is a valid photo key). Returns (count, sha256)."""
+    count = 0
+    with tarfile.open(target, "w:gz") as tar:
+        for path in sorted(folder.rglob("*")):
+            if not path.is_file():
+                continue
+            name = path.relative_to(folder).as_posix()
+            if IMAGE_MEMBER.match(name):
+                tar.add(path, arcname=name, recursive=False)
+                count += 1
+    return count, _sha256(target)
 
 
 class BackupNotConfigured(Exception):
@@ -75,7 +104,8 @@ class LocalBackupStorage:
         return self.directory() / filename
 
     def delete(self, filename: str) -> None:
-        for name in (filename, filename.removesuffix(".db") + ".json"):
+        stem = filename.removesuffix(".db")
+        for name in (filename, stem + ".json", stem + ".images.tar.gz"):  # the database, its manifest, its photos
             path = self.path_of(name)
             if path.exists():
                 path.unlink()
@@ -243,6 +273,16 @@ def perform_backup(
                 "verification_failed",
                 "The backup could not be verified and was discarded.",
             )
+        images_count, images_sha = 0, None
+        photos = image_folder(settings)
+        if photos is not None and photos.is_dir():
+            images_partial = store.path_of(f"{key}.images.partial")
+            try:
+                images_count, images_sha = _archive_images(photos, images_partial)
+                if images_count:
+                    os.replace(images_partial, store.path_of(images_filename(key)))
+            finally:
+                images_partial.unlink(missing_ok=True)
         os.replace(partial, final)
         partial = None
         manifest: dict[str, Any] = {
@@ -255,6 +295,9 @@ def perform_backup(
             "sha256": verification.sha256,
             "schema_revision": verification.schema_revision,
             "initiated_by": initiated_by,
+            "images_file": images_filename(key) if images_count else None,
+            "images_count": images_count,
+            "images_sha256": images_sha if images_count else None,
         }
         store.path_of(f"{key}.json").write_text(json.dumps(manifest, indent=2))
         observability.log_event(

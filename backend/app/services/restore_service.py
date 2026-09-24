@@ -20,6 +20,7 @@ because it runs with the application stopped, which is the safe way to restore.
 import json
 import shutil
 import sqlite3
+import tarfile
 import tempfile
 import time
 from dataclasses import dataclass
@@ -230,6 +231,10 @@ def restore(
         return result
     after = backup_service.verify_file(live)
     detail = "The database was restored from the backup."
+    photos_note = _restore_photos(record.backup_key, store, settings)
+    if photos_note:
+        detail += " " + photos_note
+    _reregister_backups(live, store)
     if verification.compatibility == "upgradable":
         detail += " Run the migrations (alembic upgrade head) before starting the application."
     result = RestoreResult(
@@ -242,6 +247,72 @@ def restore(
     )
     _log(store, result, actor)
     return result
+
+
+def _restore_photos(key: str, store: BackupStorage, settings: Settings) -> str:
+    """Put the backup's photos back next to the restored database. Only valid photo names are extracted (nothing can leave the folder),
+    an existing photo is never overwritten, and a photo file the backup does not hold is never deleted."""
+    manifest_path = store.path_of(f"{key}.json")
+    try:
+        manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    except (OSError, ValueError):
+        manifest = {}
+    name = manifest.get("images_file")
+    if not name:
+        return "This backup holds no photos." if manifest else ""
+    folder = backup_service.image_folder(settings)
+    archive = store.path_of(name)
+    if folder is None or not archive.is_file():
+        return "The backup's photos could not be restored: restore the photo folder from its own backup."
+    if manifest.get("images_sha256") and backup_service._sha256(archive) != manifest["images_sha256"]:
+        return "The backup's photo archive failed its checksum, so no photos were restored."
+    restored = 0
+    try:
+        with tarfile.open(archive, "r:gz") as tar:
+            for member in tar.getmembers():
+                if not member.isfile() or not backup_service.IMAGE_MEMBER.match(member.name):
+                    continue
+                target = folder / member.name
+                if target.exists():
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                source = tar.extractfile(member)
+                if source is None:
+                    continue
+                temp = target.with_suffix(target.suffix + ".part")
+                temp.write_bytes(source.read())
+                temp.replace(target)
+                restored += 1
+    except (OSError, tarfile.TarError):
+        return "The backup's photos could not be fully restored: restore the photo folder from its own backup."
+    return f"{restored} photo(s) restored."
+
+
+def _reregister_backups(database: Path, store: BackupStorage) -> None:
+    """The list of backups lives in the database, so restoring an older backup forgets newer ones. Every backup file that still has a
+    manifest beside it is written back into the restored database's list (a backup already listed is left alone)."""
+    try:
+        folder = store.directory()
+        with sqlite3.connect(database, timeout=5) as connection:
+            known = {r[0] for r in connection.execute("SELECT backup_key FROM backup_records")}
+            for manifest_path in sorted(folder.glob("*.json")):
+                try:
+                    m = json.loads(manifest_path.read_text())
+                    key, filename = m["backup_key"], m["filename"]
+                except (OSError, ValueError, KeyError):
+                    continue
+                if key in known or not (folder / filename).is_file():
+                    continue
+                now = utc_now().isoformat(sep=" ")[:26]  # the format SQLite stores (UTC, no offset)
+                connection.execute(
+                    "INSERT INTO backup_records (backup_key, kind, status, storage_provider, filename, size_bytes, sha256,"
+                    " schema_revision, initiated_by, verified_at, updated_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (key, m.get("kind", "MANUAL"), "VERIFIED", store.name, filename, m.get("size_bytes"), m.get("sha256"),
+                     m.get("schema_revision"), m.get("initiated_by", "unknown"), now,
+                     now, (m.get("created_at") or now).replace("T", " ")[:26]),
+                )  # fmt: skip
+    except sqlite3.Error:
+        pass  # the restore itself succeeded; the list can be rebuilt from the manifests later
 
 
 def record_attempt(session, result: RestoreResult, actor: str) -> None:  # noqa: ANN001
