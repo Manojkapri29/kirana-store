@@ -1,2 +1,10 @@
-# Vercel installs the serverless function's dependencies from this file: the backend's own list.
--r backend/requirements.txt
+# GENERATED COPY of backend/requirements.txt (Vercel cannot follow '-r'); tests/test_phase20_release.py keeps them identical.
+# Runtime dependencies.
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+pydantic-settings==2.15.0
+SQLAlchemy==2.0.54
+alembic==1.20.0
+openpyxl==3.1.5  # XLSX export
+argon2-cffi==25.1.0  # password hashing (Argon2id)
+psycopg[binary]==3.3.6  # PostgreSQL driver (used only when KIRANA_DATABASE_URL is a postgresql+psycopg:// URL)

@@ -68,3 +68,27 @@ def test_the_cron_endpoint_exists_only_with_a_secret_and_needs_it(real_client, m
     assert client.get("/api/cron/tick", headers={"Authorization": "Bearer wrong"}).status_code == 401
     ok = client.get("/api/cron/tick", headers={"Authorization": "Bearer s3cret-value-for-tests"})
     assert ok.status_code == 200 and set(ok.json()) == {"ran", "failed"}
+
+
+def test_the_vercel_requirements_file_is_a_copy_of_the_backends():
+    root = (BACKEND.parent / "requirements.txt").read_text().splitlines()[1:]
+    assert root == (BACKEND / "requirements.txt").read_text().splitlines()
+
+
+def test_vercel_defaults_apply_only_on_vercel_and_never_override_the_operator():
+    from app.core.hosting import apply_vercel_defaults
+
+    plain: dict[str, str] = {}
+    apply_vercel_defaults(plain)
+    assert plain == {}  # not on Vercel: nothing is touched
+    on_vercel = {"VERCEL": "1", "VERCEL_PROJECT_PRODUCTION_URL": "shop.vercel.app", "DATABASE_URL": "postgres://u:pw@h/db", "KIRANA_LOG_FORMAT": "text"}
+    apply_vercel_defaults(on_vercel)
+    assert on_vercel["KIRANA_ENVIRONMENT"] == "production" and on_vercel["KIRANA_FRONTEND_URL"] == "https://shop.vercel.app"
+    assert on_vercel["KIRANA_LOG_FORMAT"] == "text"  # the operator's value wins
+    assert len(on_vercel["KIRANA_SECRET_KEY"]) >= 32 and "pw" not in on_vercel["KIRANA_SECRET_KEY"]
+    again = dict(on_vercel)
+    apply_vercel_defaults(again)
+    assert again == on_vercel  # stable
+    own = {"VERCEL": "1", "DATABASE_URL": "postgres://u:pw@h/db", "KIRANA_SECRET_KEY": "x" * 40}
+    apply_vercel_defaults(own)
+    assert own["KIRANA_SECRET_KEY"] == "x" * 40
