@@ -9,14 +9,13 @@ single-shop app and grow into a multi-shop SaaS.
 > The project folder and a few internal names (`kirana-store/`, the `KIRANA_` environment prefix,
 > `kirana.db`) are the original working name. They are internal only and will be renamed later.
 
-> **Status: Phase 7 of 16 (detailed sales).** You choose your type of business, manage suppliers, products
-> and categories, record opening stock, **make product-wise bills** (search or scan, discounts, cash, UPI or
-> credit; stock and profit are worked out for you), keep **customers and their khata** (opening balance, payments, advances,
-> adjustments, reversals, a full ledger history), and **record purchases**: draft a purchase, post it (the stock is added and
-> the average cost updated), void or correct it. You see current stock (In / Low / Out of stock), stock history
-> (each purchase is linked) and the average cost, and can export products, inventory, history and purchases to
-> CSV or Excel. Sales, khata and the rest come in later phases.
-> See [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Status: Phases 1–20 complete (Phase 20 = full-system QA and production-readiness audit).** A multi-shop small-business platform:
+> catalogue, suppliers, purchases, detailed and quick sales, returns, customer credit (khata), inventory intelligence, CRM and loyalty,
+> finance (ledger, expenses, cash, profit and loss, tax), analytics and a report builder, a read-only AI assistant, an integrations
+> framework (email/SMS/WhatsApp gateways, payment evidence and webhooks, S3 storage, accounting export), an installable offline-capable
+> PWA, SaaS administration, backup and restore. **Read [docs/QA_REPORT.md](docs/QA_REPORT.md) for what was and was not verified, and
+> [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) before deploying.** Not production-verified: Docker images, PostgreSQL, real
+> external providers, TLS, load on real hardware. There is no online store / order module and no payment processing.
 
 ## Stack
 
@@ -110,10 +109,13 @@ All configuration comes from environment variables; nothing secret is committed.
 
 ## Documentation
 
+- **Start here:** [Setup](docs/SETUP.md), [Environment variables](docs/ENVIRONMENT_VARIABLES.md), [Migrations](docs/MIGRATIONS.md), [Production runbook](docs/PRODUCTION_RUNBOOK.md), [Release checklist](docs/RELEASE_CHECKLIST.md), [Troubleshooting](docs/TROUBLESHOOTING.md), [QA report](docs/QA_REPORT.md)
+- **Domains:** [Inventory](docs/INVENTORY.md), [Sales](docs/SALES.md), [Finance](docs/FINANCE.md), [CRM](docs/CRM.md), [AI](docs/AI.md), [Reporting](docs/REPORTING.md), [Integrations](docs/INTEGRATIONS.md), [PWA and offline](docs/PWA_OFFLINE.md), [Performance](docs/PERFORMANCE.md)
+
 - [Architecture](docs/ARCHITECTURE.md): layers, service boundaries, ledgers, SaaS readiness
 - [Database](docs/DATABASE.md): planned schema and SQLite to PostgreSQL strategy
 - [Business rules](docs/BUSINESS_RULES.md): the approved rules every phase must follow
-- [Roadmap](docs/ROADMAP.md): Phases 1 to 16 (build Phase 14, CRM, is the latest; backend only, see "What Phase 14 added" below)
+- [Roadmap](docs/ROADMAP.md)
 - [Production](docs/PRODUCTION.md), [Security](docs/SECURITY.md), [Observability](docs/OBSERVABILITY.md)
 - [Backup and restore](docs/BACKUP_AND_RESTORE.md), [Notifications](docs/NOTIFICATIONS.md), [SaaS administration](docs/SAAS_ADMIN.md)
 - [PostgreSQL migration checklist](docs/POSTGRES_MIGRATION_CHECKLIST.md)

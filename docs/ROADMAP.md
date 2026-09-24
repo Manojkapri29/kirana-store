@@ -292,3 +292,10 @@ multiple shops per account, subscription billing, WhatsApp notifications, **cust
 (see [ARCHITECTURE.md](ARCHITECTURE.md) and [DATABASE.md](DATABASE.md#future-online-ordering)). Online
 ordering will be generic for every business type and will reuse the same products, customers, pricing and
 inventory; it will not get its own inventory.
+
+## Status after Phase 20
+
+Phases 1–20 are built. Phase 17 added integrations, Phase 18 the offline PWA, Phase 19 performance and scaling work, and Phase 20 the
+full-system QA (see [QA_REPORT.md](QA_REPORT.md)). Customer online ordering (storefront, cart, delivery) was **never built** and remains out of scope;
+the "out of MVP scope" list above is historical: payments *evidence*, AI (read-only) and WhatsApp/SMS *gateways* now exist behind integrations that
+must be configured and tested by the shop.
