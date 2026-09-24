@@ -4,17 +4,59 @@ Contains migration revisions, disk space for backups, feature flags, the NAMES o
 rate limiter's size, and counts of recent platform events. It contains no secret, no connection string and no path.
 """
 
+from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core import ratelimit, schema_state
 from app.core.config import Settings, get_settings
 from app.db.types import utc_now
-from app.models.enums import BackupStatus
+from app.models import BackgroundJob, Integration, MessageDelivery, OnlinePayment, SyncOperation, WebhookEvent
+from app.models.enums import (
+    BackupStatus,
+    IntegrationStatus,
+    JobStatus,
+    MessageStatus,
+    SyncStatus,
+    WebhookStatus,
+)
 from app.services import backup_service, notification_service, system_event_service
 from app.services.ai_provider import provider_status
+
+
+def _work_queues(session: Session) -> dict[str, Any]:
+    """Counts only (no shop, no name, no payload): are jobs, integrations, messages, webhooks and offline syncs healthy?"""
+    since = utc_now() - timedelta(hours=24)
+
+    def count(model, *conditions) -> int:  # noqa: ANN001
+        return session.scalar(select(func.count()).select_from(model).where(*conditions)) or 0
+
+    return {
+        "jobs": {
+            "pending": count(
+                BackgroundJob, BackgroundJob.status.in_([JobStatus.PENDING, JobStatus.RETRYING])
+            ),
+            "failed_24h": count(
+                BackgroundJob, BackgroundJob.status == JobStatus.FAILED, BackgroundJob.updated_at >= since
+            ),
+        },
+        "integrations": {
+            "in_error": count(Integration, Integration.status == IntegrationStatus.ERROR),
+            "messages_queued": count(MessageDelivery, MessageDelivery.status == MessageStatus.QUEUED),
+            "messages_failed_24h": count(
+                MessageDelivery,
+                MessageDelivery.status == MessageStatus.FAILED,
+                MessageDelivery.created_at >= since,
+            ),
+            "webhooks_failed_24h": count(
+                WebhookEvent, WebhookEvent.status == WebhookStatus.FAILED, WebhookEvent.received_at >= since
+            ),
+            "payments_needing_review": count(OnlinePayment, OnlinePayment.needs_review.is_(True)),
+        },
+        "offline_sync": {"conflicts_open": count(SyncOperation, SyncOperation.status == SyncStatus.CONFLICT)},
+    }
 
 
 def detail(session: Session, settings: Settings | None = None) -> dict[str, Any]:
@@ -65,4 +107,5 @@ def detail(session: Session, settings: Settings | None = None) -> dict[str, Any]
         "ai_provider_configured": ai["configured"],
         "notification_channels": notification_service.channel_status(settings),
         "events_last_24h": system_event_service.counts_since(session, 24),
+        "work_queues": _work_queues(session),
     }

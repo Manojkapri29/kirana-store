@@ -128,6 +128,7 @@ All configuration comes from environment variables; nothing secret is committed.
 - Phase 16: [Analytics and business intelligence](docs/ANALYTICS.md), [KPI formulas and sources](docs/ANALYTICS_KPIS.md), [Cohort definitions](docs/ANALYTICS_COHORTS.md), [Report builder](docs/REPORT_BUILDER.md), [Analytics AI tools](docs/ANALYTICS_AI_TOOLS.md)
 - Phase 17: [Integrations and ecosystem](docs/INTEGRATIONS.md)
 - Phase 18: [PWA, mobile and offline](docs/PWA_OFFLINE.md)
+- Phase 19: [Performance, scaling and PostgreSQL readiness](docs/PERFORMANCE.md)
 - Phase 14: [Retention](docs/RETENTION.md), [Referrals and consent](docs/REFERRALS.md), [CRM AI tools](docs/CRM_AI_TOOLS.md)
 
 ## What Phase 8 added

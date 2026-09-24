@@ -27,6 +27,9 @@ GROUP_SETTINGS = {
     "auth": "rate_limit_auth",
     "public": "rate_limit_public",
     "webhook": "rate_limit_webhook",
+    "sync": "rate_limit_sync",
+    "message": "rate_limit_message",
+    "payment": "rate_limit_payment",
 }
 _MAX_KEYS = 50_000  # a bound on memory: when exceeded, idle keys are dropped
 

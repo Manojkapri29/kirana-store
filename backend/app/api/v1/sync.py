@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.api.deps import Ctx
+from app.api.deps import Ctx, rate_limited
 from app.core import observability
 from app.core.context import RequestContext
 from app.db.session import get_session, write_transaction
@@ -120,7 +120,7 @@ def _run_one(ctx: RequestContext, device_id: str | None, op: SyncOperationIn) ->
         return {"client_op_id": op.client_op_id, "type": op.type, "status": "RETRY", "result": None, "error_code": "server_error", "message": "The server could not apply this right now. It is safe to send it again.", "duplicate": False}
 
 
-@router.post("/operations")
+@router.post("/operations", dependencies=[Depends(rate_limited("sync"))])
 def sync_operations(payload: SyncBatchIn, ctx: Ctx) -> dict:
     """Apply queued operations in order. One operation's problem never blocks the next. A repeated id returns its stored answer."""
     results = []

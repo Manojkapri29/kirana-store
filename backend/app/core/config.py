@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     )  # bill pricing and coupon checks (a cashier types quickly)
     rate_limit_export: int = Field(default=20, ge=1)
     rate_limit_webhook: int = Field(default=120, ge=1)
+    # Argon2id needs ~64 MiB per hash. Sign-ins beyond this many at once wait their turn instead of all taking memory together.
+    password_hash_concurrency: int = Field(default=4, ge=1, le=64)
+    rate_limit_sync: int = Field(default=600, ge=1)  # offline batches (up to 50 operations each)
+    rate_limit_message: int = Field(default=60, ge=1)  # messages sent to customers cost money and can annoy people
+    rate_limit_payment: int = Field(default=120, ge=1)
     rate_limit_admin: int = Field(default=60, ge=1)  # internal administration
     rate_limit_admin_auth_failures: int = Field(default=10, ge=1)  # bad admin tokens per window per address
     # Sign-in attempts per window, per client address and per email (the public storefront does not exist yet).
@@ -119,6 +124,12 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/kirana.db"
     # How long a SQLite connection waits for another writer before failing with "database is locked".
     db_busy_timeout_ms: int = 5000
+    # PostgreSQL connection pool (ignored by SQLite). Total connections a process may hold = pool size + overflow; keep
+    # workers x that number under the database's max_connections.
+    db_pool_size: int = Field(default=10, ge=1, le=200)
+    db_max_overflow: int = Field(default=10, ge=0, le=200)
+    db_pool_recycle_seconds: int = Field(default=1800, ge=30)
+    db_pool_timeout_seconds: int = Field(default=30, ge=1)
 
     # NoDecode lets us accept a plain comma-separated string instead of JSON.
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]

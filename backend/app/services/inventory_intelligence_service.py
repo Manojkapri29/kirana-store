@@ -72,7 +72,7 @@ def _period(today: date, days: int) -> tuple[date, date]:
     return today - timedelta(days=days - 1), today
 
 
-def stock_value(session: Session, shop_id: int) -> tuple[Decimal | None, int]:
+def stock_value(session: Session, shop_id: int, rows: list | None = None) -> tuple[Decimal | None, int]:
     """Total value of stock on hand at average cost, and how many active products with stock have no known
     cost.
 
@@ -80,7 +80,8 @@ def stock_value(session: Session, shop_id: int) -> tuple[Decimal | None, int]:
     sum of what is known, and `count` says how many products are left out of it (so the number is never
     silently short).
     """
-    rows, _ = inventory_service.list_inventory(session, shop_id, active=True, limit=None)
+    if rows is None:
+        rows, _ = inventory_service.list_inventory(session, shop_id, active=True, limit=None)
     held = [r for r in rows if r.current_stock > 0]
     known = [r for r in held if r.avg_cost is not None]
     missing = len(held) - len(known)
@@ -91,10 +92,13 @@ def stock_value(session: Session, shop_id: int) -> tuple[Decimal | None, int]:
     return sum((r.current_stock * r.avg_cost for r in known if r.avg_cost is not None), ZERO), missing
 
 
-def _movers(session: Session, shop_id: int, today: date, days: int) -> list[MoverRow]:
+def _movers(
+    session: Session, shop_id: int, today: date, days: int, rows: list | None = None
+) -> list[MoverRow]:
     """Every active product with current stock or recent sales, ranked fastest to slowest, for one period."""
     start, end = _period(today, days)
-    rows, _ = inventory_service.list_inventory(session, shop_id, active=True, limit=None)
+    if rows is None:
+        rows, _ = inventory_service.list_inventory(session, shop_id, active=True, limit=None)
     stock_by_product = {r.product_id: r for r in rows}
     sold = {s.product_id: s for s in analytics_service.product_sales(session, shop_id, start, end)}
     out: list[MoverRow] = []
@@ -118,25 +122,33 @@ def _movers(session: Session, shop_id: int, today: date, days: int) -> list[Move
 
 
 def fast_moving(
-    session: Session, shop_id: int, today: date, days: int = 30, limit: int = 20
+    session: Session,
+    shop_id: int,
+    today: date,
+    days: int = 30,
+    limit: int = 20,
+    movers: list[MoverRow] | None = None,
 ) -> list[MoverRow]:
     """Highest units sold in the period, among products that still have stock (nothing to reorder from an
     empty shelf)."""
-    movers = [m for m in _movers(session, shop_id, today, days) if m.quantity_sold > 0]
+    if movers is None:
+        movers = _movers(session, shop_id, today, days)
+    movers = [m for m in movers if m.quantity_sold > 0]
     return sorted(movers, key=lambda m: (-m.quantity_sold, m.name.casefold()))[:limit]
 
 
 def slow_moving(
-    session: Session, shop_id: int, today: date, days: int = 60, cover_multiplier: Decimal = Decimal("3")
-) -> list[MoverRow]:
+    session: Session, shop_id: int, today: date, days: int = 60, cover_multiplier: Decimal = Decimal("3"),
+    movers: list[MoverRow] | None = None,
+) -> list[MoverRow]:  # fmt: skip
     """Stock on hand that would take unusually long to sell through at the period's pace: "low recent sales
     velocity", never "bad" or "write off". A product with plenty of stock and either no sales, or more than
     `cover_multiplier` times the period's length of cover, qualifies."""
     ceiling = Decimal(days) * cover_multiplier
+    if movers is None:
+        movers = _movers(session, shop_id, today, days)
     out = [
-        m
-        for m in _movers(session, shop_id, today, days)
-        if m.current_stock > 0 and (m.days_of_cover is None or m.days_of_cover > ceiling)
+        m for m in movers if m.current_stock > 0 and (m.days_of_cover is None or m.days_of_cover > ceiling)
     ]
     return sorted(
         out,
@@ -144,9 +156,13 @@ def slow_moving(
     )
 
 
-def dead_stock(session: Session, shop_id: int, today: date, days: int = 90) -> list[MoverRow]:
+def dead_stock(
+    session: Session, shop_id: int, today: date, days: int = 90, movers: list[MoverRow] | None = None
+) -> list[MoverRow]:
     """Stock on hand with NO sales at all in the period (a stricter, unambiguous case of slow moving)."""
-    out = [m for m in _movers(session, shop_id, today, days) if m.current_stock > 0 and m.quantity_sold == 0]
+    if movers is None:
+        movers = _movers(session, shop_id, today, days)
+    out = [m for m in movers if m.current_stock > 0 and m.quantity_sold == 0]
     return sorted(out, key=lambda m: (m.stock_value is None, -(m.stock_value or ZERO), m.name.casefold()))
 
 
@@ -170,10 +186,13 @@ def inventory_health(session: Session, shop_id: int, today: date, days: int = 30
     """One summary screen's worth of numbers, all for the same period, all from the functions above."""
     rows, total = inventory_service.list_inventory(session, shop_id, active=True, limit=None)
     status = inventory_service.StockStatus
-    value, missing = stock_value(session, shop_id)
-    fast = fast_moving(session, shop_id, today, days, limit=10_000)
-    slow = slow_moving(session, shop_id, today, days)
-    dead = dead_stock(session, shop_id, today, days)
+    value, missing = stock_value(session, shop_id, rows)
+    movers = _movers(
+        session, shop_id, today, days, rows
+    )  # worked out ONCE for fast, slow and dead (was three times)
+    fast = fast_moving(session, shop_id, today, days, limit=10_000, movers=movers)
+    slow = slow_moving(session, shop_id, today, days, movers=movers)
+    dead = dead_stock(session, shop_id, today, days, movers=movers)
     reorder_risk = sum(
         1 for r in rows if r.current_stock > 0 and r.current_stock <= r.reorder_level
     )  # already selling close to nothing left

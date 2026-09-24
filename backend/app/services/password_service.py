@@ -5,6 +5,7 @@ parameters inside it, so the parameters can be raised later and old hashes are u
 """
 
 import secrets
+import threading
 from functools import lru_cache
 
 from argon2 import PasswordHasher
@@ -31,8 +32,24 @@ def _current(settings: Settings | None = None) -> PasswordHasher:
     return _hasher(settings.password_hash_time_cost, settings.password_hash_memory_kib)
 
 
+_gate_lock = threading.Lock()
+_gate: tuple[int, threading.BoundedSemaphore] | None = None
+
+
+def _turnstile(settings: Settings | None = None) -> threading.BoundedSemaphore:
+    """At most `password_hash_concurrency` hashes run at once. Each takes ~64 MiB, so a burst of sign-ins queues briefly instead of
+    multiplying memory use (12 at once measured 12 x 64 MiB before this)."""
+    global _gate  # noqa: PLW0603
+    limit = (settings or get_settings()).password_hash_concurrency
+    with _gate_lock:
+        if _gate is None or _gate[0] != limit:
+            _gate = (limit, threading.BoundedSemaphore(limit))
+        return _gate[1]
+
+
 def hash_password(password: str, settings: Settings | None = None) -> str:
-    return _current(settings).hash(password)
+    with _turnstile(settings):
+        return _current(settings).hash(password)
 
 
 def verify_password(stored: str, password: str, settings: Settings | None = None) -> bool:
@@ -40,7 +57,8 @@ def verify_password(stored: str, password: str, settings: Settings | None = None
     if not stored or stored == UNUSABLE:
         return False
     try:
-        return _current(settings).verify(stored, password)
+        with _turnstile(settings):
+            return _current(settings).verify(stored, password)
     except (VerifyMismatchError, VerificationError, InvalidHashError):
         return False
 

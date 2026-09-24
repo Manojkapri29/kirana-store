@@ -13,8 +13,8 @@ from sqlalchemy import func, select
 from app.models import AuditLog, CustomerLedgerEntry, InventoryTransaction, QuickSale, Sale, SyncOperation
 from tests.client_helpers import client_with
 from tests.factories import today_in_shop_timezone
-from tests.test_sales_api import CUSTOMERS, make_customer, owed, shelf  # noqa: F401  (shelf is a fixture)
 from tests.test_purchases_api import stock
+from tests.test_sales_api import CUSTOMERS, make_customer, owed, shelf  # noqa: F401  (shelf is a fixture)
 
 SYNC = "/api/v1/sync"
 TODAY = today_in_shop_timezone().isoformat()

@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import Ctx
+from app.api.deps import Ctx, rate_limited
 from app.api.idempotency import KEY_PATTERN
 from app.db.session import get_session, write_transaction
 from app.models.enums import OnlinePaymentStatus
@@ -39,7 +39,7 @@ def _key(value: str | None) -> str:
     return value
 
 
-@router.post("", response_model=PaymentOut, status_code=201)
+@router.post("", response_model=PaymentOut, status_code=201, dependencies=[Depends(rate_limited("payment"))])
 def create_payment(payload: PaymentIn, ctx: Ctx, idempotency_key: Key = None) -> PaymentOut:
     key = _key(idempotency_key)
     with write_transaction() as session:

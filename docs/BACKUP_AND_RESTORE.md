@@ -66,3 +66,8 @@ reports backups as "not configured" for a non-SQLite database. See `POSTGRES_MIG
 
 Off-machine copies and encryption of backups at rest are not built; encrypt the volume or copy backups with your own tool.
 Restore drills are your responsibility: run `rehearse` regularly.
+
+
+## Uploaded files (Phase 19 note)
+
+The database backup does **not** contain uploaded product photos (local folder `KIRANA_IMAGE_STORAGE_DIR` or the S3 bucket). Back those up separately and restore them alongside the database; photos missing after a restore show as absent, the business data is unaffected. The restore drill test (`tests/test_phase19_restore_drill.py`) covers the database only.

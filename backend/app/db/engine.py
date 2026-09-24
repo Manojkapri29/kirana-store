@@ -56,7 +56,12 @@ def _configure_sqlite(engine: Engine, busy_timeout_ms: int, enforce_foreign_keys
 
 
 def create_db_engine(
-    url: str, *, busy_timeout_ms: int = 5000, echo: bool = False, enforce_foreign_keys: bool = True
+    url: str,
+    *,
+    busy_timeout_ms: int = 5000,
+    echo: bool = False,
+    enforce_foreign_keys: bool = True,
+    pool: dict | None = None,
 ) -> Engine:
     """Build an engine for `url`. Used by the app, Alembic and the tests.
 
@@ -75,11 +80,21 @@ def create_db_engine(
         )
         _configure_sqlite(engine, busy_timeout_ms, enforce_foreign_keys)
         return engine
-    return create_engine(parsed, echo=echo, pool_pre_ping=True)
+    # Server databases: a bounded, health-checked pool; connections are recycled before a proxy can drop them.
+    return create_engine(parsed, echo=echo, pool_pre_ping=True, **(pool or {}))
 
 
 @lru_cache
 def get_engine() -> Engine:
     """The application's engine, created on first use from the configured URL."""
     settings = get_settings()
-    return create_db_engine(settings.database_url, busy_timeout_ms=settings.db_busy_timeout_ms)
+    return create_db_engine(
+        settings.database_url,
+        busy_timeout_ms=settings.db_busy_timeout_ms,
+        pool={
+            "pool_size": settings.db_pool_size,
+            "max_overflow": settings.db_max_overflow,
+            "pool_recycle": settings.db_pool_recycle_seconds,
+            "pool_timeout": settings.db_pool_timeout_seconds,
+        },
+    )

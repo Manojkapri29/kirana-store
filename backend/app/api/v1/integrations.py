@@ -11,7 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Query, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import Ctx
+from app.api.deps import Ctx, rate_limited
 from app.api.idempotency import KEY_PATTERN
 from app.db.session import get_session, write_transaction
 from app.integrations import location
@@ -115,7 +115,7 @@ def list_messages(
     }
 
 
-@router.post("/messages", response_model=MessageOut, status_code=201)
+@router.post("/messages", response_model=MessageOut, status_code=201, dependencies=[Depends(rate_limited("message"))])
 def send_message(
     payload: MessageIn,
     ctx: Ctx,
