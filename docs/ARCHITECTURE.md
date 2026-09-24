@@ -493,3 +493,11 @@ the Phase 13 `approval_service`; nothing is duplicated and CRM never writes inve
 Loyalty earning/reversal and referral qualification hook into the sale/quick-sale post and void paths in a savepoint, so they can
 never block a sale. Sending is behind `notification_service.provider_for`, which returns nothing for every channel today, so
 campaigns record `NOT_CONFIGURED`. The assistant only ever creates a campaign **draft** through the confirmable-action pipeline.
+
+
+## Phase 15 additions: finance
+
+A consolidation layer, not a second accounting system (see [FINANCE.md](FINANCE.md)). New services read sales, purchases, returns and
+khata through one normalised ledger view; finance owns only expenses, insert-only entries, cash counts, reconciliation marks, periods
+and tax configuration. Period guards are called from the post/void paths of the source documents. The shared approval queue now
+authorises by request kind. `write_transaction` gained `note_after_rollback` so a refused change can still leave a record.

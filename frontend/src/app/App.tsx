@@ -1,5 +1,13 @@
 import { Route, Routes } from 'react-router-dom'
 
+import { CashPage } from '@/features/finance/CashPage'
+import { ExpensesPage } from '@/features/finance/ExpensesPage'
+import { FinanceDashboardPage } from '@/features/finance/FinanceDashboardPage'
+import { FinanceReportsPage } from '@/features/finance/FinanceReportsPage'
+import { FinanceSettingsPage } from '@/features/finance/FinanceSettingsPage'
+import { LedgerPage } from '@/features/finance/LedgerPage'
+import { PeriodsPage } from '@/features/finance/PeriodsPage'
+import { ReconciliationPage } from '@/features/finance/ReconciliationPage'
 import { AutomationPage } from '@/features/crm/AutomationPage'
 import { CampaignDetailPage } from '@/features/crm/CampaignDetailPage'
 import { CampaignsPage } from '@/features/crm/CampaignsPage'
@@ -100,6 +108,14 @@ export function App() {
         <Route path="customers/new" element={<CustomerFormPage mode="create" />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="customers/:id/crm" element={<CustomerCrmPage />} />
+        <Route path="finance" element={<FinanceDashboardPage />} />
+        <Route path="finance/expenses" element={<ExpensesPage />} />
+        <Route path="finance/cash" element={<CashPage />} />
+        <Route path="finance/ledger" element={<LedgerPage />} />
+        <Route path="finance/reports" element={<FinanceReportsPage />} />
+        <Route path="finance/reconciliation" element={<ReconciliationPage />} />
+        <Route path="finance/periods" element={<PeriodsPage />} />
+        <Route path="finance/settings" element={<FinanceSettingsPage />} />
         <Route path="crm" element={<CrmDashboardPage />} />
         <Route path="crm/campaigns" element={<CampaignsPage />} />
         <Route path="crm/campaigns/:id" element={<CampaignDetailPage />} />

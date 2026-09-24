@@ -35,7 +35,7 @@ from app.models import (
     User,
 )
 from app.models.enums import DocumentStatus, PurchaseStatus, StockReferenceType, SupplierCreditMode
-from app.services import inventory_service, numbering_service
+from app.services import finance_period_service, inventory_service, numbering_service
 from app.services import return_calculation as calc
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
@@ -390,6 +390,7 @@ def create_purchase_return(
     if len(items) > MAX_ITEMS:
         problems.append(("items", f"A return can have at most {MAX_ITEMS} items."))
     when = return_date or today
+    finance_period_service.assert_open(session, ctx, when, action="purchase_return")
     if when > today:
         problems.append(("return_date", "The return date cannot be in the future."))
     elif when < purchase.purchase_date:
@@ -472,6 +473,7 @@ def void_purchase_return(
         raise NotFoundError("Return not found")
     if ret.status is DocumentStatus.VOID:
         raise ConflictError("This return is already void.")
+    finance_period_service.assert_open(session, ctx, ret.return_date, action="void_purchase_return")
     before = _snapshot(ret)
     item_ids = list(
         session.scalars(

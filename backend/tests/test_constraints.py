@@ -154,6 +154,7 @@ class TestShopIsolation:
             session,
             Expense(
                 shop_id=tenant_a.shop.id,
+                expense_no="EXP/T/0001",
                 expense_date=TODAY,
                 category_id=foreign.id,
                 amount=Decimal("500"),

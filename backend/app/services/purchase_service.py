@@ -33,7 +33,7 @@ from app.core.context import RequestContext
 from app.db.types import round_money, utc_now
 from app.models import Product, Purchase, PurchaseItem, Supplier, Unit, User
 from app.models.enums import PurchaseStatus, StockReferenceType
-from app.services import inventory_service, numbering_service, purchase_return_service
+from app.services import finance_period_service, inventory_service, numbering_service, purchase_return_service
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
 from app.services.shop_service import get_shop, shop_today
@@ -692,6 +692,7 @@ def post_purchase(session: Session, ctx: RequestContext, purchase_id: int) -> Pu
         raise ConflictError(f"This purchase has already been posted ({purchase.purchase_no}).")
     if purchase.status is PurchaseStatus.VOID:
         raise ConflictError("This purchase is void and cannot be posted.")
+    finance_period_service.assert_open(session, ctx, purchase.purchase_date, action="post_purchase")
 
     items = _items_of(session, ctx.shop_id, purchase.id)
     if not items:
@@ -756,6 +757,8 @@ def void_purchase(session: Session, ctx: RequestContext, purchase_id: int, reaso
     purchase = _get_purchase(session, ctx.shop_id, purchase_id, lock=True)
     if purchase.status is PurchaseStatus.VOID:
         raise ConflictError("This purchase is already void.")
+    if purchase.status is PurchaseStatus.POSTED:
+        finance_period_service.assert_open(session, ctx, purchase.purchase_date, action="void_purchase")
 
     before = _snapshot(purchase)
     was_posted = purchase.status is PurchaseStatus.POSTED

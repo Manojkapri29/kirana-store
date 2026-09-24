@@ -1306,3 +1306,85 @@ def export_campaign_sends(
         for s in sends
     ]  # fmt: skip
     return _file(session, ctx, _Dataset(f"campaign_sends_{campaign_id}", CAMPAIGN_SEND_COLUMNS, rows), fmt)
+
+
+# --- Finance (Phase 15) -----------------------------------------------------------------------------------
+
+FINANCE_LEDGER_COLUMNS = [
+    Column("entry_date", "Date"), Column("event_type", "Type"), Column("source_type", "Source"),
+    Column("source_id", "Source ID"), Column("reference", "Reference"), Column("amount", "Amount", "money"),
+    Column("settled_amount", "Settled", "money"), Column("direction", "Direction"),
+    Column("payment_method", "Payment method"), Column("status", "Status"),
+    Column("customer_id", "Customer ID"), Column("supplier_id", "Supplier ID"), Column("note", "Note"),
+]  # fmt: skip
+EXPENSE_COLUMNS = [
+    Column("expense_no", "Expense no."), Column("expense_date", "Date"), Column("category", "Category"),
+    Column("payee", "Payee"), Column("description", "Description"), Column("amount", "Amount", "money"),
+    Column("payment_method", "Payment method"), Column("status", "Status"),
+]  # fmt: skip
+PAYABLE_COLUMNS = [
+    Column("name", "Supplier"), Column("total_purchases", "Purchases", "money"),
+    Column("purchase_returns", "Returns", "money"), Column("payments_made", "Payments", "money"),
+    Column("balance", "Payable", "money"), Column("oldest_open_date", "Oldest open purchase"),
+    Column("b0", "0-30 days", "money"), Column("b31", "31-60 days", "money"),
+    Column("b61", "61-90 days", "money"), Column("b90", "90+ days", "money"),
+]  # fmt: skip
+RECEIVABLE_COLUMNS = [
+    Column("name", "Customer"), Column("balance", "Owes", "money"), Column("advance", "Advance", "money"),
+    Column("oldest_open_date", "Oldest open charge"), Column("last_payment_date", "Last payment"),
+    Column("b0", "0-30 days", "money"), Column("b31", "31-60 days", "money"),
+    Column("b61", "61-90 days", "money"), Column("b90", "90+ days", "money"),
+]  # fmt: skip
+
+
+def export_finance_ledger(
+    session: Session, ctx: RequestContext, fmt: ExportFormat, date_from: date, date_to: date
+) -> ExportFile:
+    from app.services import finance_ledger_service
+
+    rows = [
+        {**r.__dict__, "event_type": r.event_type.value, "direction": r.direction.value}
+        for r in finance_ledger_service.list_ledger(session, ctx.shop_id, date_from, date_to)
+    ]
+    return _file(session, ctx, _Dataset("finance_ledger", FINANCE_LEDGER_COLUMNS, rows), fmt)
+
+
+def export_expenses(
+    session: Session, ctx: RequestContext, fmt: ExportFormat, date_from: date | None, date_to: date | None
+) -> ExportFile:
+    from app.services import expense_service
+
+    names = {c.id: c.name for c in expense_service.list_categories(session, ctx.shop_id)}
+    items, _ = expense_service.list_expenses(
+        session, ctx.shop_id, date_from=date_from, date_to=date_to, limit=100000
+    )
+    rows = [
+        {
+            "expense_no": e.expense_no, "expense_date": e.expense_date,
+            "category": names.get(e.category_id, ""), "payee": e.payee, "description": e.description,
+            "amount": e.amount,
+            "payment_method": e.payment_method.value, "status": e.status.value,
+        }
+        for e in items
+    ]  # fmt: skip
+    return _file(session, ctx, _Dataset("expenses", EXPENSE_COLUMNS, rows), fmt)
+
+
+def _aging_cols(aging: dict[str, Any]) -> dict[str, Any]:
+    return {"b0": aging["0-30"], "b31": aging["31-60"], "b61": aging["61-90"], "b90": aging["90+"]}
+
+
+def export_payables(session: Session, ctx: RequestContext, fmt: ExportFormat, as_of: date) -> ExportFile:
+    from app.services import payables_service
+
+    report = payables_service.compute(session, ctx.shop_id, as_of)
+    rows = [{**s.__dict__, **_aging_cols(s.aging)} for s in report.suppliers]
+    return _file(session, ctx, _Dataset("payables", PAYABLE_COLUMNS, rows), fmt)
+
+
+def export_receivables(session: Session, ctx: RequestContext, fmt: ExportFormat, as_of: date) -> ExportFile:
+    from app.services import receivables_service
+
+    report = receivables_service.compute(session, ctx.shop_id, as_of)
+    rows = [{**c.__dict__, **_aging_cols(c.aging)} for c in report.customers]
+    return _file(session, ctx, _Dataset("receivables", RECEIVABLE_COLUMNS, rows), fmt)

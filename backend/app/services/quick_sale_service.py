@@ -30,6 +30,7 @@ from app.models import Customer, QuickSale, User
 from app.models.enums import KhataReferenceType, PaymentMethod, PaymentType, SaleStatus
 from app.services import (
     entitlement_service,
+    finance_period_service,
     khata_service,
     loyalty_service,
     numbering_service,
@@ -327,6 +328,7 @@ def post_quick_sale(
     today = shop_today(get_shop(session, ctx.shop_id))
     if sale.sale_date > today:
         raise InvalidInputError("The date cannot be in the future.", field="sale_date")
+    finance_period_service.assert_open(session, ctx, sale.sale_date, action="post_quick_sale")
 
     payment = payment_service.resolve_payment(
         sale.total_amount,
@@ -387,6 +389,8 @@ def void_quick_sale(session: Session, ctx: RequestContext, quick_sale_id: int, r
     sale = _get(session, ctx.shop_id, quick_sale_id, lock=True)
     if sale.status is SaleStatus.VOID:
         raise ConflictError("This quick sale is already void.")
+    if sale.status is SaleStatus.POSTED:
+        finance_period_service.assert_open(session, ctx, sale.sale_date, action="void_quick_sale")
 
     before = _snapshot(sale)
     was_posted = sale.status is SaleStatus.POSTED

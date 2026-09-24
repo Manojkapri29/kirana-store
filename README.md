@@ -123,6 +123,8 @@ All configuration comes from environment variables; nothing secret is committed.
 - Phase 13: [Supplier analytics](docs/SUPPLIER_ANALYTICS.md), [Customer analytics](docs/CUSTOMER_ANALYTICS.md), [Business health](docs/BUSINESS_HEALTH.md)
 - Phase 13: [Workflow automation](docs/WORKFLOW_AUTOMATION.md), [Scheduled reports](docs/SCHEDULED_REPORTS.md)
 - Phase 14: [CRM](docs/CRM.md), [Loyalty](docs/LOYALTY.md), [Campaigns and reactivation](docs/CAMPAIGNS.md), [Marketing automation](docs/MARKETING_AUTOMATION.md)
+- Phase 15: [Finance](docs/FINANCE.md), [Ledger](docs/FINANCE_LEDGER.md), [Expenses](docs/EXPENSES.md), [Cash](docs/CASH_MANAGEMENT.md), [Profit and loss](docs/PROFIT_AND_LOSS.md), [Cash flow](docs/CASH_FLOW.md)
+- Phase 15: [Tax reporting](docs/TAX_REPORTING.md), [Period controls](docs/PERIOD_CONTROLS.md), [Reconciliation](docs/RECONCILIATION.md), [Dashboard and alerts](docs/FINANCE_DASHBOARD.md), [Finance AI tools](docs/FINANCE_AI_TOOLS.md)
 - Phase 14: [Retention](docs/RETENTION.md), [Referrals and consent](docs/REFERRALS.md), [CRM AI tools](docs/CRM_AI_TOOLS.md)
 
 ## What Phase 8 added
@@ -333,3 +335,17 @@ request (the existing Approvals API is used).
 **Not done (on purpose, this phase).** No real messaging provider; no scheduler for automation
 rules or campaign start times; referral rewards are not reversed on a sale void; no birthday/anniversary triggers
 (no such data) and no abandoned-cart (no online store).
+
+## What Phase 15 added
+
+**Finance on top of what exists, with no second accounting system.** An expense workflow (draft, submit, approve, post, void) with
+configurable categories and a per-shop approval limit; a financial ledger that is one traceable view over sales, purchases, returns,
+khata payments and the few events finance owns (insert-only, corrected by reversal or explicit adjustment); daily cash with physical
+counts (opening cash is never guessed); payables and receivables (khata stays the source of truth) with labelled ageing; profit and
+loss that says **Profit Not Available** rather than inventing a cost; cash flow; a configurable tax *reporting foundation*; financial
+periods (open, locked, closed) enforced on finance and on sale/purchase/return posting and voiding; reconciliation review (no bank
+integration exists and none is faked); a finance dashboard, neutral alerts, ten read-only AI tools, exports and an
+English/Hindi "Finance" section. See [Finance](docs/FINANCE.md).
+
+**Not done (on purpose).** No bank, payment or tax-filing integration; no online orders exist to include; ageing is by transaction date
+because no due dates or payment terms are stored; split payments across methods are not recorded per method.

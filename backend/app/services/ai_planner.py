@@ -87,7 +87,7 @@ _INSTRUCTIONS = re.compile(
 _WRITE_VERBS = (
     "delete|remove|cancel|post|refund|change|update|set|adjust|increase|decrease|reduce|raise|lower|add|create|activate|"
     "approve|reject|issue|record|mark|void|reverse|edit|modify|fix|reset|clear|wipe|erase|write off|transfer|send|pay|buy|order|"
-    "upgrade|downgrade|accept|deactivate|pause|expire"
+    "upgrade|downgrade|accept|deactivate|pause|expire|reconcile|unlock|lock|reopen|close|submit|withdraw|deposit"
 )
 _WRITE = re.compile(
     rf"^(please\s+|kindly\s+|now\s+|just\s+)?({_WRITE_VERBS})\b"
@@ -222,6 +222,28 @@ def route(question: str, today: date) -> PlannedCall | Clarify | None:
         text, "monthly", "month", "business", "mahine", "महीने", "मासिक"
     ):
         return call("get_business_report")
+    if _any(text, "finance dashboard", "financial dashboard", "finance overview", "financial overview"):
+        return call("get_financial_dashboard")
+    if _any(
+        text, "profit and loss", "profit & loss", "p&l", "pnl", "net profit", "shuddh munafa", "शुद्ध मुनाफ"
+    ):
+        return call("get_pnl_summary")
+    if _any(text, "cash flow", "cashflow", "nakdi pravah", "नकदी प्रवाह"):
+        return call("get_cash_flow_summary")
+    if _any(text, "expense", "kharcha", "kharche", "खर्च"):
+        return call("get_expense_summary")
+    if _any(text, "receivable", "who owes me", "customers owe"):
+        return call("get_receivables_summary")
+    if _any(text, "payable", "i owe", "we owe", "owe suppliers", "supplier dues", "supplier outstanding"):
+        return call("get_payables_summary")
+    if _any(text, "financial ledger", "finance ledger", "money events", "financial transactions"):
+        return call("get_financial_ledger", **({"limit": n} if (n := _limit(text)) else {}))
+    if _any(text, "tax", "gst", "vat", "कर "):
+        return call("get_tax_summary")
+    if _any(text, "reconcil", "unmatched payment", "मिलान"):
+        return call("get_reconciliation_summary")
+    if _any(text, "revenue", "total income") and not _any(text, "customer revenue", "online revenue"):
+        return call("get_revenue_summary")
     if _any(
         text, "dashboard", "overview", "at a glance", "how is my business", "business kaisa", "kaisa chal"
     ):

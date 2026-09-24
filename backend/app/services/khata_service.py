@@ -829,3 +829,112 @@ def collections_between(session: Session, shop_id: int, start: date, end: date) 
         )
     )
     return Decimal(payments or 0) - Decimal(undone or 0)
+
+
+# --- Read-only views for finance (Phase 15). Khata stays the only owner of `customer_ledger`. ---
+
+
+@dataclass(frozen=True)
+class PaymentView:
+    id: int
+    customer_id: int
+    entry_date: date
+    amount: Decimal  # positive: money received
+    payment_method: PaymentMethod | None
+    payment_reference: str | None
+    note: str | None
+    created_by: int
+
+
+def list_payments(session: Session, shop_id: int, start: date, end: date) -> list[PaymentView]:
+    """Customer payments dated `start`..`end`, minus any that were reversed. Read-only."""
+    reversed_ids = select(CustomerLedgerEntry.reverses_entry_id).where(
+        CustomerLedgerEntry.shop_id == shop_id, CustomerLedgerEntry.reverses_entry_id.is_not(None)
+    )
+    rows = session.scalars(
+        select(CustomerLedgerEntry).where(
+            CustomerLedgerEntry.shop_id == shop_id,
+            CustomerLedgerEntry.entry_type == CustomerLedgerEntryType.PAYMENT,
+            CustomerLedgerEntry.entry_date >= start,
+            CustomerLedgerEntry.entry_date <= end,
+            CustomerLedgerEntry.id.not_in(reversed_ids),
+        )
+    )
+    return [
+        PaymentView(
+            c.id,
+            c.customer_id,
+            c.entry_date,
+            -c.amount_delta,
+            c.payment_method,
+            c.payment_reference,
+            c.note,
+            c.created_by,
+        )
+        for c in rows
+    ]
+
+
+@dataclass(frozen=True)
+class AgingEvent:
+    customer_id: int
+    entry_date: date
+    amount_delta: Decimal  # positive: the customer owes more
+    entry_type: CustomerLedgerEntryType
+    id: int
+
+
+def aging_events(session: Session, shop_id: int, as_of: date) -> list[AgingEvent]:
+    """Every ledger movement up to `as_of`, oldest first, for ageing what is owed. Read-only."""
+    rows = session.scalars(
+        select(CustomerLedgerEntry)
+        .where(CustomerLedgerEntry.shop_id == shop_id, CustomerLedgerEntry.entry_date <= as_of)
+        .order_by(CustomerLedgerEntry.entry_date, CustomerLedgerEntry.id)
+    )
+    return [AgingEvent(c.customer_id, c.entry_date, c.amount_delta, c.entry_type, c.id) for c in rows]
+
+
+def period_totals(
+    session: Session, shop_id: int, start: date, end: date
+) -> dict[CustomerLedgerEntryType, Decimal]:
+    """Signed ledger movement per entry type inside a period. Read-only."""
+    rows = session.execute(
+        select(CustomerLedgerEntry.entry_type, func.coalesce(func.sum(CustomerLedgerEntry.amount_delta), 0))
+        .where(
+            CustomerLedgerEntry.shop_id == shop_id,
+            CustomerLedgerEntry.entry_date >= start,
+            CustomerLedgerEntry.entry_date <= end,
+        )
+        .group_by(CustomerLedgerEntry.entry_type)
+    ).all()
+    return {entry_type: Decimal(total or 0) for entry_type, total in rows}
+
+
+def get_payment(session: Session, shop_id: int, payment_id: int) -> PaymentView | None:
+    """One un-reversed customer payment, or None. Read-only."""
+    row = session.scalar(
+        select(CustomerLedgerEntry).where(
+            CustomerLedgerEntry.shop_id == shop_id,
+            CustomerLedgerEntry.id == payment_id,
+            CustomerLedgerEntry.entry_type == CustomerLedgerEntryType.PAYMENT,
+        )
+    )
+    if row is None:
+        return None
+    reversed_by = session.scalar(
+        select(CustomerLedgerEntry.id).where(
+            CustomerLedgerEntry.shop_id == shop_id, CustomerLedgerEntry.reverses_entry_id == row.id
+        )
+    )
+    if reversed_by is not None:
+        return None
+    return PaymentView(
+        row.id,
+        row.customer_id,
+        row.entry_date,
+        -row.amount_delta,
+        row.payment_method,
+        row.payment_reference,
+        row.note,
+        row.created_by,
+    )

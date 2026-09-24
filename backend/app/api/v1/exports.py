@@ -498,3 +498,52 @@ def export_campaign_sends(
     campaign_id: int, ctx: Ctx, session: ReadSession, fmt: Format = ExportFormat.CSV
 ) -> Response:
     return download(export_datasets.export_campaign_sends(session, ctx, fmt, campaign_id))
+
+
+# --- Finance (Phase 15): each file needs its finance view permission and FINANCE_EXPORT ---
+
+
+def _range(session: Session, ctx: Ctx, date_from: date | None, date_to: date | None) -> tuple[date, date]:
+    from app.services.shop_service import get_shop, shop_today
+
+    end = date_to or shop_today(get_shop(session, ctx.shop_id))
+    return (date_from or end.replace(day=1)), end
+
+
+@router.get("/finance-ledger")
+def export_finance_ledger(
+    ctx: Ctx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    start, end = _range(session, ctx, date_from, date_to)
+    return download(export_datasets.export_finance_ledger(session, ctx, fmt, start, end))
+
+
+@router.get("/expenses")
+def export_expenses(
+    ctx: Ctx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    return download(export_datasets.export_expenses(session, ctx, fmt, date_from, date_to))
+
+
+@router.get("/payables")
+def export_payables(
+    ctx: Ctx, session: ReadSession, fmt: Format = ExportFormat.CSV, as_of: date | None = None
+) -> Response:
+    _, end = _range(session, ctx, None, as_of)
+    return download(export_datasets.export_payables(session, ctx, fmt, end))
+
+
+@router.get("/receivables")
+def export_receivables(
+    ctx: Ctx, session: ReadSession, fmt: Format = ExportFormat.CSV, as_of: date | None = None
+) -> Response:
+    _, end = _range(session, ctx, None, as_of)
+    return download(export_datasets.export_receivables(session, ctx, fmt, end))

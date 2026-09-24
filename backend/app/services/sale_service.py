@@ -55,6 +55,7 @@ from app.models.enums import (
 )
 from app.services import (
     entitlement_service,
+    finance_period_service,
     inventory_service,
     khata_service,
     loyalty_service,
@@ -925,6 +926,7 @@ def post_sale(
     today = shop_today(shop)
     if sale.sale_date > today:
         raise InvalidInputError("The sale date cannot be in the future.", field="sale_date")
+    finance_period_service.assert_open(session, ctx, sale.sale_date, action="post_sale")
 
     # Re-check every line as it is now (a product may have been deactivated since the cart was made), and
     # recompute the totals from the lines: nothing supplied earlier is trusted.
@@ -1073,6 +1075,8 @@ def void_sale(session: Session, ctx: RequestContext, sale_id: int, reason: str) 
     sale = _get_sale(session, ctx.shop_id, sale_id, lock=True)
     if sale.status is SaleStatus.VOID:
         raise ConflictError("This sale is already void.")
+    if sale.status is SaleStatus.POSTED:
+        finance_period_service.assert_open(session, ctx, sale.sale_date, action="void_sale")
 
     before = _snapshot(sale)
     was_posted = sale.status is SaleStatus.POSTED

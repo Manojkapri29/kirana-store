@@ -60,7 +60,6 @@ def _drop_triggers() -> None:
             op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_insert_only ON {table}")
 
 
-
 NEW_PERMISSIONS = {
     "OWNER": ["STOCK_COUNT_VIEW", "STOCK_COUNT_CREATE", "STOCK_COUNT_REVIEW", "STOCK_COUNT_APPROVE", "STOCK_COUNT_POST", "TASK_VIEW", "TASK_CREATE", "TASK_ASSIGN", "TASK_COMPLETE", "TASK_CANCEL", "SCHEDULED_REPORT_MANAGE"],
     "MANAGER": ["STOCK_COUNT_VIEW", "STOCK_COUNT_CREATE", "STOCK_COUNT_REVIEW", "STOCK_COUNT_APPROVE", "STOCK_COUNT_POST", "TASK_VIEW", "TASK_CREATE", "TASK_ASSIGN", "TASK_COMPLETE", "TASK_CANCEL", "SCHEDULED_REPORT_MANAGE"],
@@ -70,11 +69,14 @@ NEW_PERMISSIONS = {
     "ACCOUNTANT": ["TASK_VIEW", "TASK_CREATE", "TASK_COMPLETE"],
 }  # fmt: skip
 
+
 def upgrade() -> None:
     # The AI can now also draft a task (task_service.create): still nothing financial or inventory-changing.
     with op.batch_alter_table("ai_actions") as batch_op:
         batch_op.drop_constraint("kind", type_="check")
-        batch_op.create_check_constraint("kind", "kind IN ('PURCHASE_DRAFT', 'STOCK_ADJUSTMENT', 'PROMOTION_DRAFT', 'TASK_DRAFT')")
+        batch_op.create_check_constraint(
+            "kind", "kind IN ('PURCHASE_DRAFT', 'STOCK_ADJUSTMENT', 'PROMOTION_DRAFT', 'TASK_DRAFT')"
+        )
 
     with op.batch_alter_table("products") as batch_op:
         batch_op.add_column(sa.Column("pack_size", sa.BigInteger(), nullable=True))
@@ -83,7 +85,9 @@ def upgrade() -> None:
         batch_op.create_check_constraint("moq_non_negative", "moq >= 0")
     with op.batch_alter_table("suppliers") as batch_op:
         batch_op.add_column(sa.Column("lead_time_days", sa.Integer(), nullable=True))
-        batch_op.create_check_constraint("lead_time_days_positive", "lead_time_days IS NULL OR lead_time_days > 0")
+        batch_op.create_check_constraint(
+            "lead_time_days_positive", "lead_time_days IS NULL OR lead_time_days > 0"
+        )
     with op.batch_alter_table("shops") as batch_op:
         batch_op.add_column(sa.Column("stock_count_variance_threshold", sa.BigInteger(), nullable=True))
         batch_op.create_check_constraint(
@@ -97,15 +101,31 @@ def upgrade() -> None:
         sa.Column("title", sa.String(200), nullable=False),
         sa.Column(
             "scope",
-            sa.Enum("FULL", "CATEGORY", "PRODUCTS", name="stock_count_scope", native_enum=False, create_constraint=True, length=8),
+            sa.Enum(
+                "FULL",
+                "CATEGORY",
+                "PRODUCTS",
+                name="stock_count_scope",
+                native_enum=False,
+                create_constraint=True,
+                length=8,
+            ),
             nullable=False,
         ),
         sa.Column("category_id", ID, nullable=True),
         sa.Column(
             "status",
             sa.Enum(
-                "DRAFT", "COUNTING", "REVIEW", "APPROVED", "POSTED", "CANCELLED",
-                name="stock_count_status", native_enum=False, create_constraint=True, length=9,
+                "DRAFT",
+                "COUNTING",
+                "REVIEW",
+                "APPROVED",
+                "POSTED",
+                "CANCELLED",
+                name="stock_count_status",
+                native_enum=False,
+                create_constraint=True,
+                length=9,
             ),  # fmt: skip
             server_default="DRAFT",
             nullable=False,
@@ -126,11 +146,31 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_stock_counts")),
         sa.UniqueConstraint("shop_id", "id", name=op.f("uq_stock_counts_shop_id_id")),
-        sa.ForeignKeyConstraint(["shop_id", "category_id"], ["categories.shop_id", "categories.id"], name=op.f("fk_stock_counts_shop_id_category_id")),
-        sa.ForeignKeyConstraint(["shop_id", "created_by"], ["users.shop_id", "users.id"], name=op.f("fk_stock_counts_shop_id_created_by")),
-        sa.ForeignKeyConstraint(["shop_id", "reviewed_by"], ["users.shop_id", "users.id"], name=op.f("fk_stock_counts_shop_id_reviewed_by")),
-        sa.ForeignKeyConstraint(["shop_id", "approved_by"], ["users.shop_id", "users.id"], name=op.f("fk_stock_counts_shop_id_approved_by")),
-        sa.ForeignKeyConstraint(["shop_id", "posted_by"], ["users.shop_id", "users.id"], name=op.f("fk_stock_counts_shop_id_posted_by")),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "category_id"],
+            ["categories.shop_id", "categories.id"],
+            name=op.f("fk_stock_counts_shop_id_category_id"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "created_by"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_stock_counts_shop_id_created_by"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "reviewed_by"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_stock_counts_shop_id_reviewed_by"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "approved_by"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_stock_counts_shop_id_approved_by"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "posted_by"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_stock_counts_shop_id_posted_by"),
+        ),
         sa.ForeignKeyConstraint(["shop_id"], ["shops.id"], name=op.f("fk_stock_counts_shop_id")),
     )
     op.create_index("ix_stock_counts_shop_status", "stock_counts", ["shop_id", "status"])
@@ -152,10 +192,24 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_stock_count_items")),
         sa.UniqueConstraint("shop_id", "id", name=op.f("uq_stock_count_items_shop_id_id")),
-        sa.UniqueConstraint("stock_count_id", "product_id", name=op.f("uq_stock_count_items_stock_count_id_product_id")),
-        sa.ForeignKeyConstraint(["shop_id", "stock_count_id"], ["stock_counts.shop_id", "stock_counts.id"], name=op.f("fk_stock_count_items_shop_id_stock_count_id")),
-        sa.ForeignKeyConstraint(["shop_id", "product_id"], ["products.shop_id", "products.id"], name=op.f("fk_stock_count_items_shop_id_product_id")),
-        sa.ForeignKeyConstraint(["shop_id", "counted_by"], ["users.shop_id", "users.id"], name=op.f("fk_stock_count_items_shop_id_counted_by")),
+        sa.UniqueConstraint(
+            "stock_count_id", "product_id", name=op.f("uq_stock_count_items_stock_count_id_product_id")
+        ),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "stock_count_id"],
+            ["stock_counts.shop_id", "stock_counts.id"],
+            name=op.f("fk_stock_count_items_shop_id_stock_count_id"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "product_id"],
+            ["products.shop_id", "products.id"],
+            name=op.f("fk_stock_count_items_shop_id_product_id"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "counted_by"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_stock_count_items_shop_id_counted_by"),
+        ),
         sa.ForeignKeyConstraint(["shop_id"], ["shops.id"], name=op.f("fk_stock_count_items_shop_id")),
     )
     op.create_index("ix_stock_count_items_shop_count", "stock_count_items", ["shop_id", "stock_count_id"])
@@ -169,13 +223,31 @@ def upgrade() -> None:
         sa.Column("kind", sa.String(40), nullable=True),
         sa.Column(
             "status",
-            sa.Enum("OPEN", "IN_PROGRESS", "WAITING", "COMPLETED", "CANCELLED", name="task_status", native_enum=False, create_constraint=True, length=11),
+            sa.Enum(
+                "OPEN",
+                "IN_PROGRESS",
+                "WAITING",
+                "COMPLETED",
+                "CANCELLED",
+                name="task_status",
+                native_enum=False,
+                create_constraint=True,
+                length=11,
+            ),
             server_default="OPEN",
             nullable=False,
         ),
         sa.Column(
             "priority",
-            sa.Enum("LOW", "MEDIUM", "HIGH", name="task_priority", native_enum=False, create_constraint=True, length=6),
+            sa.Enum(
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                name="task_priority",
+                native_enum=False,
+                create_constraint=True,
+                length=6,
+            ),
             server_default="MEDIUM",
             nullable=False,
         ),
@@ -192,16 +264,34 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_business_tasks")),
         sa.UniqueConstraint("shop_id", "id", name=op.f("uq_business_tasks_shop_id_id")),
-        sa.ForeignKeyConstraint(["shop_id", "assigned_to"], ["users.shop_id", "users.id"], name=op.f("fk_business_tasks_shop_id_assigned_to")),
-        sa.ForeignKeyConstraint(["shop_id", "created_by"], ["users.shop_id", "users.id"], name=op.f("fk_business_tasks_shop_id_created_by")),
-        sa.ForeignKeyConstraint(["shop_id", "completed_by"], ["users.shop_id", "users.id"], name=op.f("fk_business_tasks_shop_id_completed_by")),
-        sa.ForeignKeyConstraint(["shop_id", "cancelled_by"], ["users.shop_id", "users.id"], name=op.f("fk_business_tasks_shop_id_cancelled_by")),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "assigned_to"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_business_tasks_shop_id_assigned_to"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "created_by"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_business_tasks_shop_id_created_by"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "completed_by"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_business_tasks_shop_id_completed_by"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "cancelled_by"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_business_tasks_shop_id_cancelled_by"),
+        ),
         sa.ForeignKeyConstraint(["shop_id"], ["shops.id"], name=op.f("fk_business_tasks_shop_id")),
         sa.CheckConstraint("length(trim(title)) > 0", name=op.f("ck_business_tasks_title_not_blank")),
     )
     op.create_index("ix_business_tasks_shop_status", "business_tasks", ["shop_id", "status"])
     op.create_index("ix_business_tasks_shop_assigned", "business_tasks", ["shop_id", "assigned_to", "status"])
-    op.create_index("ix_business_tasks_shop_entity", "business_tasks", ["shop_id", "entity_type", "entity_id"])
+    op.create_index(
+        "ix_business_tasks_shop_entity", "business_tasks", ["shop_id", "entity_type", "entity_id"]
+    )
 
     op.create_table(
         "task_comments",
@@ -213,8 +303,16 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_task_comments")),
         sa.UniqueConstraint("shop_id", "id", name=op.f("uq_task_comments_shop_id_id")),
-        sa.ForeignKeyConstraint(["shop_id", "task_id"], ["business_tasks.shop_id", "business_tasks.id"], name=op.f("fk_task_comments_shop_id_task_id")),
-        sa.ForeignKeyConstraint(["shop_id", "user_id"], ["users.shop_id", "users.id"], name=op.f("fk_task_comments_shop_id_user_id")),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "task_id"],
+            ["business_tasks.shop_id", "business_tasks.id"],
+            name=op.f("fk_task_comments_shop_id_task_id"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "user_id"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_task_comments_shop_id_user_id"),
+        ),
         sa.ForeignKeyConstraint(["shop_id"], ["shops.id"], name=op.f("fk_task_comments_shop_id")),
         sa.CheckConstraint("length(trim(body)) > 0", name=op.f("ck_task_comments_body_not_blank")),
     )
@@ -229,7 +327,16 @@ def upgrade() -> None:
         sa.Column("entity_id", ID, nullable=False),
         sa.Column(
             "status",
-            sa.Enum("PENDING", "APPROVED", "REJECTED", "CANCELLED", name="approval_status", native_enum=False, create_constraint=True, length=9),
+            sa.Enum(
+                "PENDING",
+                "APPROVED",
+                "REJECTED",
+                "CANCELLED",
+                name="approval_status",
+                native_enum=False,
+                create_constraint=True,
+                length=9,
+            ),
             server_default="PENDING",
             nullable=False,
         ),
@@ -244,14 +351,26 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_approval_requests")),
         sa.UniqueConstraint("shop_id", "id", name=op.f("uq_approval_requests_shop_id_id")),
-        sa.ForeignKeyConstraint(["shop_id", "requested_by"], ["users.shop_id", "users.id"], name=op.f("fk_approval_requests_shop_id_requested_by")),
-        sa.ForeignKeyConstraint(["shop_id", "decided_by"], ["users.shop_id", "users.id"], name=op.f("fk_approval_requests_shop_id_decided_by")),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "requested_by"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_approval_requests_shop_id_requested_by"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "decided_by"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_approval_requests_shop_id_decided_by"),
+        ),
         sa.ForeignKeyConstraint(["shop_id"], ["shops.id"], name=op.f("fk_approval_requests_shop_id")),
         sa.CheckConstraint("length(trim(kind)) > 0", name=op.f("ck_approval_requests_kind_not_blank")),
-        sa.CheckConstraint("length(trim(entity_type)) > 0", name=op.f("ck_approval_requests_entity_type_not_blank")),
+        sa.CheckConstraint(
+            "length(trim(entity_type)) > 0", name=op.f("ck_approval_requests_entity_type_not_blank")
+        ),
     )
     op.create_index("ix_approval_requests_shop_status", "approval_requests", ["shop_id", "status"])
-    op.create_index("ix_approval_requests_shop_entity", "approval_requests", ["shop_id", "entity_type", "entity_id"])
+    op.create_index(
+        "ix_approval_requests_shop_entity", "approval_requests", ["shop_id", "entity_type", "entity_id"]
+    )
 
     op.create_table(
         "scheduled_reports",
@@ -260,7 +379,15 @@ def upgrade() -> None:
         sa.Column("report_type", sa.String(40), nullable=False),
         sa.Column(
             "schedule",
-            sa.Enum("DAILY", "WEEKLY", "MONTHLY", name="report_schedule", native_enum=False, create_constraint=True, length=7),
+            sa.Enum(
+                "DAILY",
+                "WEEKLY",
+                "MONTHLY",
+                name="report_schedule",
+                native_enum=False,
+                create_constraint=True,
+                length=7,
+            ),
             nullable=False,
         ),
         sa.Column("is_active", sa.Boolean(), server_default="1", nullable=False),
@@ -274,9 +401,15 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_scheduled_reports")),
         sa.UniqueConstraint("shop_id", "id", name=op.f("uq_scheduled_reports_shop_id_id")),
-        sa.ForeignKeyConstraint(["shop_id", "created_by"], ["users.shop_id", "users.id"], name=op.f("fk_scheduled_reports_shop_id_created_by")),
+        sa.ForeignKeyConstraint(
+            ["shop_id", "created_by"],
+            ["users.shop_id", "users.id"],
+            name=op.f("fk_scheduled_reports_shop_id_created_by"),
+        ),
         sa.ForeignKeyConstraint(["shop_id"], ["shops.id"], name=op.f("fk_scheduled_reports_shop_id")),
-        sa.CheckConstraint("length(trim(report_type)) > 0", name=op.f("ck_scheduled_reports_report_type_not_blank")),
+        sa.CheckConstraint(
+            "length(trim(report_type)) > 0", name=op.f("ck_scheduled_reports_report_type_not_blank")
+        ),
     )
     op.create_index("ix_scheduled_reports_shop_active", "scheduled_reports", ["shop_id", "is_active"])
 
@@ -301,8 +434,17 @@ def downgrade() -> None:
             )
     with op.batch_alter_table("ai_actions") as batch_op:
         batch_op.drop_constraint("kind", type_="check")
-        batch_op.create_check_constraint("kind", "kind IN ('PURCHASE_DRAFT', 'STOCK_ADJUSTMENT', 'PROMOTION_DRAFT')")
-    for table in ("scheduled_reports", "approval_requests", "task_comments", "business_tasks", "stock_count_items", "stock_counts"):
+        batch_op.create_check_constraint(
+            "kind", "kind IN ('PURCHASE_DRAFT', 'STOCK_ADJUSTMENT', 'PROMOTION_DRAFT')"
+        )
+    for table in (
+        "scheduled_reports",
+        "approval_requests",
+        "task_comments",
+        "business_tasks",
+        "stock_count_items",
+        "stock_counts",
+    ):
         op.drop_table(table)
     with op.batch_alter_table("shops") as batch_op:
         batch_op.drop_constraint("stock_count_variance_threshold_non_negative", type_="check")

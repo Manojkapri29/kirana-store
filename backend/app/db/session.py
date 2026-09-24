@@ -12,7 +12,7 @@ ledger insert must happen inside the same one, or two simultaneous sales could b
 Never call `session.commit()` yourself inside a service; the transaction owner commits.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from functools import lru_cache
 
@@ -47,10 +47,32 @@ def write_transaction(factory: sessionmaker[Session] | None = None) -> Iterator[
         yield session
         session.commit()
     except BaseException:
+        pending = session.info.pop(AFTER_ROLLBACK_KEY, None)
         session.rollback()
+        if pending:
+            _record_after_rollback(session, pending)
         raise
     finally:
         session.close()
+
+
+AFTER_ROLLBACK_KEY = "after_rollback"
+
+
+def note_after_rollback(session: Session, action: Callable[[Session], None]) -> None:
+    """Ask for `action(session)` to run in a fresh transaction if THIS one is rolled back. For facts that must
+    outlive a refusal (for example "someone tried to change a closed period"): the refusal rolls the request
+    back, and without this the record of the attempt would go with it. It never runs on success."""
+    session.info.setdefault(AFTER_ROLLBACK_KEY, []).append(action)
+
+
+def _record_after_rollback(session: Session, actions: list[Callable[[Session], None]]) -> None:
+    try:
+        for action in actions:
+            action(session)
+        session.commit()
+    except Exception:  # noqa: BLE001 - a failure to note the attempt must never hide the original error
+        session.rollback()
 
 
 def get_session() -> Iterator[Session]:

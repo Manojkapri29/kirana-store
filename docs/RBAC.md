@@ -74,6 +74,16 @@ beyond its user, cannot change a role, and still only proposes: a person confirm
 Launching a campaign is a separate permission from managing one. The CRM AI tools are each gated by the matching `*_VIEW` code and
 `CAMPAIGN_DRAFT` needs `CAMPAIGN_MANAGE`.
 
+## Finance permissions (Phase 15)
+
+`FINANCE_VIEW`, `FINANCE_MANAGE`, `FINANCE_EXPENSE_VIEW`, `FINANCE_EXPENSE_MANAGE`, `FINANCE_EXPENSE_APPROVE`, `FINANCE_CASH_VIEW`,
+`FINANCE_CASH_MANAGE`, `FINANCE_RECONCILIATION_MANAGE`, `FINANCE_PERIOD_LOCK`, `FINANCE_PERIOD_UNLOCK`, `FINANCE_ADJUSTMENT_MANAGE`,
+`FINANCE_EXPORT`. Owner and manager hold all; the accountant has view, expense manage, cash, reconciliation, period lock and export
+(not approve, unlock or adjustments); the cashier only cash view/manage. Finance exports need the view permission **and**
+`FINANCE_EXPORT`. The shared `/approvals` endpoints authorise **by request kind**: stock count -> `STOCK_COUNT_APPROVE`, campaign ->
+`CAMPAIGN_LAUNCH`, loyalty adjustment -> `LOYALTY_MANAGE`, expense -> `FINANCE_EXPENSE_APPROVE`, finance adjustment ->
+`FINANCE_ADJUSTMENT_MANAGE`, period reopen -> `FINANCE_PERIOD_UNLOCK`.
+
 ## Adding a route or a permission
 
 1. Add the route. 2. Add its `_r(...)` line to `ROUTE_RULES`. 3. Run `pytest tests/test_rbac.py`: it names any route without a rule.

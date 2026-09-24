@@ -416,3 +416,76 @@ class ReferralEventStatus(StrEnum):
     REWARDED = "REWARDED"
     EXPIRED = "EXPIRED"
     INVALID = "INVALID"
+
+
+# --- Finance, accounting and business control (Phase 15) -----------------------------------------------
+
+
+class FinanceEventType(StrEnum):
+    """What kind of money event a ledger row is. Most are read from the documents that already exist (sales,
+    purchases, returns, khata payments); the rest are recorded by finance itself in `finance_entries`."""
+
+    SALE = "SALE"
+    PURCHASE = "PURCHASE"
+    SALE_RETURN = "SALE_RETURN"
+    PURCHASE_RETURN = "PURCHASE_RETURN"
+    CUSTOMER_PAYMENT = "CUSTOMER_PAYMENT"
+    SUPPLIER_PAYMENT = "SUPPLIER_PAYMENT"
+    EXPENSE = "EXPENSE"
+    OWNER_CAPITAL = "OWNER_CAPITAL"
+    OWNER_WITHDRAWAL = "OWNER_WITHDRAWAL"
+    ADJUSTMENT = "ADJUSTMENT"
+    OTHER_INCOME = "OTHER_INCOME"
+
+
+class FlowDirection(StrEnum):
+    IN = "IN"
+    OUT = "OUT"
+
+
+class ExpenseStatus(StrEnum):
+    DRAFT = "DRAFT"
+    SUBMITTED = "SUBMITTED"
+    APPROVED = "APPROVED"
+    POSTED = "POSTED"
+    REJECTED = "REJECTED"
+    VOIDED = "VOIDED"
+
+
+class FinancePaymentMethod(StrEnum):
+    """How money moved, for records finance itself owns. Sales, purchases and khata keep their own narrower
+    `PaymentMethod` (CASH, UPI, OTHER); every one of those values is also valid here. CREDIT is not a payment
+    method: a credit sale is simply unpaid and lives in the customer's khata."""
+
+    CASH = "CASH"
+    UPI = "UPI"
+    CARD = "CARD"
+    BANK_TRANSFER = "BANK_TRANSFER"
+    OTHER = "OTHER"
+
+
+class PeriodStatus(StrEnum):
+    OPEN = "OPEN"
+    LOCKED = "LOCKED"
+    CLOSED = "CLOSED"
+
+
+class ReconStatus(StrEnum):
+    MATCHED = "MATCHED"
+    UNMATCHED = "UNMATCHED"
+    PARTIAL = "PARTIAL"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+
+
+class CashFlowClass(StrEnum):
+    OPERATING = "OPERATING"
+    INVESTING = "INVESTING"
+    FINANCING = "FINANCING"
+    OTHER = "OTHER"
+
+
+class TaxType(StrEnum):
+    GST = "GST"
+    VAT = "VAT"
+    SALES_TAX = "SALES_TAX"
+    OTHER = "OTHER"

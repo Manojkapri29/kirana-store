@@ -10,6 +10,15 @@ from app.models.campaigns import Campaign, CampaignAudienceSnapshot, CampaignSen
 from app.models.catalog import Category, Product, Unit
 from app.models.crm import CustomerGroup, CustomerGroupMember, CustomerNote
 from app.models.expenses import Expense, ExpenseCategory
+from app.models.finance import (
+    CashCount,
+    FinanceEntry,
+    FinanceSettings,
+    FinancialPeriod,
+    ReconciliationMark,
+    TaxRate,
+    TaxSetting,
+)
 from app.models.inventory import InventoryTransaction
 from app.models.jobs import BackgroundJob
 from app.models.khata import CustomerLedgerEntry
@@ -80,7 +89,14 @@ __all__ = [
     "Customer",
     "CustomerLedgerEntry",
     "DocumentSequence",
+    "CashCount",
     "Expense",
+    "FinanceEntry",
+    "FinanceSettings",
+    "FinancialPeriod",
+    "ReconciliationMark",
+    "TaxRate",
+    "TaxSetting",
     "ExpenseCategory",
     "IdempotencyKey",
     "InventoryTransaction",

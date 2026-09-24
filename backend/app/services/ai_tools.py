@@ -33,18 +33,27 @@ from app.services import (
     analytics_service,
     authorization_service,
     campaign_service,
+    cashflow_service,
     crm_dashboard_service,
     crm_service,
     entitlement_service,
+    expense_service,
+    finance_dashboard_service,
+    finance_ledger_service,
     inventory_intelligence_service,
     inventory_service,
     khata_service,
     loyalty_service,
+    payables_service,
+    pnl_service,
     price_comparison_service,
+    receivables_service,
+    reconciliation_service,
     referral_service,
     retention_service,
     sales_report_service,
     supplier_intelligence_service,
+    tax_service,
 )
 from app.services import ai_format as fmt
 from app.services import ai_insights_service as insights_service
@@ -103,6 +112,26 @@ class LimitArgs(_Args):
 
 class PriceArgs(_Args):
     product: str = Field(min_length=1, max_length=100, description="The product's name, SKU or barcode.")
+
+
+class LedgerArgs(PeriodArgs):
+    limit: int = Field(default=15, ge=1, le=50)
+    event_type: (
+        Literal[
+            "SALE",
+            "PURCHASE",
+            "SALE_RETURN",
+            "PURCHASE_RETURN",
+            "CUSTOMER_PAYMENT",
+            "SUPPLIER_PAYMENT",
+            "EXPENSE",
+            "OWNER_CAPITAL",
+            "OWNER_WITHDRAWAL",
+            "ADJUSTMENT",
+            "OTHER_INCOME",
+        ]
+        | None
+    ) = None
 
 
 class CustomerArgs(_Args):
@@ -1445,6 +1474,416 @@ def _customer_growth_dashboard(tc: ToolContext, _args: NoArgs) -> Answer:
     )
 
 
+# --- Finance (Phase 15): read-only. Every figure comes from the same service the finance screens use. --------
+
+_FIN_NOTE = (
+    "Figures are read from the shop's own posted records. Nothing here changes any record.",
+    "आंकड़े दुकान के अपने पोस्ट किए रिकॉर्ड से लिए गए हैं। इससे कोई रिकॉर्ड नहीं बदलता।",
+)
+
+
+def _fin_answer(tc: ToolContext, tool: str, title: tuple[str, str], message: tuple[str, str], figures: list[Figure],
+                sources: list[str], period: ai_dates.Period | None = None, notes: list[str] | None = None,
+                table: Table | None = None, status: str = ANSWERED) -> Answer:  # fmt: skip
+    return Answer(
+        status,
+        tool,
+        tc.t(*title),
+        tc.t(*message),
+        figures,
+        table=table,
+        sources=sources,
+        period=_period_info(period) if period else None,
+        notes=[*(notes or []), tc.t(*_FIN_NOTE)],
+    )
+
+
+def _na(value: Decimal | None) -> str:
+    return fmt.money(value)
+
+
+def _revenue_summary(tc: ToolContext, args: PeriodArgs) -> Answer:
+    period = tc.period(args, "this month")
+    p = pnl_service.compute(tc.session, tc.ctx.shop_id, period.start, period.end)
+    notes = [
+        tc.t(
+            "Calculation: Detailed Sales + Quick Sales - Sales Returns, by posted date. There are no online orders in this application, so none are added.",
+            "गणना: विस्तृत बिक्री + क्विक सेल - बिक्री वापसी। इस ऐप में ऑनलाइन ऑर्डर नहीं हैं, इसलिए कुछ नहीं जोड़ा गया।",
+        )
+    ]
+    if p.quick_sales_have_no_cost:
+        notes.append(
+            tc.t(
+                "Limitation: Quick Sales count as revenue but have no product cost.",
+                "सीमा: क्विक सेल राजस्व में गिनी जाती है पर उसकी उत्पाद लागत नहीं होती।",
+            )
+        )
+    figures = [
+        Figure(tc.t("Detailed sales", "विस्तृत बिक्री"), _rupees(p.detailed_sales)),
+        Figure(tc.t("Quick sales", "क्विक सेल"), _rupees(p.quick_sales)),
+        Figure(tc.t("Sales returns", "बिक्री वापसी"), _rupees(p.sales_returns)),
+        Figure(tc.t("Net revenue", "शुद्ध राजस्व"), _rupees(p.revenue)),
+    ]
+    return _fin_answer(
+        tc,
+        "get_revenue_summary",
+        ("Revenue", "राजस्व"),
+        (f"Revenue for {period.label}.", f"{period.label} का राजस्व।"),
+        figures,
+        ["Based on posted sales, quick sales and sales returns"],
+        period,
+        notes,
+    )
+
+
+def _pnl_summary(tc: ToolContext, args: PeriodArgs) -> Answer:
+    period = tc.period(args, "this month")
+    p = pnl_service.compute(tc.session, tc.ctx.shop_id, period.start, period.end)
+    figures = [
+        Figure(tc.t("Revenue", "राजस्व"), _rupees(p.revenue)),
+        Figure(tc.t("Cost of goods sold", "बेचे माल की लागत"), _na(p.cogs)),
+        Figure(tc.t("Gross profit", "सकल मुनाफ़ा"), _na(p.gross_profit)),
+        Figure(tc.t("Operating expenses (posted)", "संचालन खर्च (पोस्ट किए)"), _rupees(p.operating_expenses)),
+        Figure(tc.t("Net profit", "शुद्ध मुनाफ़ा"), _na(p.net_profit)),
+        Figure(
+            tc.t("Gross margin", "सकल मार्जिन"),
+            f"{p.gross_margin_pct}%" if p.gross_margin_pct is not None else fmt.money(None),
+        ),
+    ]
+    notes = [
+        tc.t(
+            "Calculation: Gross profit = Revenue - cost of goods sold; Net profit = Gross profit - posted expenses; Gross margin = Gross profit / Revenue x 100.",
+            "गणना: सकल मुनाफ़ा = राजस्व - माल की लागत; शुद्ध मुनाफ़ा = सकल मुनाफ़ा - पोस्ट किए खर्च।",
+        )
+    ]
+    notes += p.notes
+    if p.costed_sales.status == "PARTIAL":
+        notes.append(
+            tc.t(
+                f"On the detailed sales whose cost is known ({p.costed_sales.coverage_pct}% of revenue) gross profit is {_rupees(p.costed_sales.gross_profit)}. This covers only that part of the business.",
+                f"जिन बिक्री की लागत ज्ञात है ({p.costed_sales.coverage_pct}% राजस्व) उन पर सकल मुनाफ़ा {_rupees(p.costed_sales.gross_profit)} है। यह केवल उतना हिस्सा है।",
+            )
+        )
+    status = ANSWERED if p.status == "ACTUAL" else NOT_AVAILABLE
+    msg = (
+        (f"Profit and loss for {period.label}.", f"{period.label} का लाभ-हानि।")
+        if status == ANSWERED
+        else (
+            f"Profit Not Available: Insufficient Cost Data for {period.label}.",
+            "मुनाफ़ा उपलब्ध नहीं: लागत का डेटा अपर्याप्त।",
+        )
+    )
+    return _fin_answer(
+        tc,
+        "get_pnl_summary",
+        ("Profit and loss", "लाभ-हानि"),
+        msg,
+        figures,
+        ["Based on posted sales, returns, stored cost snapshots and posted expenses"],
+        period,
+        notes,
+        status=status,
+    )
+
+
+def _expense_summary(tc: ToolContext, args: PeriodArgs) -> Answer:
+    period = tc.period(args, "this month")
+    total = expense_service.posted_expense_total(tc.session, tc.ctx.shop_id, period.start, period.end)
+    rows = expense_service.expenses_by_category(tc.session, tc.ctx.shop_id, period.start, period.end)
+    listed, _ = expense_service.list_expenses(
+        tc.session, tc.ctx.shop_id, date_from=period.start, date_to=period.end, limit=500
+    )
+    waiting = sum(1 for e in listed if e.status.value in ("DRAFT", "SUBMITTED", "APPROVED"))
+    if not rows and not waiting:
+        return Answer(
+            NO_DATA,
+            "get_expense_summary",
+            tc.t("Expenses", "खर्च"),
+            tc.t(f"No expenses recorded for {period.label}.", f"{period.label} के लिए कोई खर्च दर्ज नहीं।"),
+            period=_period_info(period),
+        )
+    table = (
+        Table(
+            [tc.t("Category", "श्रेणी"), tc.t("Posted amount", "पोस्ट राशि")],
+            [[n, _rupees(a)] for _, n, a in rows[:10]],
+        )
+        if rows
+        else None
+    )
+    notes = [
+        tc.t(
+            "Only POSTED expenses count (a voided one is netted out). Drafts, submitted, approved and rejected expenses are not included.",
+            "केवल पोस्ट किए खर्च गिने जाते हैं (रद्द किया खर्च घटाया जाता है)।",
+        )
+    ]
+    figures = [
+        Figure(tc.t("Posted expenses", "पोस्ट किए खर्च"), _rupees(total)),
+        Figure(
+            tc.t("Waiting to be posted", "पोस्ट होने की प्रतीक्षा में"),
+            str(waiting),
+            tc.t("not counted", "गिने नहीं गए"),
+        ),
+    ]
+    return _fin_answer(
+        tc,
+        "get_expense_summary",
+        ("Expenses", "खर्च"),
+        (f"Posted expenses for {period.label}.", f"{period.label} के पोस्ट किए खर्च।"),
+        figures,
+        ["Based on the finance ledger's expense entries"],
+        period,
+        notes,
+        table,
+    )
+
+
+def _cash_flow_summary(tc: ToolContext, args: PeriodArgs) -> Answer:
+    period = tc.period(args, "this month")
+    r = cashflow_service.compute(tc.session, tc.ctx.shop_id, period.start, period.end)
+    figures = [
+        Figure(tc.t("Cash inflow", "नकदी आवक"), _rupees(r.inflow)),
+        Figure(tc.t("Cash outflow", "नकदी जावक"), _rupees(r.outflow)),
+        Figure(tc.t("Net cash flow", "शुद्ध नकदी प्रवाह"), _rupees(r.net)),
+    ]
+    rows = [
+        [k, _rupees(v.inflow), _rupees(v.outflow)] for k, v in r.by_class.items() if v.inflow or v.outflow
+    ]
+    table = Table([tc.t("Class", "वर्ग"), tc.t("In", "आवक"), tc.t("Out", "जावक")], rows) if rows else None
+    notes = [
+        tc.t(
+            "Calculation: money that actually moved (the settled part of each record), inflows minus outflows. A credit sale is not an inflow until it is paid.",
+            "गणना: वास्तव में आया-गया पैसा; उधार बिक्री भुगतान होने तक आवक नहीं।",
+        ),
+        *r.notes,
+    ]
+    return _fin_answer(
+        tc,
+        "get_cash_flow_summary",
+        ("Cash flow", "नकदी प्रवाह"),
+        (f"Cash flow for {period.label}.", f"{period.label} का नकदी प्रवाह।"),
+        figures,
+        ["Based on the financial ledger view"],
+        period,
+        notes,
+        table,
+    )
+
+
+def _receivables_summary(tc: ToolContext, _args: NoArgs) -> Answer:
+    r = receivables_service.compute(tc.session, tc.ctx.shop_id, tc.today)
+    if not r.customers:
+        return Answer(
+            NO_DATA,
+            "get_receivables_summary",
+            tc.t("Receivables", "प्राप्य"),
+            tc.t("No customer owes anything right now.", "अभी किसी ग्राहक पर बकाया नहीं।"),
+        )
+    table = Table(
+        [tc.t("Customer", "ग्राहक"), tc.t("Owes", "बकाया"), tc.t("Oldest charge (days)", "सबसे पुराना (दिन)")],
+        [
+            [c.name, _rupees(c.balance), str(c.oldest_open_days) if c.oldest_open_days is not None else "—"]
+            for c in r.customers
+            if c.balance > 0
+        ][:10],
+    )
+    figures = [
+        Figure(tc.t("Total receivables", "कुल प्राप्य"), _rupees(r.total_receivables)),
+        Figure(tc.t("Customer advances", "ग्राहक अग्रिम"), _rupees(r.total_advances)),
+    ]
+    figures += [Figure(f"{b} {tc.t('days', 'दिन')}", _rupees(v)) for b, v in r.aging.items()]
+    notes = [tc.t(r.methodology, "कोई देय तिथि दर्ज नहीं है; उम्र हर प्रविष्टि की अपनी तारीख से गिनी जाती है।")]
+    return _fin_answer(
+        tc,
+        "get_receivables_summary",
+        ("Receivables", "प्राप्य"),
+        ("What customers owe, from Khata.", "ग्राहकों का बकाया, खाता से।"),
+        figures,
+        ["Based on the Khata ledger (the source of truth for customer balances)"],
+        None,
+        notes,
+        table,
+    )
+
+
+def _payables_summary(tc: ToolContext, _args: NoArgs) -> Answer:
+    r = payables_service.compute(tc.session, tc.ctx.shop_id, tc.today)
+    if not r.suppliers:
+        return Answer(
+            NO_DATA,
+            "get_payables_summary",
+            tc.t("Payables", "देय"),
+            tc.t("There are no supplier purchases yet.", "अभी कोई सप्लायर खरीद नहीं।"),
+        )
+    table = Table(
+        [tc.t("Supplier", "सप्लायर"), tc.t("Payable", "देय")],
+        [[x.name, _rupees(x.balance)] for x in r.suppliers if x.balance > 0][:10],
+    )
+    figures = [
+        Figure(tc.t("Total payable", "कुल देय"), _rupees(r.total_payable)),
+        Figure(tc.t("Supplier advances", "सप्लायर अग्रिम"), _rupees(r.total_advances)),
+    ]
+    figures += [Figure(f"{b} {tc.t('days', 'दिन')}", _rupees(v)) for b, v in r.aging.items()]
+    notes = [tc.t(r.methodology, "सप्लायर की भुगतान शर्तें दर्ज नहीं हैं; उम्र खरीद की अपनी तारीख से गिनी जाती है।")]
+    return _fin_answer(
+        tc,
+        "get_payables_summary",
+        ("Payables", "देय"),
+        ("What you owe suppliers.", "सप्लायरों को देय राशि।"),
+        figures,
+        ["Based on posted purchases, purchase returns and supplier payments"],
+        None,
+        notes,
+        table,
+    )
+
+
+def _financial_ledger(tc: ToolContext, args: LedgerArgs) -> Answer:
+    from app.models.enums import FinanceEventType
+
+    period = tc.period(args, "this month")
+    kinds = [FinanceEventType(args.event_type)] if args.event_type else None
+    rows = finance_ledger_service.list_ledger(
+        tc.session, tc.ctx.shop_id, period.start, period.end, event_types=kinds
+    )
+    if not rows:
+        return Answer(
+            NO_DATA,
+            "get_financial_ledger",
+            tc.t("Financial ledger", "वित्तीय खाता-बही"),
+            NO_DATA_TEXT,
+            period=_period_info(period),
+        )
+    cols = [
+        tc.t("Date", "तारीख"),
+        tc.t("Type", "प्रकार"),
+        tc.t("Reference", "संदर्भ"),
+        tc.t("Amount", "राशि"),
+        tc.t("Settled", "निपटाया"),
+        tc.t("Method", "तरीका"),
+    ]
+    body = [
+        [
+            r.entry_date.isoformat(),
+            r.event_type.value,
+            r.reference or f"{r.source_type}#{r.source_id}",
+            _rupees(r.amount),
+            _rupees(r.settled_amount),
+            r.payment_method,
+        ]
+        for r in rows[: args.limit]
+    ]
+    total_in = sum((r.settled_amount for r in rows if r.direction.value == "IN"), ZERO)
+    total_out = sum((r.settled_amount for r in rows if r.direction.value == "OUT"), ZERO)
+    notes = [
+        tc.t(
+            f"Showing {min(len(rows), args.limit)} of {len(rows)} rows, newest first. Every row points to its source document.",
+            f"{len(rows)} में से {min(len(rows), args.limit)} पंक्तियाँ, नई पहले।",
+        )
+    ]
+    figures = [
+        Figure(tc.t("Money in", "आवक"), _rupees(total_in)),
+        Figure(tc.t("Money out", "जावक"), _rupees(total_out)),
+    ]
+    return _fin_answer(
+        tc,
+        "get_financial_ledger",
+        ("Financial ledger", "वित्तीय खाता-बही"),
+        (f"Money events for {period.label}.", f"{period.label} की धन-प्रविष्टियाँ।"),
+        figures,
+        [
+            "Based on the financial ledger view over sales, purchases, returns, khata payments and finance entries"
+        ],
+        period,
+        notes,
+        Table(cols, body),
+    )
+
+
+def _tax_summary(tc: ToolContext, args: PeriodArgs) -> Answer:
+    period = tc.period(args, "this month")
+    t = tax_service.summary(tc.session, tc.ctx.shop_id, period.start, period.end)
+    if t.status != "CONFIGURED":
+        return Answer(
+            NOT_CONFIGURED,
+            "get_tax_summary",
+            tc.t("Tax summary", "कर सारांश"),
+            tc.t(
+                "Tax has not been configured for this shop, so no tax can be calculated.",
+                "इस दुकान के लिए कर सेट नहीं है, इसलिए कर की गणना नहीं हो सकती।",
+            ),
+            period=_period_info(period),
+        )
+    figures = [
+        Figure(tc.t("Taxable sales", "कर योग्य बिक्री"), _rupees(t.sales.taxable_amount)),
+        Figure(tc.t("Tax collected (net of returns)", "एकत्र कर (वापसी घटाकर)"), _rupees(t.tax_collected)),
+        Figure(tc.t("Taxable purchases", "कर योग्य खरीद"), _rupees(t.purchases.taxable_amount)),
+        Figure(tc.t("Tax paid (net of returns)", "चुकाया कर (वापसी घटाकर)"), _rupees(t.tax_paid)),
+        Figure(tc.t("Indicative net tax", "संकेतात्मक शुद्ध कर"), _rupees(t.net_tax)),
+    ]
+    notes = [t.methodology, t.disclaimer, *t.notes]
+    return _fin_answer(
+        tc,
+        "get_tax_summary",
+        ("Tax summary", "कर सारांश"),
+        (f"Tax reporting foundation figures for {period.label}.", f"{period.label} के कर रिपोर्टिंग आंकड़े।"),
+        figures,
+        ["Based on the shop's configured tax rates and its posted sales and purchases"],
+        period,
+        notes,
+    )
+
+
+def _reconciliation_summary(tc: ToolContext, args: PeriodArgs) -> Answer:
+    period = tc.period(args, "this month")
+    r = reconciliation_service.summary(tc.session, tc.ctx.shop_id, period.start, period.end)
+    figures = [
+        Figure(k.replace("_", " ").title(), f"{r.counts[k]} ({_rupees(r.amounts[k])})") for k in r.counts
+    ]
+    notes = [
+        tc.t(
+            "Bank Integration Not Configured: nothing is matched to a bank statement automatically.",
+            "बैंक एकीकरण सेट नहीं है: कुछ भी बैंक स्टेटमेंट से अपने-आप नहीं मिलाया जाता।",
+        )
+    ]
+    return _fin_answer(
+        tc,
+        "get_reconciliation_summary",
+        ("Reconciliation", "मिलान"),
+        (f"Electronic payment records for {period.label}.", f"{period.label} के इलेक्ट्रॉनिक भुगतान।"),
+        figures,
+        ["Based on the shop's own payment records and its manual review marks"],
+        period,
+        notes,
+    )
+
+
+def _financial_dashboard(tc: ToolContext, args: PeriodArgs) -> Answer:
+    period = tc.period(args, "this month")
+    d = finance_dashboard_service.build(tc.session, tc.ctx.shop_id, period.start, period.end, today=tc.today)
+    p = d.pnl
+    figures = [
+        Figure(tc.t("Revenue", "राजस्व"), _rupees(p.revenue)),
+        Figure(tc.t("Gross profit", "सकल मुनाफ़ा"), _na(p.gross_profit)),
+        Figure(tc.t("Net profit", "शुद्ध मुनाफ़ा"), _na(p.net_profit)),
+        Figure(tc.t("Operating expenses", "संचालन खर्च"), _rupees(p.operating_expenses)),
+        Figure(tc.t("Cash inflow", "नकदी आवक"), _rupees(d.cash_flow.inflow)),
+        Figure(tc.t("Cash outflow", "नकदी जावक"), _rupees(d.cash_flow.outflow)),
+        Figure(tc.t("Customer outstanding", "ग्राहक बकाया"), _rupees(d.customer_outstanding)),
+        Figure(tc.t("Supplier outstanding", "सप्लायर देय"), _rupees(d.supplier_outstanding)),
+        Figure(tc.t("Alerts to review", "देखने योग्य अलर्ट"), str(d.alert_count)),
+    ]
+    return _fin_answer(
+        tc,
+        "get_financial_dashboard",
+        ("Finance dashboard", "वित्त डैशबोर्ड"),
+        (f"Finance overview for {period.label}.", f"{period.label} का वित्त सारांश।"),
+        figures,
+        ["Based on the finance dashboard's own services (profit and loss, cash flow, khata, purchases)"],
+        period,
+        list(d.notes),
+    )
+
+
 def _insights(tc: ToolContext, _args: NoArgs) -> Answer:
     found = insights_service.insights(tc.session, tc.ctx.shop_id, tc.today)
     if not found:
@@ -1579,6 +2018,16 @@ TOOL_PERMISSION: dict[str, str] = {
     "get_campaign_summary": "CAMPAIGN_VIEW",
     "get_referral_summary": "REFERRAL_VIEW",
     "get_customer_growth_dashboard": "CRM_ANALYTICS_VIEW",
+    "get_revenue_summary": "FINANCE_VIEW",
+    "get_pnl_summary": "FINANCE_VIEW",
+    "get_expense_summary": "FINANCE_EXPENSE_VIEW",
+    "get_cash_flow_summary": "FINANCE_VIEW",
+    "get_receivables_summary": "FINANCE_VIEW",
+    "get_payables_summary": "FINANCE_VIEW",
+    "get_financial_ledger": "FINANCE_VIEW",
+    "get_tax_summary": "FINANCE_VIEW",
+    "get_reconciliation_summary": "FINANCE_VIEW",
+    "get_financial_dashboard": "FINANCE_VIEW",
 }  # fmt: skip
 
 TOOLS: dict[str, Tool] = {
@@ -1772,6 +2221,76 @@ TOOLS: dict[str, Tool] = {
             NoArgs,
             ADVANCED,
             _customer_growth_dashboard,
+        ),
+        Tool(
+            "get_revenue_summary",
+            "Revenue for a period: detailed sales + quick sales - returns.",
+            PeriodArgs,
+            ADVANCED,
+            _revenue_summary,
+        ),
+        Tool(
+            "get_pnl_summary",
+            "Profit and loss for a period (revenue, cost, gross and net profit, expenses); says when cost data is missing.",
+            PeriodArgs,
+            ADVANCED,
+            _pnl_summary,
+        ),
+        Tool(
+            "get_expense_summary",
+            "Posted expenses for a period, by category.",
+            PeriodArgs,
+            ADVANCED,
+            _expense_summary,
+        ),
+        Tool(
+            "get_cash_flow_summary",
+            "Cash inflows, outflows and net cash flow for a period.",
+            PeriodArgs,
+            ADVANCED,
+            _cash_flow_summary,
+        ),
+        Tool(
+            "get_receivables_summary",
+            "What customers owe (from Khata) with ageing.",
+            NoArgs,
+            ADVANCED,
+            _receivables_summary,
+        ),
+        Tool(
+            "get_payables_summary",
+            "What the shop owes suppliers, with ageing.",
+            NoArgs,
+            ADVANCED,
+            _payables_summary,
+        ),
+        Tool(
+            "get_financial_ledger",
+            "Recent money events (sales, purchases, payments, expenses...) with their source documents.",
+            LedgerArgs,
+            ADVANCED,
+            _financial_ledger,
+        ),
+        Tool(
+            "get_tax_summary",
+            "Tax collected and paid from the shop's configured tax rates (a reporting foundation, not a return).",
+            PeriodArgs,
+            ADVANCED,
+            _tax_summary,
+        ),
+        Tool(
+            "get_reconciliation_summary",
+            "How many electronic payment records are matched, partial, unmatched or need review.",
+            PeriodArgs,
+            ADVANCED,
+            _reconciliation_summary,
+        ),
+        Tool(
+            "get_financial_dashboard",
+            "The finance dashboard's headline figures for a period.",
+            PeriodArgs,
+            ADVANCED,
+            _financial_dashboard,
         ),
         Tool("get_insights", "Plain-language insights from the shop's data.", NoArgs, ADVANCED, _insights),
         Tool(

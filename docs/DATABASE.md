@@ -463,3 +463,18 @@ Downgrade removes the new structures and is **refused while one email belongs to
 
 All money is integer paise; every table carries `shop_id` with composite tenant foreign keys. Five tables get the existing insert-only
 triggers. Downgrade is tested (up → down → up). Nothing existing is renamed or dropped.
+
+
+## Migration 0018: finance (Phase 15)
+
+| Change | Detail |
+|---|---|
+| `finance_entries` | insert-only money events finance owns; unique on (shop, event type, reference type, reference id) and on `reverses_entry_id` |
+| `cash_counts`, `reconciliation_marks` | insert-only |
+| `financial_periods` | OPEN/LOCKED/CLOSED ranges, unique start per shop |
+| `tax_settings`, `tax_rates`, `finance_settings` | per-shop configuration (rates in basis points; thresholds nullable = off) |
+| `expenses` | rebuilt with the DRAFT..VOIDED lifecycle (refuses to run if the old table holds rows); `expense_categories.cash_flow_class` |
+| `role_permissions` | the 12 finance permissions for the system roles |
+
+All money is integer paise with composite tenant foreign keys. Three tables get the insert-only triggers (SQLite and PostgreSQL).
+Downgrade is tested (up, down, up).

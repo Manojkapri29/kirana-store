@@ -32,7 +32,13 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 ID = sa.BigInteger().with_variant(sa.Integer(), "sqlite")
-INSERT_ONLY = ["customer_notes", "loyalty_ledger", "campaign_audience_snapshots", "campaign_sends", "automation_runs"]
+INSERT_ONLY = [
+    "customer_notes",
+    "loyalty_ledger",
+    "campaign_audience_snapshots",
+    "campaign_sends",
+    "automation_runs",
+]
 
 NEW_PERMISSIONS = {
     "OWNER": [
@@ -113,10 +119,18 @@ def upgrade() -> None:
                 nullable=True,
             )
         )  # fmt: skip
-        batch_op.add_column(sa.Column("marketing_opt_in_email", sa.Boolean(), server_default="0", nullable=False))
-        batch_op.add_column(sa.Column("marketing_opt_in_sms", sa.Boolean(), server_default="0", nullable=False))
-        batch_op.add_column(sa.Column("marketing_opt_in_whatsapp", sa.Boolean(), server_default="0", nullable=False))
-        batch_op.add_column(sa.Column("marketing_opt_in_push", sa.Boolean(), server_default="0", nullable=False))
+        batch_op.add_column(
+            sa.Column("marketing_opt_in_email", sa.Boolean(), server_default="0", nullable=False)
+        )
+        batch_op.add_column(
+            sa.Column("marketing_opt_in_sms", sa.Boolean(), server_default="0", nullable=False)
+        )
+        batch_op.add_column(
+            sa.Column("marketing_opt_in_whatsapp", sa.Boolean(), server_default="0", nullable=False)
+        )
+        batch_op.add_column(
+            sa.Column("marketing_opt_in_push", sa.Boolean(), server_default="0", nullable=False)
+        )
         batch_op.add_column(sa.Column("referred_by_customer_id", ID, nullable=True))
     with op.batch_alter_table("customers") as batch_op:
         batch_op.create_foreign_key(
@@ -300,7 +314,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["shop_id", "customer_id"], ["customers.shop_id", "customers.id"], name=op.f("fk_campaign_audience_snapshots_shop_id_customer_id")),
         sa.ForeignKeyConstraint(["shop_id"], ["shops.id"], name=op.f("fk_campaign_audience_snapshots_shop_id")),
     )  # fmt: skip
-    op.create_index("ix_campaign_audience_shop_campaign", "campaign_audience_snapshots", ["shop_id", "campaign_id"])
+    op.create_index(
+        "ix_campaign_audience_shop_campaign", "campaign_audience_snapshots", ["shop_id", "campaign_id"]
+    )
 
     op.create_table(
         "campaign_sends",
@@ -382,7 +398,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["shop_id", "customer_id"], ["customers.shop_id", "customers.id"], name=op.f("fk_automation_runs_shop_id_customer_id")),
         sa.ForeignKeyConstraint(["shop_id"], ["shops.id"], name=op.f("fk_automation_runs_shop_id")),
     )  # fmt: skip
-    op.create_index("ix_automation_runs_shop_rule_customer", "automation_runs", ["shop_id", "rule_id", "customer_id"])
+    op.create_index(
+        "ix_automation_runs_shop_rule_customer", "automation_runs", ["shop_id", "rule_id", "customer_id"]
+    )
 
     # --- Referrals -------------------------------------------------------------------------------------------
 
@@ -456,7 +474,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["shop_id", "referred_customer_id"], ["customers.shop_id", "customers.id"], name=op.f("fk_referral_events_shop_id_referred_customer_id")),
         sa.ForeignKeyConstraint(["shop_id"], ["shops.id"], name=op.f("fk_referral_events_shop_id")),
     )  # fmt: skip
-    op.create_index("ix_referral_events_shop_referrer", "referral_events", ["shop_id", "referrer_customer_id"])
+    op.create_index(
+        "ix_referral_events_shop_referrer", "referral_events", ["shop_id", "referrer_customer_id"]
+    )
     op.create_index("ix_referral_events_shop_status", "referral_events", ["shop_id", "status"])
 
     # --- Permissions and the AI action kind -------------------------------------------------------------------
