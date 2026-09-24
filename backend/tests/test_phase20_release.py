@@ -48,3 +48,23 @@ def test_every_nginx_location_that_sets_headers_also_includes_the_security_heade
     for block in blocks:
         if "add_header" in block:
             assert "include /etc/nginx/snippets/security-headers.conf;" in block, block
+
+
+def test_a_hosting_platforms_database_url_is_understood(monkeypatch):
+    for name in ("KIRANA_DATABASE_URL", "DATABASE_URL", "POSTGRES_URL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgres://u:p@host.example/db?sslmode=require")
+    assert Settings(_env_file=None).database_url == "postgresql+psycopg://u:p@host.example/db?sslmode=require"
+    monkeypatch.setenv("KIRANA_DATABASE_URL", "sqlite:///./mine.db")  # the explicit setting always wins
+    assert Settings(_env_file=None).database_url == "sqlite:///./mine.db"
+
+
+def test_the_cron_endpoint_exists_only_with_a_secret_and_needs_it(real_client, monkeypatch):
+    client = real_client()
+    monkeypatch.delenv("CRON_SECRET", raising=False)
+    assert client.get("/api/cron/tick").status_code == 404  # not configured: it does not exist
+    monkeypatch.setenv("CRON_SECRET", "s3cret-value-for-tests")
+    assert client.get("/api/cron/tick").status_code == 401
+    assert client.get("/api/cron/tick", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    ok = client.get("/api/cron/tick", headers={"Authorization": "Bearer s3cret-value-for-tests"})
+    assert ok.status_code == 200 and set(ok.json()) == {"ran", "failed"}

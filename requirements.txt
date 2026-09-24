@@ -1,0 +1,2 @@
+# Vercel installs the serverless function's dependencies from this file: the backend's own list.
+-r backend/requirements.txt

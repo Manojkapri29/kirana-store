@@ -767,7 +767,7 @@ ROUTE_RULES: tuple[Rule, ...] = (
 # Routes that are deliberately outside the rules: they do not act inside a shop. (health, admin console with its own
 # token, the sign-in family, metrics.) `tests/test_rbac_routes.py` checks this list is exactly what is left over.
 UNGUARDED_PREFIXES = (
-    "/health", "/api/v1/admin", "/api/v1/auth", "/api/v1/webhooks", "/api/v1/public", "/docs", "/openapi.json", "/metrics",
+    "/health", "/api/v1/admin", "/api/v1/auth", "/api/v1/webhooks", "/api/v1/public", "/api/cron", "/docs", "/openapi.json", "/metrics",
 )  # fmt: skip
 
 _PARAM = re.compile(r"\{[^}]+\}")

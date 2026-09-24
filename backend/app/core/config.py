@@ -121,8 +121,21 @@ class Settings(BaseSettings):
             return [item.strip().lower() for item in value.split(",") if item.strip()]
         return value
 
-    # SQLite for the MVP; a PostgreSQL URL (postgresql+psycopg://...) works after the Phase 15 gate.
-    database_url: str = "sqlite:///./data/kirana.db"
+    # SQLite by default; PostgreSQL (postgresql+psycopg://...) is supported. Hosting platforms hand the URL over as DATABASE_URL or
+    # POSTGRES_URL (Vercel's Neon integration does), so those are accepted when KIRANA_DATABASE_URL is not set.
+    database_url: str = Field(
+        default="sqlite:///./data/kirana.db", validation_alias=AliasChoices("KIRANA_DATABASE_URL", "DATABASE_URL", "POSTGRES_URL")
+    )
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _postgres_scheme(cls, value: object) -> object:
+        """`postgres://` and `postgresql://` (what hosting platforms give) mean the psycopg 3 driver here."""
+        if isinstance(value, str):
+            for plain in ("postgres://", "postgresql://"):
+                if value.startswith(plain):
+                    return "postgresql+psycopg://" + value[len(plain) :]
+        return value
     # How long a SQLite connection waits for another writer before failing with "database is locked".
     db_busy_timeout_ms: int = 5000
     # PostgreSQL connection pool (ignored by SQLite). Total connections a process may hold = pool size + overflow; keep

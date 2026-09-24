@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.errors import register_error_handlers
-from app.api.routes import health
+from app.api.routes import cron, health
 from app.api.routes import metrics as metrics_route
 from app.api.v1.router import api_v1_router
 from app.core import diagnostics, observability
@@ -54,6 +54,7 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
 
     app.include_router(health.router)
+    app.include_router(cron.router)
     app.include_router(metrics_route.router)
     app.include_router(api_v1_router, prefix="/api/v1")
     return app
