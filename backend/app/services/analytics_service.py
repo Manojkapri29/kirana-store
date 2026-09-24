@@ -16,9 +16,10 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, type_coerce
 from sqlalchemy.orm import Session
 
+from app.db.types import Money
 from app.models import (
     Category,
     Product,
@@ -88,6 +89,7 @@ def _qty(value: object) -> Decimal:
     return value if isinstance(value, Decimal) else ZERO_QTY
 
 
+# NOTE: a SUM of a difference has no type of its own and comes back as raw paise; type_coerce restores Money.
 def product_sales(session: Session, shop_id: int, start: date, end: date) -> list[ProductSales]:
     """Quantity and revenue per product for posted sales in the period, less live returns dated in the period.
     Products that sold nothing are not listed. Highest revenue first."""
@@ -95,7 +97,7 @@ def product_sales(session: Session, shop_id: int, start: date, end: date) -> lis
         select(
             SaleItem.product_id,
             func.sum(SaleItem.quantity),
-            func.sum(SaleItem.line_total - SaleItem.promotion_discount),
+            type_coerce(func.sum(SaleItem.line_total - SaleItem.promotion_discount), Money),
         )
         .join(Sale, (Sale.shop_id == SaleItem.shop_id) & (Sale.id == SaleItem.sale_id))
         .where(

@@ -501,3 +501,15 @@ A consolidation layer, not a second accounting system (see [FINANCE.md](FINANCE.
 khata through one normalised ledger view; finance owns only expenses, insert-only entries, cash counts, reconciliation marks, periods
 and tax configuration. Period guards are called from the post/void paths of the source documents. The shared approval queue now
 authorises by request kind. `write_transaction` gained `note_after_rollback` so a refused change can still leave a record.
+
+
+## Phase 16 additions: analytics and business intelligence
+
+A read-only reporting layer, `app/reporting/`, over the existing services and ledgers (see [ANALYTICS.md](ANALYTICS.md)). Filters and periods
+are resolved on the server; KPIs are a registry with formula, source, unit and permission; the executive dashboard, KPI endpoint, exports,
+schedules and the assistant all call the same functions, so a figure cannot differ between them. `reporting/catalog.py` is the shared
+registry of table reports. New services: `saved_report_service` (saved custom reports, archived not deleted), `advanced_report_service`
+(scheduled advanced reports with idempotent `report_runs`), `analytics_export_service` (CSV/XLSX/PDF), `ai_bi_tools` (ten read-only tools). The custom
+report builder is an allowlist over provider rows: no user text is ever SQL. New tables: `saved_reports`, `report_runs` and four columns on
+`scheduled_reports` (migration `0019`). The reporting package may read ledger models; nothing in it writes.
+

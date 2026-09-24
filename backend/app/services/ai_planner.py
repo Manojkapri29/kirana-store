@@ -168,6 +168,51 @@ def _product_name(text: str) -> str | None:
     return name or None
 
 
+def _kpi_key(text: str) -> str | None:
+    """The KPI a question names (by its key or its name), longest name first so 'gross profit' beats 'profit'."""
+    from app.reporting import kpis
+
+    names = sorted(((d.name.casefold(), k) for k, (d, _fn) in kpis.KPIS.items()), key=lambda n: -len(n[0]))
+    for name, key in names:
+        if name in text or key.replace("_", " ") in text:
+            return key
+    return None
+
+
+def _route_bi(text: str, raw: str, call: Any) -> PlannedCall | Clarify | None:
+    """Business-intelligence questions (Phase 16). Only clear phrases route here; everything else falls through."""
+    if _any(text, "kpi", "key performance"):
+        key = _kpi_key(text)
+        return call("get_kpi", kpi=key) if key else call("get_executive_dashboard")
+    if _any(text, "executive dashboard", "executive summary", "executive overview"):
+        return call("get_executive_dashboard")
+    if _any(text, "cohort", "retention by month", "first purchase month"):
+        return call("get_cohort_report")
+    if _any(text, "observed together", "cross module", "cross-module", "across modules", "business insight"):
+        return call("get_cross_module_insights")
+    if _any(text, "saved report", "custom report"):
+        found = re.search(r"(?:#|\bid\s*|saved report\s+|custom report\s+)(\d+)\b", raw, re.I)
+        quoted = re.search(r"[\"'“”‘’]([^\"'“”‘’]{1,80})[\"'“”‘’]", raw)
+        if found:
+            return call("get_saved_report", report_id=int(found.group(1)))
+        if quoted:
+            return call("get_saved_report", name=quoted.group(1).strip())
+        return Clarify("Which saved report? Give its name in quotes or its number, for example: run saved report 3.")
+    if _any(text, "sales analytics", "sales trend", "sales by channel", "sales by payment", "sales by category"):
+        view = "channels" if "channel" in text else "payment_methods" if "payment" in text else "categories" if "category" in text else "trend" if "trend" in text else "summary"
+        return call("get_sales_analytics", view=view)
+    if _any(text, "inventory analytics", "stock turnover", "inventory turnover", "stock out history", "stock-out", "stockout"):
+        view = "turnover" if "turnover" in text else "stock_outs" if _any(text, "stock out", "stock-out", "stockout") else "summary"
+        return call("get_inventory_analytics", view=view)
+    if _any(text, "customer analytics", "revenue by segment", "revenue by customer segment"):
+        return call("get_customer_analytics", view="segments" if "segment" in text else "overview")
+    if _any(text, "supplier analytics", "supplier spend", "supplier concentration", "spend by supplier", "purchases by supplier"):
+        return call("get_supplier_analytics", view="overview" if "concentration" in text else "spend")
+    if _any(text, "finance analytics", "financial analytics"):
+        return call("get_finance_analytics")
+    return None
+
+
 def route(question: str, today: date) -> PlannedCall | Clarify | None:
     """The tool for a common question, or None. Never guesses a dangerous default: an unclear period is passed on
     to the tool, which refuses it, and a missing product name is asked for."""
@@ -176,6 +221,10 @@ def route(question: str, today: date) -> PlannedCall | Clarify | None:
 
     def call(tool: str, **extra: Any) -> PlannedCall:
         return PlannedCall(tool, {**(period if TOOLS[tool].args.model_fields.get("period") else {}), **extra})
+
+    bi = _route_bi(text, question, call)
+    if bi is not None:
+        return bi
 
     if _any(
         text,

@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 from app.core.context import RequestContext
 from app.models import Product
 from app.services import (
+    ai_bi_tools,
     ai_dates,
     analytics_service,
     authorization_service,
@@ -52,7 +53,6 @@ from app.services import (
     referral_service,
     retention_service,
     sales_report_service,
-    supplier_intelligence_service,
     tax_service,
 )
 from app.services import ai_format as fmt
@@ -1210,32 +1210,7 @@ def _dead_stock(tc: ToolContext, _args: NoArgs) -> Answer:
     )  # fmt: skip
 
 
-def _supplier_analytics(tc: ToolContext, _args: NoArgs) -> Answer:
-    rows = [
-        a
-        for a in supplier_intelligence_service.list_analytics(tc.session, tc.ctx.shop_id, limit=None)
-        if a.purchase_count > 0
-    ]
-    source = "Based on posted purchases"
-    if not rows:
-        return Answer(
-            NO_DATA,
-            "get_supplier_analytics",
-            tc.t("Suppliers", "सप्लायर"),
-            tc.t("No posted purchases yet.", "अभी कोई पोस्ट की गई खरीद नहीं है।"),
-            sources=[source],
-        )
-    shown = rows[:15]
-    return Answer(
-        ANSWERED, "get_supplier_analytics", tc.t("Suppliers", "सप्लायर"),
-        tc.t(f"{len(rows)} supplier{'s have' if len(rows) != 1 else ' has'} at least one posted purchase.", f"{len(rows)} सप्लायर से कम से कम एक खरीद हुई है।"),
-        table=Table(
-            [tc.t("Supplier", "सप्लायर"), tc.t("Purchases", "खरीद"), tc.t("Total value", "कुल मूल्य"), tc.t("Products supplied", "आपूर्ति किए उत्पाद")],
-            [[a.name, str(a.purchase_count), fmt.money(a.total_value), str(a.supplied_product_count)] for a in shown],
-        ),
-        sources=[source],
-        notes=[tc.t("Suppliers are not ranked \"best\": review the figures yourself.", "सप्लायर की \"सर्वश्रेष्ठ\" रैंकिंग नहीं की जाती; आंकड़े खुद देखें।")],
-    )  # fmt: skip
+# (get_supplier_analytics now lives in ai_bi_tools: period-aware, and it needs the analytics and supplier permissions.)
 
 
 # --- CRM (Phase 14): every figure comes from the same service the CRM screens use, never recomputed here ---
@@ -2008,7 +1983,6 @@ TOOL_PERMISSION: dict[str, str] = {
     "get_promotion_ideas": "PROMOTION_VIEW", "get_online_order_summary": "ONLINE_ORDER_VIEW",
     "get_price_comparison": "PRICE_INTELLIGENCE_USE",
     "get_dead_stock": "INVENTORY_VIEW",
-    "get_supplier_analytics": "REPORT_VIEW",
     "get_customer_profile": "CRM_VIEW",
     "get_customer_segments": "CRM_VIEW",
     "get_customer_retention_summary": "CRM_ANALYTICS_VIEW",
@@ -2029,6 +2003,13 @@ TOOL_PERMISSION: dict[str, str] = {
     "get_reconciliation_summary": "FINANCE_VIEW",
     "get_financial_dashboard": "FINANCE_VIEW",
 }  # fmt: skip
+
+# Business-intelligence tools (Phase 16): the primary permission goes in TOOL_PERMISSION, the data permissions the matching
+# analytics endpoint also needs go in TOOL_EXTRA_PERMISSIONS. `run_tool` requires all of them.
+TOOL_EXTRA_PERMISSIONS: dict[str, tuple[str, ...]] = {}
+for _name, (_d, _a, _f, _primary, _extra) in ai_bi_tools.BI_TOOLS.items():
+    TOOL_PERMISSION[_name] = _primary
+    TOOL_EXTRA_PERMISSIONS[_name] = _extra
 
 TOOLS: dict[str, Tool] = {
     tool.name: tool
@@ -2151,13 +2132,6 @@ TOOLS: dict[str, Tool] = {
             NoArgs,
             BASIC,
             _dead_stock,
-        ),
-        Tool(
-            "get_supplier_analytics",
-            "Purchase totals, frequency and product count per supplier, from posted purchases.",
-            NoArgs,
-            ADVANCED,
-            _supplier_analytics,
         ),
         Tool(
             "get_customer_profile",
@@ -2334,9 +2308,11 @@ def run_tool(
         raise InvalidInputError(
             f"{'.'.join(str(p) for p in first['loc']) or 'arguments'}: {first['msg']}", field="args"
         ) from None
-    authorization_service.require(ctx, TOOL_PERMISSION[name])
+    authorization_service.require(ctx, TOOL_PERMISSION[name], *TOOL_EXTRA_PERMISSIONS.get(name, ()))
     entitlement_service.require_feature(session, ctx.shop_id, tool.feature)
     return tool.run(ToolContext(session, ctx, shop_today(get_shop(session, ctx.shop_id)), language), args)
 
 
-__all__ = ["TOOL_PERMISSION", "TOOLS", "Tool", "ToolContext", "run_tool", "EntitlementError"]
+TOOLS.update({name: Tool(name, desc, model, ADVANCED, fn) for name, (desc, model, fn, _p, _e) in ai_bi_tools.BI_TOOLS.items()})
+
+__all__ = ["TOOL_EXTRA_PERMISSIONS", "TOOL_PERMISSION", "TOOLS", "Tool", "ToolContext", "run_tool", "EntitlementError"]

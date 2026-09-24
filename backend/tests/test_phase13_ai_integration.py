@@ -68,8 +68,10 @@ class TestNewIntelligenceTools:
         assert ai_tools.TOOL_PERMISSION["get_dead_stock"] == "INVENTORY_VIEW"
         assert "get_dead_stock" in ai_tools.TOOLS
 
-    def test_supplier_analytics_tool_is_gated_by_report_view_permission(self):
-        assert ai_tools.TOOL_PERMISSION["get_supplier_analytics"] == "REPORT_VIEW"
+    def test_supplier_analytics_tool_is_gated_by_the_analytics_and_supplier_permissions(self):
+        # Phase 16 made this tool period-aware and analytics-grade: it now needs ANALYTICS_ADVANCED plus the supplier data.
+        assert ai_tools.TOOL_PERMISSION["get_supplier_analytics"] == "ANALYTICS_ADVANCED"
+        assert set(ai_tools.TOOL_EXTRA_PERMISSIONS["get_supplier_analytics"]) == {"SUPPLIER_VIEW", "PURCHASE_VIEW"}
         assert "get_supplier_analytics" in ai_tools.TOOLS
 
     def test_every_tool_has_exactly_one_permission_entry(self):

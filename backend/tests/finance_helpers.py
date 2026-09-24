@@ -43,13 +43,15 @@ def make_sale(
     method=PaymentMethod.CASH,
     customer_id=None,
     cogs=None,
-    unit_cost="__auto__",
+    product=None,
+    qty=1,
+    promo_discount="0.00",
 ):  # noqa: ANN001
     """A POSTED detailed sale of one line. `paid=None` = paid in full; `cogs=None` = the cost is UNKNOWN
     (never zero); pass a Decimal for a known cost."""
     total = D(total)
     n = next(_n)
-    product = factories.make_product(session, tenant.shop, tenant.category, name=f"P{n}", sku=f"SKU-F{n}")
+    product = product or factories.make_product(session, tenant.shop, tenant.category, name=f"P{n}", sku=f"SKU-F{n}")
     paid_amount = total if paid is None else D(paid)
     sale = Sale(
         shop_id=tenant.shop.id, invoice_no=f"INV/T/{n:04d}", status=SaleStatus.POSTED, sale_date=day,
@@ -66,10 +68,11 @@ def make_sale(
             sale_id=sale.id,
             product_id=product.id,
             unit_id=product.unit_id,
-            quantity=D(1),
-            unit_price=total,
+            quantity=D(qty),
+            unit_price=total / D(qty),
             line_total=total,
-            unit_cost=None if cogs is None else D(cogs),
+            promotion_discount=D(promo_discount),
+            unit_cost=None if cogs is None else (D(cogs) / D(qty)).quantize(D('0.01')),
             cogs_amount=None if cogs is None else D(cogs),
         )
     )
@@ -144,3 +147,23 @@ def make_sales_return(session, tenant, sale, refund, *, day: date, mode=RefundMo
     )
     session.flush()
     return ret
+
+
+def make_promotion_use(session, tenant, sale, name, discount):  # noqa: ANN001
+    """Record that `sale` used a promotion called `name` (creates the promotion row it points at)."""
+    from app.models import Promotion, SalePromotion
+    from app.models.enums import PromotionScope, PromotionStatus, PromotionType
+
+    promo = Promotion(
+        shop_id=tenant.shop.id, name=name, promo_type=PromotionType.AMOUNT, scope=PromotionScope.CART,
+        status=PromotionStatus.ACTIVE, amount=D(discount), created_by=tenant.user.id,
+    )
+    session.add(promo)
+    session.flush()
+    use = SalePromotion(
+        shop_id=tenant.shop.id, sale_id=sale.id, promotion_id=promo.id, position=1, name=name,
+        promo_type=PromotionType.AMOUNT, terms=f"{discount} off", discount_amount=D(discount), basis="test",
+    )
+    session.add(use)
+    session.flush()
+    return promo

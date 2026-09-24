@@ -10,6 +10,7 @@ from app.api.v1 import (
     account,
     admin,
     ai,
+    analytics,
     approvals,
     auth,
     automation,
@@ -74,6 +75,7 @@ api_v1_router.include_router(scheduled_reports.router)
 api_v1_router.include_router(crm.router)
 api_v1_router.include_router(crm_dashboard.router)
 api_v1_router.include_router(loyalty.router)
+api_v1_router.include_router(analytics.router)
 api_v1_router.include_router(finance.router)
 api_v1_router.include_router(finance_reports.router)
 api_v1_router.include_router(campaigns.router)

@@ -47,3 +47,8 @@ class ScheduledReport(TimestampMixin, Base):
     # A small JSON summary only (figures and counts, the same shape the API returns): never a document,
     # never raw rows.
     last_result: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    # Advanced reports (Phase 16): what to run and how to deliver it. Null for the original summaries.
+    params: Mapped[dict[str, Any] | None] = mapped_column(JSON)  # filters, saved_report_id, ...
+    export_format: Mapped[str | None] = mapped_column(String(10))  # CSV | XLSX | PDF
+    delivery_channel: Mapped[str | None] = mapped_column(String(20))  # EMAIL, or null for in-app only
+    recipients: Mapped[list[str] | None] = mapped_column(JSON)

@@ -396,8 +396,10 @@ class TestNoBusinessSpecificCodeInTheCore:
 
         assert readers == [
             "account_cli.py",  # the operator tool that sets up a shop and its first owner
+            "api/v1/analytics.py",  # the analytics filter parameter (carried, never branched on)
             "api/v1/reference.py",  # the shop endpoints and the business-type list
             "models/shop.py",  # the column and the reference table
+            "reporting/filters.py",  # the common report filter carries the value; no report behaves differently by type
             "schemas/catalog.py",  # their JSON shapes
             "seed.py",  # the development shop
             "services/business_type_service.py",  # the only place that knows what a type suggests

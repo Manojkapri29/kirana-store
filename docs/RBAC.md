@@ -84,6 +84,14 @@ Launching a campaign is a separate permission from managing one. The CRM AI tool
 `CAMPAIGN_LAUNCH`, loyalty adjustment -> `LOYALTY_MANAGE`, expense -> `FINANCE_EXPENSE_APPROVE`, finance adjustment ->
 `FINANCE_ADJUSTMENT_MANAGE`, period reopen -> `FINANCE_PERIOD_UNLOCK`.
 
+## Phase 16: analytics permissions
+
+`ANALYTICS_VIEW`, `ANALYTICS_ADVANCED`, `ANALYTICS_EXECUTIVE`, `ANALYTICS_CUSTOM_REPORT`, `ANALYTICS_EXPORT`, `ANALYTICS_SCHEDULE`. Owner and manager hold all
+six; the accountant has view, advanced and export. Every analytics route needs an analytics permission **and** the permission of the data
+it shows (finance analytics need `FINANCE_VIEW`; customer analytics `CRM_ANALYTICS_VIEW`; and so on: see [ANALYTICS.md](ANALYTICS.md)). A
+custom report is checked against its dataset's permissions each time it is saved or run; a KPI the role may not see is hidden, not
+zeroed. The AI tools declare a primary permission plus extras (`TOOL_EXTRA_PERMISSIONS`) mirroring the route rules.
+
 ## Adding a route or a permission
 
 1. Add the route. 2. Add its `_r(...)` line to `ROUTE_RULES`. 3. Run `pytest tests/test_rbac.py`: it names any route without a rule.

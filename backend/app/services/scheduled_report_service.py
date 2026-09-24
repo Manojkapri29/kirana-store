@@ -21,6 +21,7 @@ from app.db.types import utc_now
 from app.models import ScheduledReport
 from app.models.enums import ReportSchedule
 from app.services import (
+    advanced_report_service,
     ai_insights_service,
     analytics_service,
     business_health_service,
@@ -175,6 +176,11 @@ def update_schedule(
 
 
 def _run_one(session: Session, row: ScheduledReport) -> None:
+    if advanced_report_service.is_advanced(row.report_type):
+        advanced_report_service.run(session, row)  # idempotent per period; see that module
+        row.last_run_at = utc_now()
+        row.next_run_at = row.last_run_at + timedelta(days=INTERVAL_DAYS[row.schedule])
+        return
     shop = get_shop(session, row.shop_id)
     today = shop_today(shop)
     try:

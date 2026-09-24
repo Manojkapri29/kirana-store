@@ -125,6 +125,7 @@ All configuration comes from environment variables; nothing secret is committed.
 - Phase 14: [CRM](docs/CRM.md), [Loyalty](docs/LOYALTY.md), [Campaigns and reactivation](docs/CAMPAIGNS.md), [Marketing automation](docs/MARKETING_AUTOMATION.md)
 - Phase 15: [Finance](docs/FINANCE.md), [Ledger](docs/FINANCE_LEDGER.md), [Expenses](docs/EXPENSES.md), [Cash](docs/CASH_MANAGEMENT.md), [Profit and loss](docs/PROFIT_AND_LOSS.md), [Cash flow](docs/CASH_FLOW.md)
 - Phase 15: [Tax reporting](docs/TAX_REPORTING.md), [Period controls](docs/PERIOD_CONTROLS.md), [Reconciliation](docs/RECONCILIATION.md), [Dashboard and alerts](docs/FINANCE_DASHBOARD.md), [Finance AI tools](docs/FINANCE_AI_TOOLS.md)
+- Phase 16: [Analytics and business intelligence](docs/ANALYTICS.md), [KPI formulas and sources](docs/ANALYTICS_KPIS.md), [Cohort definitions](docs/ANALYTICS_COHORTS.md), [Report builder](docs/REPORT_BUILDER.md), [Analytics AI tools](docs/ANALYTICS_AI_TOOLS.md)
 - Phase 14: [Retention](docs/RETENTION.md), [Referrals and consent](docs/REFERRALS.md), [CRM AI tools](docs/CRM_AI_TOOLS.md)
 
 ## What Phase 8 added
@@ -349,3 +350,20 @@ English/Hindi "Finance" section. See [Finance](docs/FINANCE.md).
 
 **Not done (on purpose).** No bank, payment or tax-filing integration; no online orders exist to include; ageing is by transaction date
 because no due dates or payment terms are stored; split payments across methods are not recorded per method.
+
+## What Phase 16 added
+
+**Advanced reporting and business intelligence on top of what exists, with no second data source.** Common, server-resolved filters and
+periods (presets, comparison, both ends inclusive); a KPI framework of 31 KPIs each with a formula, source and limitations (and honest
+*Not Available* / *Insufficient Data* / *Insufficient comparison data*); an executive dashboard; sales, inventory, customer, supplier and
+finance analytics; cohort retention with written definitions; factual cross-module observations (never causes); drill-down from a total to
+the record; a custom report builder over an allowlist (never SQL; saved, editable, archived, never deleted); scheduled advanced reports
+(idempotent, "Delivery Channel Not Configured" when no provider exists); CSV, XLSX and PDF exports with title, shop, period and generated
+time; ten read-only AI tools; six analytics permissions; an English/Hindi **Analytics** section. See [Analytics](docs/ANALYTICS.md).
+
+**Measured, not assumed.** Timings on 25,000 sales are in [docs/ANALYTICS.md](docs/ANALYTICS.md); no index or cache was added because nothing
+measured needed one, and the one cost driver found (a daily finance trend over years) is bounded.
+
+**Not done (on purpose).** No online orders exist, so online figures are Not Available; no email or SMS provider, so scheduled reports are kept
+in the app; no supplier quality, reliability or delivery scores (no such data is recorded); PDF uses standard Latin-1 fonts.
+

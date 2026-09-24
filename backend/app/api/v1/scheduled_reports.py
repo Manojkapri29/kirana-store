@@ -9,12 +9,14 @@ from sqlalchemy.orm import Session
 from app.api.deps import Ctx
 from app.db.session import get_session, write_transaction
 from app.schemas.scheduled_reports import (
+    AdvancedScheduleIn,
+    ReportRunOut,
     ScheduledReportCreateIn,
     ScheduledReportListOut,
     ScheduledReportOut,
     ScheduledReportUpdateIn,
 )
-from app.services import scheduled_report_service
+from app.services import advanced_report_service, scheduled_report_service
 
 router = APIRouter(prefix="/scheduled-reports", tags=["scheduled reports"])
 ReadSession = Annotated[Session, Depends(get_session)]
@@ -35,6 +37,23 @@ def create_report(payload: ScheduledReportCreateIn, ctx: Ctx) -> ScheduledReport
                 session, ctx, report_type=payload.report_type, schedule=payload.schedule
             )
         )
+
+
+@router.post("/advanced", response_model=ScheduledReportOut, status_code=201)
+def create_advanced(payload: AdvancedScheduleIn, ctx: Ctx) -> ScheduledReportOut:
+    with write_transaction() as session:
+        return ScheduledReportOut.of(
+            advanced_report_service.create(
+                session, ctx, kind=payload.kind, schedule=payload.schedule, filters=payload.filters,
+                saved_report_id=payload.saved_report_id, export_format=payload.export_format,
+                delivery_channel=payload.delivery_channel, recipients=payload.recipients,
+            )
+        )
+
+
+@router.get("/{report_id}/runs", response_model=list[ReportRunOut])
+def report_runs(report_id: int, ctx: Ctx, session: ReadSession) -> list[ReportRunOut]:
+    return [ReportRunOut.of(r) for r in advanced_report_service.runs_of(session, ctx.shop_id, report_id)]
 
 
 @router.get("/{report_id}", response_model=ScheduledReportOut)

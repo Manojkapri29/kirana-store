@@ -455,7 +455,7 @@ class TestMigration0015:
         assert (
             set(counts) == {"OWNER", "MANAGER", "CASHIER", "INVENTORY_STAFF", "SALES_STAFF", "ACCOUNTANT"}
             and counts["OWNER"]
-            == 85  # 50 (Phase 12) + 11 (Phase 13) + 12 (Phase 14) + 12 finance permissions (Phase 15)
+            == 91  # 50 (Phase 12) + 11 (Phase 13) + 12 (Phase 14) + 12 (Phase 15) + 6 analytics (Phase 16)
         )
 
     def test_one_email_can_now_belong_to_two_shops_but_not_twice_to_one(self, tmp_path):

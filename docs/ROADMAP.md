@@ -25,6 +25,8 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 | 13 | Reports | Planned |
 | — | Business intelligence, stock counting, workflow automation (delivered as "Phase 13" of the build) | Done, backend only |
 | — | CRM, loyalty, campaigns, retention, referrals (delivered as "Phase 14" of the build) | Done, backend only |
+| — | Finance, accounting and business control (delivered as "Phase 15" of the build) | Done, with an English/Hindi Finance section |
+| — | Advanced reporting, business intelligence and executive analytics (delivered as "Phase 16" of the build; see [ANALYTICS.md](ANALYTICS.md)) | Done, with an English/Hindi Analytics section |
 | — | Authentication (was Phase 14) | Done in Phase 12 |
 | 15 | Testing, validation and PostgreSQL gate | Planned |
 | 16 | Deployment preparation | Planned |

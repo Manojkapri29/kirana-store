@@ -3,6 +3,7 @@ which Alembic uses to compare the models with the database."""
 
 from app.models.access import Account, AuthSession, Invitation, Role, RolePermission
 from app.models.ai import AiAction, AiUsage
+from app.models.analytics import ReportRun, SavedReport
 from app.models.approvals import ApprovalRequest
 from app.models.automation import AutomationRule, AutomationRun
 from app.models.base import Base
@@ -67,6 +68,8 @@ __all__ = [
     "ReferralProgram",
     "Role",
     "RolePermission",
+    "ReportRun",
+    "SavedReport",
     "ScheduledReport",
     "StockCount",
     "StockCountItem",

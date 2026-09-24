@@ -58,3 +58,26 @@ the worker in a tight retry loop). No notification is raised for a failed run.
   Wiring a provider is a configuration step, not a code change (see the final Phase 13 report's "Configuration
   Required" section).
 - A report's `last_result` is overwritten by each run; only the most recent run's result is kept.
+
+
+## Advanced reports (Phase 16)
+
+`advanced_report_service.py` extends the same table (`scheduled_reports`) and the same worker (`run_due`): a row whose `report_type` is
+`adv_kpis`, `adv_executive`, `adv_sales`, `adv_inventory`, `adv_customers`, `adv_cohorts`, `adv_suppliers`, `adv_finance` or `saved_report`
+is an advanced report. The six original types above are untouched. New columns: `params` (allowlisted filters, `saved_report_id`),
+`export_format` (CSV, XLSX or PDF), `delivery_channel` (`EMAIL` or none) and `recipients`; a new table `report_runs` keeps every run.
+
+* **Create:** `POST /scheduled-reports/advanced` (`ANALYTICS_SCHEDULE` + `SCHEDULED_REPORT_MANAGE`, and the permissions of the report's data,
+  checked when creating). Daily, weekly or monthly.
+* **Period:** the last **complete** day, Monday-to-Sunday week or calendar month before today (in the shop's time zone); never a partial one.
+* **Idempotent:** a run is keyed by (schedule, period end) and that key is unique in the database. Running again for the same period, from the
+  worker or "run now", returns the existing run and creates nothing (tested, including worker plus run-now). A period whose run
+  **failed** is tried again into the same row (access may be back, an archived report restored), so a transient failure does not block the
+  period for good and there is still exactly one row per period.
+* **Summary only:** each run stores counts and totals in `report_runs.summary`, never raw rows or customer names. The full file is one
+  request away through the export endpoint (`GET /analytics/export/{key}`).
+* **Delivery:** no provider is bundled. A schedule that asks for `EMAIL` is recorded with `delivery_status = NOT_CONFIGURED` and the words
+  "Delivery Channel Not Configured"; it is never reported as sent. Otherwise `STORED_IN_APP` plus an in-app notification.
+* **Permissions at run time:** a run acts with the creator's *current* permissions. If they lost access (or left the shop) the run is
+  recorded as `FAILED` with the reason and no summary is produced. An archived saved report also fails, honestly.
+* **History:** `GET /scheduled-reports/{id}/runs` (`ANALYTICS_SCHEDULE`).

@@ -22,7 +22,7 @@ EXPECTED_TABLES = {
     "plan_features", "plans", "price_observations", "product_images", "promotions", "purchase_items", "purchase_return_items", "purchase_returns", "purchases", "quick_sales",
     "sale_items", "sale_promotions", "sales", "sales_return_items", "sales_returns", "shop_subscriptions", "shops",
     "subscription_usage", "suppliers", "units", "users",
-    "approval_requests", "business_tasks", "scheduled_reports", "stock_count_items", "stock_counts", "task_comments",
+    "approval_requests", "business_tasks", "report_runs", "saved_reports", "scheduled_reports", "stock_count_items", "stock_counts", "task_comments",
     "automation_rules", "automation_runs", "campaigns", "campaign_audience_snapshots", "campaign_sends",
     "customer_groups", "customer_group_members", "customer_notes", "loyalty_ledger", "loyalty_programs",
     "referral_codes", "referral_events", "referral_programs",
@@ -30,7 +30,7 @@ EXPECTED_TABLES = {
     "tax_rates", "tax_settings",
 }  # fmt: skip
 
-HEAD = "0018"  # the newest revision: the one place to change when a migration is added
+HEAD = "0019"  # the newest revision: the one place to change when a migration is added
 
 MIGRATION_FILES = sorted((BACKEND_DIR / "migrations" / "versions").glob("*.py"))
 
