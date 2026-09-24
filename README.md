@@ -324,6 +324,12 @@ See [Referrals](docs/REFERRALS.md).
 default) need a second person's approval via the Phase 13 queue. The assistant gained nine read-only CRM tools and a
 `CAMPAIGN_DRAFT` action that can only create a draft. See [CRM AI tools](docs/CRM_AI_TOOLS.md).
 
-**Not done (on purpose, this phase).** No frontend screens; no real messaging provider; no scheduler for automation
+**Screens.** A "Growth" section (`/crm`): overview dashboard, campaigns (create draft, launch with confirmation, pause/cancel,
+per-customer outcomes), win-back preview and draft, loyalty program, automation rules, approval limits and the referral
+program, plus a per-customer growth profile (consent, loyalty adjustment, notes, timeline) linked from the customer page.
+English and Hindi. Not built: a screen for customer groups (campaigns can still target a saved group) and for approving a
+request (the existing Approvals API is used).
+
+**Not done (on purpose, this phase).** No real messaging provider; no scheduler for automation
 rules or campaign start times; referral rewards are not reversed on a sale void; no birthday/anniversary triggers
 (no such data) and no abandoned-cart (no online store).

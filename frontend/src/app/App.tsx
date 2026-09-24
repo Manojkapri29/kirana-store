@@ -1,5 +1,13 @@
 import { Route, Routes } from 'react-router-dom'
 
+import { AutomationPage } from '@/features/crm/AutomationPage'
+import { CampaignDetailPage } from '@/features/crm/CampaignDetailPage'
+import { CampaignsPage } from '@/features/crm/CampaignsPage'
+import { CrmDashboardPage } from '@/features/crm/CrmDashboardPage'
+import { CrmSettingsPage } from '@/features/crm/CrmSettingsPage'
+import { CustomerCrmPage } from '@/features/crm/CustomerCrmPage'
+import { LoyaltyPage } from '@/features/crm/LoyaltyPage'
+import { ReactivationPage } from '@/features/crm/ReactivationPage'
 import { CustomerDetailPage } from '@/features/customers/CustomerDetailPage'
 import { CustomerFormPage } from '@/features/customers/CustomerFormPage'
 import { CustomersPage } from '@/features/customers/CustomersPage'
@@ -91,6 +99,14 @@ export function App() {
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/new" element={<CustomerFormPage mode="create" />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
+        <Route path="customers/:id/crm" element={<CustomerCrmPage />} />
+        <Route path="crm" element={<CrmDashboardPage />} />
+        <Route path="crm/campaigns" element={<CampaignsPage />} />
+        <Route path="crm/campaigns/:id" element={<CampaignDetailPage />} />
+        <Route path="crm/reactivation" element={<ReactivationPage />} />
+        <Route path="crm/loyalty" element={<LoyaltyPage />} />
+        <Route path="crm/automation" element={<AutomationPage />} />
+        <Route path="crm/settings" element={<CrmSettingsPage />} />
         <Route path="customers/:id/edit" element={<CustomerFormPage mode="edit" />} />
         <Route path="suppliers" element={<SuppliersPage />} />
         <Route path="suppliers/new" element={<SupplierFormPage mode="create" />} />

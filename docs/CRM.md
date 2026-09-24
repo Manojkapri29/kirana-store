@@ -69,7 +69,7 @@ No new environment variables. Everything is per shop through the API (`/crm/appr
 
 ## Known limitations
 
-* No frontend screens. Dashboard filters: `period_days` only (no per-segment or per-channel filter yet).
+* No screens for customer groups or for deciding an approval request yet (the API exists). Dashboard filters: `period_days` only (no per-segment or per-channel filter yet).
 * No group deletion (deactivate-only philosophy; no DELETE routes exist).
 * Birthday/anniversary triggers are not possible: the customer record stores neither date. Abandoned-cart is n/a: there
   is no online store.

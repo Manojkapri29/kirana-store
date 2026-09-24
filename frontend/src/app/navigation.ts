@@ -3,6 +3,7 @@ import {
   BarChart3,
   Boxes,
   CreditCard,
+  HeartHandshake,
   Tag,
   Zap,
   LayoutDashboard,
@@ -80,6 +81,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: Users,
     labelKey: 'nav.customers',
   },
+  { id: 'crm', permission: 'CRM_ANALYTICS_VIEW', path: '/crm', icon: HeartHandshake, labelKey: 'nav.crm' },
   {
     id: 'suppliers', permission: 'SUPPLIER_VIEW',
     path: '/suppliers',

@@ -97,6 +97,9 @@ export function CustomerDetailPage() {
           <Badge tone={c.is_active ? 'green' : 'slate'}>{c.is_active ? t('common.active') : t('common.inactive')}</Badge>
         </div>
         <div className="flex flex-wrap gap-3">
+          <LinkButton to={`/customers/${c.id}/crm`} variant="secondary" requires="CRM_VIEW">
+            {t('crm.customer.openCrm')}
+          </LinkButton>
           <LinkButton to={`/customers/${c.id}/edit`} variant="secondary">
             <Pencil aria-hidden="true" className="size-5" />
             {t('common.edit')}
