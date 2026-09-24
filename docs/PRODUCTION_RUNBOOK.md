@@ -33,11 +33,11 @@ python -m app.integrity_cli && alembic current # 0021 (head)
 Drill result (Phase 20): after restore the data was exactly as of the backup (stock, khata balance), `integrity_check`, `foreign_key_check`
 and the application integrity checks were clean, the schema was at head, sign-in worked and a new sale posted. **Two things to know:**
 
-* The backup **does not contain uploaded photos**. Restoring the database alone leaves the product photo returning 404; copying the saved photo
-  folder back restored it byte-for-byte (SHA-256 matched).
-* The backup **registry lives inside the database**. Restoring an older backup makes newer backups disappear from `backup_cli list`. Their `.db` files
-  remain in `KIRANA_BACKUP_DIR`; a restore automatically first makes a "pre-restore" backup file, so nothing is lost. To restore a file that is no longer listed,
-  stop the app and replace the database file with it (delete `*.db-wal` / `*.db-shm` first), then run the integrity and `alembic current` checks above.
+* Both points found by the first drill are now fixed in the product. A backup with local photo storage also archives the photos (`<key>.images.tar.gz`) and a
+  restore puts them back without overwriting existing files (tested; a corrupted archive is refused). Photos in S3 are not in the backup.
+* The backup **registry lives inside the database**, so restoring an older backup used to hide newer ones. A restore now re-lists every backup that still has a
+  manifest and file in the backup folder, and always makes a "pre-restore" safety backup first.
+* On PostgreSQL the same commands use `pg_dump` / `pg_restore` (see BACKUP_AND_RESTORE.md).
 
 ## Incident quick reference
 
@@ -50,5 +50,5 @@ and the application integrity checks were clean, the schema was at head, sign-in
 
 ## Not verified
 
-Docker images/compose, TLS/proxy configuration, PostgreSQL, S3 storage against a real provider, real SMTP/SMS/payment providers, load on real hardware,
+Docker images/compose, TLS/proxy configuration, a remote or managed PostgreSQL service (local PostgreSQL 16 was verified), S3 storage against a real provider, real SMTP/SMS/payment providers, load on real hardware,
 multi-instance rate limiting (limits are per process), and monitoring/alerting (none is wired to any external service).

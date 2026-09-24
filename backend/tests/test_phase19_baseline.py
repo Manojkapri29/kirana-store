@@ -19,9 +19,9 @@ NOW = "'2026-09-01 10:00:00.000000'"
 def huge(big, engine, tenant_a):  # noqa: F811
     shop, user = tenant_a.shop.id, tenant_a.user.id
     with engine.begin() as c:
-        c.execute(text("SELECT 1"))
-        cols = [r[1] for r in c.execute(text("PRAGMA table_info(audit_log)"))]
-        assert {"shop_id", "entity_type", "action"} <= set(cols)
+        from sqlalchemy import inspect
+
+        assert {"shop_id", "entity_type", "action"} <= {col["name"] for col in inspect(c).get_columns("audit_log")}
         c.execute(
             text(
                 "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i < :rows) "

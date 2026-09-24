@@ -296,6 +296,6 @@ inventory; it will not get its own inventory.
 ## Status after Phase 20
 
 Phases 1–20 are built. Phase 17 added integrations, Phase 18 the offline PWA, Phase 19 performance and scaling work, and Phase 20 the
-full-system QA (see [QA_REPORT.md](QA_REPORT.md)). Customer online ordering (storefront, cart, delivery) was **never built** and remains out of scope;
+full-system QA (see [QA_REPORT.md](QA_REPORT.md)). After Phase 20 a follow-up built the [online store](ONLINE_STORE.md) (storefront, cart, COD/UPI-on-delivery orders, delivery/pickup workflow), PostgreSQL support ([POSTGRES_MIGRATION_CHECKLIST.md](POSTGRES_MIGRATION_CHECKLIST.md)) and photo backups. Delivery fees and online payment were not built;
 the "out of MVP scope" list above is historical: payments *evidence*, AI (read-only) and WhatsApp/SMS *gateways* now exist behind integrations that
 must be configured and tested by the shop.

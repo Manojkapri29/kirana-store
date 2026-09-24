@@ -21,7 +21,7 @@ from alembic import command  # noqa: E402
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.deps import get_request_context
@@ -46,8 +46,60 @@ def sqlite_url(path: Path) -> str:
     return f"sqlite:///{path}"
 
 
+# Set KIRANA_TEST_POSTGRES_URL=postgresql+psycopg://user@host:port/postgres to run the suite on a real PostgreSQL server instead of SQLite:
+# one template database is created and migrated with Alembic, and every test gets its own copy (CREATE DATABASE ... TEMPLATE).
+POSTGRES_ADMIN_URL = os.environ.get("KIRANA_TEST_POSTGRES_URL")
+
+
+def _pg_admin():  # noqa: ANN202
+    from sqlalchemy import create_engine
+
+    return create_engine(POSTGRES_ADMIN_URL, isolation_level="AUTOCOMMIT")
+
+
+def _pg_url(name: str) -> str:
+    from sqlalchemy.engine import make_url
+
+    return make_url(POSTGRES_ADMIN_URL).set(database=name).render_as_string(hide_password=False)
+
+
+def pytest_collection_modifyitems(config, items):  # noqa: ANN001, ANN201
+    """Tests that exercise SQLite-only machinery (the file backup API, PRAGMAs, a database *file*) are skipped on PostgreSQL."""
+    if not POSTGRES_ADMIN_URL:
+        return
+    skip = pytest.mark.skip(reason="SQLite-specific: exercises a SQLite file, PRAGMA or the SQLite backup API")
+    for item in items:
+        if Path(str(item.fspath)).name in SQLITE_ONLY_MODULES or any(part in item.nodeid for part in SQLITE_ONLY_NODES):
+            item.add_marker(skip)
+
+
+# Modules that are about SQLite itself: its file backup API and restore, its PRAGMAs, EXPLAIN QUERY PLAN index checks, and bulk loads through a
+# raw SQLite connection. (PostgreSQL has its own backup tools and EXPLAIN; those are not covered by this suite.)
+SQLITE_ONLY_MODULES = {
+    "test_phase11_backup.py", "test_followup_backup_files.py", "test_phase19_restore_drill.py", "test_database_engine.py",
+}  # fmt: skip
+# Individual tests that build or inspect a SQLite database file (migration data tests) or read SQLite's storage types.
+SQLITE_ONLY_NODES = (
+    "test_phase11_performance.py::TestScreensStayQuick", "test_phase16_performance.py::TestIndexesServeTheAnalyticsQueries",
+    "test_promotions.py::TestMigration0009", "test_quick_sales.py::TestMigration0008", "test_phase9_migrations.py",
+    "test_types.py::TestMoneyStoredInDatabase", "test_types.py::TestUtcDateTimeType::test_aware_datetime_in_another_timezone_is_stored_as_utc",
+    "test_phase12_ops.py::TestJobs::test_the_backup_job_makes_one_verified_backup",
+    "test_image_intelligence.py::TestPlanAndPrivacy::test_the_photo_bytes_never_appear_in_the_database_or_the_logs",
+)  # fmt: skip
+
+
 @pytest.fixture(scope="session")
-def migrated_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def migrated_template(tmp_path_factory: pytest.TempPathFactory) -> Path | str:
+    if POSTGRES_ADMIN_URL:
+        name = f"kirana_tpl_{os.getpid()}"
+        with _pg_admin().connect() as c:
+            c.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+            c.execute(text(f'CREATE DATABASE "{name}"'))
+        command.upgrade(alembic_config(_pg_url(name)), "head")
+        yield name
+        with _pg_admin().connect() as c:
+            c.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        return
     path = tmp_path_factory.mktemp("template") / "template.db"
     command.upgrade(alembic_config(sqlite_url(path)), "head")
     # Fold the WAL file into the main file so that copying the single file is a complete snapshot.
@@ -55,14 +107,25 @@ def migrated_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
     with engine.connect() as connection:
         connection.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))
     engine.dispose()
-    return path
+    yield path
+
+
+_pg_counter = iter(range(1, 10**9))
 
 
 @pytest.fixture
-def db_url(migrated_template: Path, tmp_path: Path) -> str:
+def db_url(migrated_template: Path | str, tmp_path: Path) -> Iterator[str]:
+    if POSTGRES_ADMIN_URL:
+        name = f"kirana_t_{os.getpid()}_{next(_pg_counter)}"
+        with _pg_admin().connect() as c:
+            c.execute(text(f'CREATE DATABASE "{name}" TEMPLATE "{migrated_template}"'))
+        yield _pg_url(name)
+        with _pg_admin().connect() as c:
+            c.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        return
     target = tmp_path / "test.db"
     shutil.copy(migrated_template, target)
-    return sqlite_url(target)
+    yield sqlite_url(target)
 
 
 @pytest.fixture
@@ -124,7 +187,25 @@ def tenant_of(session: Session):
     return _make
 
 
+_PG_WORDING = {
+    "FOREIGN KEY": "foreign key constraint",
+    "UNIQUE": "unique constraint|duplicate key",
+    "NOT NULL": "not-null constraint|null value",
+    "CHECK": "check constraint",
+}
+
+
+def _wording(match: str | None) -> str | None:
+    """SQLite and PostgreSQL word the same refusal differently; on PostgreSQL the generic SQLite words also accept PostgreSQL's."""
+    if match is None or not POSTGRES_ADMIN_URL:
+        return match
+    for sqlite_word, pg_word in _PG_WORDING.items():
+        match = match.replace(sqlite_word, f"(?:{sqlite_word}|{pg_word})")
+    return match
+
+
 def assert_rejected(session: Session, *objects: object, match: str | None = None) -> None:
+    match = _wording(match)
     """Assert that the database refuses to store `objects`, then reset the session."""
     session.add_all(objects)
     with pytest.raises(IntegrityError, match=match):
@@ -135,7 +216,9 @@ def assert_rejected(session: Session, *objects: object, match: str | None = None
 def assert_sql_rejected(
     session: Session, sql: str, params: dict | None = None, match: str | None = None
 ) -> None:
-    with pytest.raises(IntegrityError, match=match):
+    match = _wording(match)
+    # PostgreSQL reports a trigger's refusal (insert-only ledgers) as a ProgrammingError, SQLite as an IntegrityError.
+    with pytest.raises(DBAPIError if POSTGRES_ADMIN_URL else IntegrityError, match=match):
         session.execute(text(sql), params or {})
     session.rollback()
 

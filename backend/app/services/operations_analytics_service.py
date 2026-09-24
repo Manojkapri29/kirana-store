@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.context import RequestContext
+from app.reporting import online as online_report
 from app.services import ai_format as fmt
 from app.services import (
     ai_insights_service,
@@ -25,9 +26,17 @@ from app.services.errors import EntitlementError, InvalidInputError
 from app.services.shop_service import get_shop, shop_today
 
 ZERO = Decimal("0")
-NOT_BUILT = "Online ordering is not part of this application yet, so there is nothing to report."
+INSIDE_DETAILED = "Online store orders are ordinary detailed sales once delivered, so they are already inside the detailed figures."
 NOT_AVAILABLE = "Not Available"
 MAX_DAYS = 366
+
+
+def _online_store(session: Session, sid: int, start: date, end: date) -> dict:
+    r = online_report.period_summary(session, sid, start, end)
+    return {
+        "placed": r["placed"], "delivered": r["delivered"], "rejected_or_cancelled": r["rejected_or_cancelled"],
+        "delivered_value": _s(r["delivered_value"]), "note": r["note"],
+    }  # fmt: skip
 
 
 def _s(value: Decimal | None) -> str | None:
@@ -85,7 +94,7 @@ def overview(
             "discounts": _s(s.quick.discount),
             "net": _s(s.quick.net),
         },
-        "online": {"available": False, "reason": NOT_BUILT},
+        "online": {"available": False, "reason": INSIDE_DETAILED},
         "returns": {"count": s.returns_count, "refunded": _s(s.returns_total)},
         "net_after_returns": _s(s.net_after_returns),
         "series": [
@@ -130,7 +139,7 @@ def overview(
         "credit_sales": {"bills": credit_count, "unpaid": _s(credit_total)},
         "customers_who_bought": buyers,
         "returning_customers": returning,
-        "online_customers": {"available": False, "reason": NOT_BUILT},
+        "online_customers": {"available": False, "reason": INSIDE_DETAILED},
     }
 
     p = analytics_service.purchase_totals(session, sid, start, end)
@@ -202,6 +211,6 @@ def overview(
         "purchases": purchases,
         "profit": profit,
         "promotions": promotions,
-        "online_store": {"available": False, "reason": NOT_BUILT},
+        "online_store": {"available": True, **_online_store(session, sid, start, end)},
         "source": "Calculated from your sales, stock, purchase and khata records. Nothing is estimated.",
     }

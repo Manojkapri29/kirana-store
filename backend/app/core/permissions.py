@@ -46,16 +46,16 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "PROMOTION_VIEW": ("Offers", "See offers and coupons"),
     "PROMOTION_CREATE": ("Offers", "Create offers and coupons"),
     "PROMOTION_EDIT": ("Offers", "Change, activate, pause and expire offers"),
-    "ONLINE_ORDER_VIEW": ("Online orders", "See online orders (there is no online store yet)"),
-    "ONLINE_ORDER_ACCEPT": ("Online orders", "Accept online orders"),
+    "ONLINE_ORDER_VIEW": ("Online orders", "See online orders"),
+    "ONLINE_ORDER_ACCEPT": ("Online orders", "Accept online orders (this also adds the customer to your customers)"),
     "ONLINE_ORDER_REJECT": ("Online orders", "Reject online orders"),
-    "ONLINE_ORDER_STATUS_UPDATE": ("Online orders", "Move an online order along"),
+    "ONLINE_ORDER_STATUS_UPDATE": ("Online orders", "Move an online order along, or cancel it. Marking it delivered also creates the sale, which needs the permission to sell"),
     "REPORT_VIEW": ("Reports", "See reports, insights and the business overview"),
     "REPORT_EXPORT": ("Reports", "Download data files (customers, sales, purchases, reports)"),
     "AI_USE": ("AI", "Use the business assistant and read documents"),
     "AI_ACTION_CONFIRM": ("AI", "Confirm actions the assistant proposes"),
     "PRICE_INTELLIGENCE_USE": ("Products", "Look up outside prices"),
-    "STORE_SETTINGS_MANAGE": ("Settings", "Change online store settings"),
+    "STORE_SETTINGS_MANAGE": ("Settings", "Set up the online store (address, opening, payment and delivery options) and choose which products it shows"),
     "STAFF_VIEW": ("Staff", "See staff and their access"),
     "STAFF_INVITE": ("Staff", "Invite staff"),
     "STAFF_EDIT": ("Staff", "Change a staff member's role"),
@@ -654,6 +654,17 @@ ROUTE_RULES: tuple[Rule, ...] = (
     _r("POST", "/integrations/{integration_type}/test", "INTEGRATION_TEST"),
     _r("POST", "/integrations/{integration_type}/rotate-credentials", "INTEGRATION_CONFIGURE"),
     _r("POST", "/integrations/{integration_type}/rotate-webhook-key", "WEBHOOK_MANAGE"),
+    _r("GET", "/store/settings", "STORE_SETTINGS_MANAGE"),
+    _r("PUT", "/store/settings", "STORE_SETTINGS_MANAGE"),
+    _r("GET", "/store/listings", "STORE_SETTINGS_MANAGE"),
+    _r("PUT", "/store/listings/{product_id}", "STORE_SETTINGS_MANAGE"),
+    _r("GET", "/online-orders", "ONLINE_ORDER_VIEW"),
+    _r("GET", "/online-orders/summary", "ONLINE_ORDER_VIEW"),
+    _r("GET", "/online-orders/{order_id}", "ONLINE_ORDER_VIEW"),
+    _r("POST", "/online-orders/{order_id}/accept", "ONLINE_ORDER_ACCEPT"),
+    _r("POST", "/online-orders/{order_id}/reject", "ONLINE_ORDER_REJECT"),
+    _r("POST", "/online-orders/{order_id}/cancel", "ONLINE_ORDER_STATUS_UPDATE"),
+    _r("POST", "/online-orders/{order_id}/advance", "ONLINE_ORDER_STATUS_UPDATE"),
     _r("POST", "/payments", "PAYMENT_INTEGRATION_MANAGE"),
     _r("GET", "/payments", "INTEGRATION_VIEW"),
     _r("GET", "/payments/{payment_id}", "INTEGRATION_VIEW"),
@@ -756,7 +767,7 @@ ROUTE_RULES: tuple[Rule, ...] = (
 # Routes that are deliberately outside the rules: they do not act inside a shop. (health, admin console with its own
 # token, the sign-in family, metrics.) `tests/test_rbac_routes.py` checks this list is exactly what is left over.
 UNGUARDED_PREFIXES = (
-    "/health", "/api/v1/admin", "/api/v1/auth", "/api/v1/webhooks", "/docs", "/openapi.json", "/metrics",
+    "/health", "/api/v1/admin", "/api/v1/auth", "/api/v1/webhooks", "/api/v1/public", "/docs", "/openapi.json", "/metrics",
 )  # fmt: skip
 
 _PARAM = re.compile(r"\{[^}]+\}")

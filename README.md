@@ -9,13 +9,14 @@ single-shop app and grow into a multi-shop SaaS.
 > The project folder and a few internal names (`kirana-store/`, the `KIRANA_` environment prefix,
 > `kirana.db`) are the original working name. They are internal only and will be renamed later.
 
-> **Status: Phases 1–20 complete (Phase 20 = full-system QA and production-readiness audit).** A multi-shop small-business platform:
-> catalogue, suppliers, purchases, detailed and quick sales, returns, customer credit (khata), inventory intelligence, CRM and loyalty,
-> finance (ledger, expenses, cash, profit and loss, tax), analytics and a report builder, a read-only AI assistant, an integrations
-> framework (email/SMS/WhatsApp gateways, payment evidence and webhooks, S3 storage, accounting export), an installable offline-capable
-> PWA, SaaS administration, backup and restore. **Read [docs/QA_REPORT.md](docs/QA_REPORT.md) for what was and was not verified, and
-> [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) before deploying.** Not production-verified: Docker images, PostgreSQL, real
-> external providers, TLS, load on real hardware. There is no online store / order module and no payment processing.
+> **Status: Phases 1–20 complete, plus a follow-up** (online store, PostgreSQL support, photo backups; see [docs/QA_REPORT.md](docs/QA_REPORT.md)).
+> A multi-shop small-business platform: catalogue, suppliers, purchases, detailed and quick sales, returns, customer credit (khata), inventory
+> intelligence, CRM and loyalty, finance (ledger, expenses, cash, profit and loss, tax), analytics and a report builder, a read-only AI assistant, an
+> **online store** (customers order by web page; delivery creates the ordinary sale), an integrations framework (email/SMS/WhatsApp gateways, payment
+> evidence and webhooks, S3 storage, accounting export), an installable offline-capable PWA, SaaS administration, backup and restore on **SQLite or PostgreSQL**.
+> **Read [docs/QA_REPORT.md](docs/QA_REPORT.md) for what was and was not verified, and [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) before deploying.**
+> Not verified: Docker images, a remote/managed PostgreSQL, real external providers, TLS, load on real hardware. Nothing is charged online: there is no
+> payment gateway in the ordering flow.
 
 ## Stack
 
@@ -23,7 +24,7 @@ single-shop app and grow into a multi-shop SaaS.
 |---|---|
 | Frontend | React 19, Vite, TypeScript, Tailwind CSS 4, react-i18next (English/Hindi) |
 | Backend | Python, FastAPI, Pydantic settings |
-| Database | SQLAlchemy 2 + Alembic on SQLite for the MVP; PostgreSQL later (nothing to install now) |
+| Database | SQLAlchemy 2 + Alembic on SQLite by default (nothing to install); PostgreSQL 16 also supported and tested locally |
 
 TanStack Query (server state) and openpyxl (Excel export) arrived in Phase 3; Recharts is added in Phase 12, when the first chart is built.
 
@@ -110,7 +111,7 @@ All configuration comes from environment variables; nothing secret is committed.
 ## Documentation
 
 - **Start here:** [Setup](docs/SETUP.md), [Environment variables](docs/ENVIRONMENT_VARIABLES.md), [Migrations](docs/MIGRATIONS.md), [Production runbook](docs/PRODUCTION_RUNBOOK.md), [Release checklist](docs/RELEASE_CHECKLIST.md), [Troubleshooting](docs/TROUBLESHOOTING.md), [QA report](docs/QA_REPORT.md)
-- **Domains:** [Inventory](docs/INVENTORY.md), [Sales](docs/SALES.md), [Finance](docs/FINANCE.md), [CRM](docs/CRM.md), [AI](docs/AI.md), [Reporting](docs/REPORTING.md), [Integrations](docs/INTEGRATIONS.md), [PWA and offline](docs/PWA_OFFLINE.md), [Performance](docs/PERFORMANCE.md)
+- **Domains:** [Inventory](docs/INVENTORY.md), [Sales](docs/SALES.md), [Finance](docs/FINANCE.md), [CRM](docs/CRM.md), [AI](docs/AI.md), [Reporting](docs/REPORTING.md), [Online store](docs/ONLINE_STORE.md), [Integrations](docs/INTEGRATIONS.md), [PWA and offline](docs/PWA_OFFLINE.md), [Performance](docs/PERFORMANCE.md)
 
 - [Architecture](docs/ARCHITECTURE.md): layers, service boundaries, ledgers, SaaS readiness
 - [Database](docs/DATABASE.md): planned schema and SQLite to PostgreSQL strategy
@@ -131,6 +132,7 @@ All configuration comes from environment variables; nothing secret is committed.
 - Phase 17: [Integrations and ecosystem](docs/INTEGRATIONS.md)
 - Phase 18: [PWA, mobile and offline](docs/PWA_OFFLINE.md)
 - Phase 19: [Performance, scaling and PostgreSQL readiness](docs/PERFORMANCE.md)
+- Follow-up: [Online store](docs/ONLINE_STORE.md), [PostgreSQL](docs/POSTGRES_MIGRATION_CHECKLIST.md)
 - Phase 14: [Retention](docs/RETENTION.md), [Referrals and consent](docs/REFERRALS.md), [CRM AI tools](docs/CRM_AI_TOOLS.md)
 
 ## What Phase 8 added

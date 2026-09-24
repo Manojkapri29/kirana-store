@@ -75,11 +75,23 @@ class TestJourneys:
         assert pnl["quick_sales_have_no_cost"] is True
         _clean(session_factory)
 
-    def test_3_online_order_module_does_not_exist_and_says_so(self, client_a):
-        pnl = client_a.get(f"{FIN}/pnl").json()
-        assert D(pnl["online_sales"]) == D("0")
-        paths = client_a.app.openapi()["paths"]
-        assert not any("online-order" in p or "storefront" in p or "/orders" in p for p in paths)
+    def test_3_online_order_through_the_public_store(self, client_a, tenant_a, shelf, session, real_client):
+        """Added after the first audit found no order module: a customer orders, the shop delivers, one ordinary sale results."""
+        client_a.put("/api/v1/store/settings", json={"slug": "qa-store", "display_name": "QA", "is_open": True})
+        client_a.put(f"/api/v1/store/listings/{shelf['rice']['id']}", json={"visible": True})
+        order = real_client().post(
+            "/api/v1/public/stores/qa-store/orders",
+            json={"customer_name": "Asha", "customer_phone": "9876500001", "fulfilment": "PICKUP", "payment": "COD", "items": [{"product_id": shelf["rice"]["id"], "quantity": "2"}]},
+            headers={"Idempotency-Key": "journey-order-0001"},
+        ).json()
+        assert order["total_amount"] == "100.00" and stock(client_a, shelf["rice"]) == 10  # a request: nothing moved
+        oid = client_a.get("/api/v1/online-orders").json()["items"][0]["id"]
+        client_a.post(f"/api/v1/online-orders/{oid}/accept")
+        client_a.post(f"/api/v1/online-orders/{oid}/advance", json={"status": "READY"})
+        done = client_a.post(f"/api/v1/online-orders/{oid}/advance", json={"status": "DELIVERED"}).json()
+        assert done["invoice_no"] and stock(client_a, shelf["rice"]) == 8
+        pnl = client_a.get(f"{FIN}/pnl", params={"date_from": TODAY.isoformat(), "date_to": TODAY.isoformat()}).json()
+        assert D(pnl["detailed_sales"]) == D("100.00")
 
     def test_4_customer_loyalty_crm(self, client_a, tenant_a, shelf, session_factory):
         assert client_a.put(

@@ -72,10 +72,10 @@ def test_profit_is_not_available_with_missing_cost_and_the_reason_is_stated(sess
     assert profit["current"]["reason"] == "Insufficient Cost Data"
 
 
-def test_online_orders_section_says_not_available(session, tenant_a, client_a):
+def test_online_orders_section_is_a_real_count(session, tenant_a, client_a):
     d = _dash(client_a)
     online = _kpi(next(s for s in d["sections"] if s["key"] == "online_orders"), "online_orders")
-    assert online["current"]["availability"] == "NOT_AVAILABLE"
+    assert online["current"]["availability"] == "AVAILABLE" and online["current"]["amount"] in ("0", "0.00", 0)
 
 
 def test_the_dashboard_and_the_kpi_endpoint_agree(session, tenant_a, client_a):

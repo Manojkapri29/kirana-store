@@ -27,6 +27,7 @@ GROUP_SETTINGS = {
     "auth": "rate_limit_auth",
     "public": "rate_limit_public",
     "webhook": "rate_limit_webhook",
+    "store_order": "rate_limit_store_order",
     "sync": "rate_limit_sync",
     "message": "rate_limit_message",
     "payment": "rate_limit_payment",

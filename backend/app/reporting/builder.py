@@ -318,7 +318,7 @@ _dataset(
         (_f("order_date", "Order date", "date"), _f("total_amount", "Total", "money")),
         None,
         "Online orders",
-        unavailable="Not Available: online orders are not connected, so there is nothing to report.",
+        unavailable="Not Available in the report builder. Use the Online orders screen, or the online orders KPI on the analytics dashboard.",
     )
 )
 _dataset(

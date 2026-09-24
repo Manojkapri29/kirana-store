@@ -381,5 +381,5 @@ def restore(
     result = restore_service.restore(record, confirmation=payload.confirmation, actor=admin.email, via_api=True, settings=settings,
                                      pre_restore_recorder=safety_outcomes.append)  # fmt: skip
     if result.ok:
-        restore_service.note_in_database(result, admin.email, backup_service.database_file(settings))
+        restore_service.record_restore(result, admin.email, settings)
     return _restore_out(result)

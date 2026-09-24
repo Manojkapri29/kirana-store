@@ -34,6 +34,13 @@ from app.models.jobs import BackgroundJob
 from app.models.khata import CustomerLedgerEntry
 from app.models.loyalty import LoyaltyLedger, LoyaltyProgram
 from app.models.notifications import NotificationDelivery, NotificationEvent, NotificationPreference
+from app.models.online_store import (
+    OnlineOrder,
+    OnlineOrderEvent,
+    OnlineOrderItem,
+    StoreListing,
+    StoreSettings,
+)
 from app.models.operations import (
     AdminAuditLog,
     BackupRecord,
@@ -57,6 +64,11 @@ from app.models.system import AuditLog, DocumentSequence, IdempotencyKey
 from app.models.tasks import BusinessTask, TaskComment
 
 __all__ = [
+    "OnlineOrder",
+    "OnlineOrderEvent",
+    "OnlineOrderItem",
+    "StoreListing",
+    "StoreSettings",
     "SyncOperation",
     "AccountingMapping",
     "Integration",

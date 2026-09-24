@@ -97,7 +97,9 @@ export interface Overview {
   promotions:
     | Unavailable
     | { available: true; discount_total: string; offer_applications: number; coupon_uses: number }
-  online_store: Unavailable
+  online_store:
+    | Unavailable
+    | { available: true; placed: number; delivered: number; rejected_or_cancelled: number; delivered_value: string | null; note: string }
   source: string
 }
 

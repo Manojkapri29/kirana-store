@@ -201,7 +201,7 @@ def _online_repeat() -> Insight:
         "online_repeat_customers",
         "Online order repeat customers",
         "NOT_AVAILABLE",
-        "Not Available: online orders are not connected, so there is no online repeat-customer data.",
+        "Not Available: repeat behaviour of online customers is not analysed separately. They are ordinary customers and appear in the customer reports.",
         ["Online orders"],
         ("REPORT_VIEW",),
     )

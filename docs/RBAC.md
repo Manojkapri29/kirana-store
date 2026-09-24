@@ -18,8 +18,8 @@ server** whatever the screen shows, and tests prove it.
 
 Codes and meanings are in `PERMISSIONS` (`GET /api/v1/roles/permissions`). Groups: Products, Inventory, Suppliers, Purchases, Sales,
 Returns, Customers, Khata, Offers, Online orders, Reports, AI, Staff, Account, Settings. Beyond the list in the brief, `ROLE_MANAGE`
-(custom roles) was added. `ONLINE_ORDER_*` and `STORE_SETTINGS_MANAGE` exist as codes but **no route uses them yet**: there is no
-online store.
+(custom roles) was added. `ONLINE_ORDER_*` and `STORE_SETTINGS_MANAGE` are used by the online store routes (see ONLINE_STORE.md): setting up the
+store and choosing its products needs `STORE_SETTINGS_MANAGE`; orders use the four `ONLINE_ORDER_*` codes, and delivering also needs the sale permissions.
 
 **Owner-only** (`OWNER_ONLY_PERMISSIONS`): `ROLE_MANAGE`, `BACKUP_CREATE`. Only the OWNER role holds them; a custom role can never be
 given one.

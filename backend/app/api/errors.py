@@ -30,7 +30,7 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError, SQLAlchemyError
+from sqlalchemy.exc import DataError, DBAPIError, IntegrityError, OperationalError, SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
@@ -400,10 +400,20 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(OperationalError)
     async def busy(request: Request, exc: OperationalError) -> JSONResponse:
         text = str(exc.orig).lower()
-        transient = "locked" in text or "busy" in text or "timeout" in text or "connection" in text
+        waits = ("locked", "busy", "timeout", "connection", "deadlock", "could not serialize")
+        transient = any(word in text for word in waits)
         return _unexpected(
             request, exc, ErrorCategory.DATABASE, 503 if transient else 500, retryable=transient
         )
+
+    @app.exception_handler(DataError)
+    async def bad_data(request: Request, exc: DataError) -> JSONResponse:
+        """A value the database cannot store (NUL in text, which PostgreSQL refuses, or a huge number).
+        The person's input is at fault, so the answer is 422, not a server error."""
+        message = "Some of the text or numbers you entered cannot be saved. Remove unusual characters."
+        _log(request, ErrorCategory.VALIDATION, "validation_error", 422, None, exc)
+        body = error_body(ErrorCategory.VALIDATION, message, detail=message)
+        return _respond(request, 422, body)
 
     @app.exception_handler(SQLAlchemyError)
     async def database(request: Request, exc: SQLAlchemyError) -> JSONResponse:

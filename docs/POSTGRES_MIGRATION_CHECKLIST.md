@@ -1,42 +1,53 @@
-# PostgreSQL migration checklist
+# PostgreSQL
 
-**The application still runs on SQLite. No PostgreSQL migration was done in Phase 11.** This is the result of a read-only audit
-of the code (searching for SQLite-specific constructs) and a list of what to do when the time comes. Nothing here has been run
-against PostgreSQL.
+PostgreSQL 16 was installed and used in the follow-up to Phase 20. What was **actually run** is listed here, with what is still not verified. SQLite
+remains the default and the supported single-machine deployment; PostgreSQL is now a tested alternative for a larger or multi-instance deployment.
 
-## Already portable
+## Verified on a real PostgreSQL 16 server (localhost, one machine)
 
-* Models use SQLAlchemy types; money and quantity are `BigInteger` (integer paise / thousandths) through `TypeDecorator`s, so
-  there is no floating point and no `Numeric` rounding difference.
-* No `strftime`/`julianday`/`typeof`/`GROUP_CONCAT`/`INSERT OR`/`AUTOINCREMENT` in SQL. The `strftime` calls in the code are Python
-  `datetime` formatting, not SQL.
-* Text search uses `func.lower(...).contains(..., autoescape=True)`; PostgreSQL treats it the same (consider `ILIKE` and `pg_trgm`
-  indexes for large catalogs).
-* Timestamps are UTC through `UTCDateTime`.
-* Insert-only triggers and CHECK constraints are created for both dialects in the migrations (`0001`, `0014` contain PostgreSQL
-  branches).
-* Row locking already uses `SELECT ... FOR UPDATE` (`with_for_update`, 19 places), which SQLite ignores and PostgreSQL honours.
+* **Migrations:** all 23 revisions upgrade on an empty database; `alembic check` reports no drift; downgrade to base and up again works.
+* **Test suite:** the whole backend suite runs against PostgreSQL by setting `KIRANA_TEST_POSTGRES_URL` (see `tests/conftest.py`: one migrated template
+  database, one copy per test). Result: everything passes except tests that are about SQLite itself and are skipped there (its file backup API,
+  PRAGMAs, `EXPLAIN QUERY PLAN`, migration-data tests that build SQLite files). The skipped tests are listed by name in `conftest.py`.
+* **Production-mode server on PostgreSQL:** the application started with production settings, passed `/health/ready`, and ran the whole business flow
+  over HTTP (products, purchase, sale on credit, khata, an online order delivered into a sale); `python -m app.integrity_cli` was clean.
+* **Backup and restore:** `python -m app.backup_cli create | verify | rehearse | restore` work on PostgreSQL through `pg_dump` / `pg_restore`
+  (`app/services/pg_backup.py`, tested in `tests/test_pg_backup.py`): a verified custom-format dump, a trial restore into a scratch database, an
+  all-or-nothing restore that brings data and id sequences back.
+* **Performance smoke:** the Phase 19 baseline (25,000 sales, 3,000 products, 100,000 audit rows) passes on PostgreSQL with the same limits;
+  indexes serve the hot queries. Numbers are in `PERFORMANCE.md`.
 
-## Must change or verify
+## Problems the real server found, now fixed
 
-| Item | Where | Action |
-| --- | --- | --- |
-| Writer transactions use `BEGIN IMMEDIATE` (execution option `sqlite_begin_immediate`) | `app/db/engine.py`, `app/db/session.py` | PostgreSQL uses normal `BEGIN`; concurrency then depends on `FOR UPDATE` locks and `SERIALIZABLE`/`READ COMMITTED` choices. Re-run `tests/test_concurrency.py` |
-| SQLite pragmas (WAL, `foreign_keys`, `busy_timeout`) | `app/db/engine.py` | not needed; foreign keys are always enforced |
-| Alembic `batch_alter_table` (73 uses) | migrations `0002`–`0014` | works on PostgreSQL but is unnecessary there; start PostgreSQL from a squashed baseline (`0001`…`0014` as one) or run the chain on an empty database |
-| Partial unique indexes use `sqlite_where` | `models/purchasing.py`, `models/subscription.py` | add the matching `postgresql_where` |
-| `server_default` values such as `expression.true()` | models | check literals (`1`/`0` vs `true`/`false`) |
-| Document numbering counters | `numbering_service` | uses row locks: verify under concurrent posting |
-| `sqlite_master`/`PRAGMA` use | `app/reporting/integrity.py`, `app/services/ai_planner.py` (a regex that *blocks* those words), `migrations/env.py` | the integrity checker runs `PRAGMA foreign_key_check` (check 12): guard it with a dialect test (PostgreSQL enforces foreign keys itself) |
-| Backup and restore | `backup_service`, `restore_service`, `backup_cli` | SQLite only; replace with `pg_dump`/snapshots and document it |
-| Error mapping matches SQLite wording ("locked", "busy") | `app/api/errors.py` (`OperationalError` handler) | add PostgreSQL messages (`deadlock detected`, `could not serialize`, `connection`) |
-| `JSON` columns (audit detail, AI proposals, events) | models | fine; consider `JSONB` |
-| Case and collation | name uniqueness and search | SQLite `lower()` vs PostgreSQL collations: confirm unique-name rules behave the same |
-| Test fixtures copy a migrated SQLite file | `tests/conftest.py` | needs a PostgreSQL template database or schema-per-test |
+| Problem | Fix |
+|---|---|
+| A CHECK constraint compared a boolean with `1`/`0` (migration would not run) | `TRUE`/`FALSE` in the model and migration `0015` |
+| `customers.referred_by_customer_id` was `Integer` in the model but `BigInteger` in the migration | model uses the shared id type |
+| Seeded rows (plans, roles, ...) have explicit ids, so the id sequence lagged and the first new row collided | migration `0023` sets every sequence to its table's maximum (no-op on SQLite) |
+| First use of a monthly usage counter raced under concurrency (duplicate key) | insert in a savepoint, then read and lock the winner's row |
+| A NUL character in any text made PostgreSQL refuse the value, giving HTTP 500 | database "bad data" errors now answer 422 with a plain message |
+| Deadlock / serialisation failures were treated as unexpected 500s | now a retryable 503 |
+| Backups said "not configured" | `pg_dump`-based backup and restore |
 
-## Suggested order
+## After a bulk load, run ANALYZE
 
-1. Add a `KIRANA_DATABASE_URL` for PostgreSQL in a scratch environment and run `alembic upgrade head` on an empty database.
-2. Make the test fixtures dialect-aware and run the full suite; fix what fails (expect concurrency and error-message tests).
-3. Load a copy of production data (export, then import row by row with sequences reset) and run `python -m app.integrity_cli`.
-4. Rehearse cut-over with a maintenance window; keep the SQLite file as the rollback.
+A report over 20,000 freshly bulk-loaded sales took **24 seconds** on PostgreSQL until planner statistics existed, and **20 ms** after `ANALYZE`. Normal running is fine
+(autovacuum analyses tables), but after importing or restoring a large amount of data run `ANALYZE;` (a restore from `pg_restore` does not always leave statistics).
+
+## Requirements to run on PostgreSQL
+
+* `pip install -r requirements.txt` plus a driver: `pip install "psycopg[binary]"` (kept out of the base requirements because SQLite is the default).
+* `KIRANA_DATABASE_URL=postgresql+psycopg://user:password@host:5432/db` (from the environment; never in Git). Optional pool settings
+  `KIRANA_DB_POOL_SIZE`, `_MAX_OVERFLOW`, `_POOL_RECYCLE_SECONDS`, `_POOL_TIMEOUT_SECONDS` (see `ENVIRONMENT_VARIABLES.md`).
+* `pg_dump` and `pg_restore` (PostgreSQL client tools) on the machine that takes backups, with the same major version as the server or newer.
+* A role that owns the application's schema; the rehearsal command needs `CREATEDB`. Require SSL (`sslmode=verify-full`) for a remote server.
+* Run migrations from one place as a release step (`alembic upgrade head`). Run exactly one worker process for periodic jobs.
+* Rate limiting and metrics are still per process: several instances need a shared store (Redis).
+
+## Not verified
+
+* A **remote** managed PostgreSQL service, SSL/TLS to it, PgBouncer, replicas, and behaviour under real multi-instance load.
+* PostgreSQL versions other than 16.
+* Moving an existing SQLite database to PostgreSQL: there is no import tool. Start a new PostgreSQL database, or export/import by your own means and then run
+  `python -m app.integrity_cli`. Keep the SQLite file as the rollback.
+* Text search uses `lower(...) LIKE '%term%'`: fine at shop scale on PostgreSQL, but a large catalogue would want a `pg_trgm` index.

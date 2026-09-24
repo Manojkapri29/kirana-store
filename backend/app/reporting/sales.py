@@ -4,7 +4,7 @@ Kinds of sale are kept apart on purpose:
   * DETAILED: a bill with product lines. The only source of product-level quantity, revenue, cost and profit.
   * QUICK: a money-only total. Contributes to revenue and payment/cash analytics ONLY; never to a product, category,
     brand, quantity, cost or profit figure, and never to inventory.
-  * ONLINE: this application has no online orders, so it is reported as Not Available (nothing is counted, and nothing
+  * ONLINE: online store orders become ordinary detailed sales, so there is no separate channel (nothing is added, and nothing
     can be double-counted with detailed sales).
   * COMBINED revenue = detailed + quick (before returns; returns are shown separately).
 
@@ -39,7 +39,7 @@ ZERO = Decimal("0.00")
 Q3 = Decimal("0.001")
 NA = "Not Available"
 QUICK_NOTE = "Quick Sales are money-only: they are in revenue and payment figures but never in any product, category, brand, quantity, cost or profit figure."
-ONLINE_NOTE = "Online sales: Not Available. This application has no online orders, so nothing is counted here and nothing can be double-counted."
+ONLINE_NOTE = "Online store orders are fulfilled as ordinary detailed sales, so they are inside Detailed sales and never counted twice. There is no separate online revenue channel."
 INSUFFICIENT_COST = "Insufficient Cost Data"
 
 

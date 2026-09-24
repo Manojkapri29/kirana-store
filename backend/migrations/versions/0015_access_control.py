@@ -116,7 +116,7 @@ def upgrade() -> None:
         sa.CheckConstraint("length(trim(code)) > 0", name=op.f("ck_roles_code_not_blank")),
         sa.CheckConstraint("length(trim(name)) > 0", name=op.f("ck_roles_name_not_blank")),
         sa.CheckConstraint(
-            "(is_system = 1 AND shop_id IS NULL) OR (is_system = 0 AND shop_id IS NOT NULL)",
+            "(is_system = TRUE AND shop_id IS NULL) OR (is_system = FALSE AND shop_id IS NOT NULL)",
             name=op.f("ck_roles_system_means_global"),
         ),
     )

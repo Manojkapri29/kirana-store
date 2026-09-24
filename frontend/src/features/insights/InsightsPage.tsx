@@ -103,7 +103,16 @@ function Sections({ o }: { o: Overview }) {
       </Card>
 
       <Card title={t('insights.onlineStore')}>
-        <NotAvailable what={o.online_store} />
+        {o.online_store.available ? (
+          <>
+            <Row label={t('insights.onlinePlaced')} value={o.online_store.placed} />
+            <Row label={t('insights.onlineDelivered')} value={o.online_store.delivered} />
+            <Row label={t('insights.onlineValue')} value={money(o.online_store.delivered_value)} />
+            <p className="text-xs text-slate-500">{o.online_store.note}</p>
+          </>
+        ) : (
+          <NotAvailable what={o.online_store} />
+        )}
       </Card>
     </div>
   )

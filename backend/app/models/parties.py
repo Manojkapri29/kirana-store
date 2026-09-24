@@ -7,6 +7,7 @@ from sqlalchemy.sql import expression
 from app.models.base import (
     Base,
     CheckConstraint,
+    IdType,
     TimestampMixin,
     enum_type,
     id_column,
@@ -98,4 +99,4 @@ class Customer(TimestampMixin, Base):
     marketing_opt_in_whatsapp: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     marketing_opt_in_push: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # Referral (Phase 14): who referred this customer, if anyone. Set once, at creation.
-    referred_by_customer_id: Mapped[int | None] = mapped_column(Integer)
+    referred_by_customer_id: Mapped[int | None] = mapped_column(IdType)

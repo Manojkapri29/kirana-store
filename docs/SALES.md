@@ -6,5 +6,5 @@
 * **Returns:** refund proportional to what was paid, as cash/UPI or khata credit; goods return at the line's cost.
 * **Khata:** the customer balance is the sum of an append-only ledger (`amount_delta`); payments, adjustments and reversals are entries.
 * **Offers/coupons, barcode scanning, price lookups (information only)** as in [BUSINESS_RULES.md](BUSINESS_RULES.md) (SL, R, K, KH, QS, PM).
-* **Online orders:** there is **no online store / order module** in this system. Reports say "Not Available"; online *payments* exist only as evidence records ([INTEGRATIONS.md](INTEGRATIONS.md)).
+* **Online orders:** the [online store](ONLINE_STORE.md) lets customers send order requests; delivering one creates and posts an ordinary Detailed Sale, so it is inside every sales report. Nothing is charged online. Online *payments* remain evidence records ([INTEGRATIONS.md](INTEGRATIONS.md)).
 * **Offline:** the till can queue quick sales, sales and customer payments and sync later ([PWA_OFFLINE.md](PWA_OFFLINE.md)).

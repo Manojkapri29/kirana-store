@@ -9,7 +9,7 @@ Status is as of the Phase 20 audit. "Done" means it was executed in this reposit
 | 3 | Frontend production build succeeds; no secret in the bundle | Done |
 | 4 | Migrations: one head, stepwise up and down, `alembic check` clean | Done (SQLite only) |
 | 5 | Integrity check (`integrity_cli`) clean on a drilled database | Done |
-| 6 | Backup created, verified, rehearsed and actually restored | Done (database; files by copy) |
+| 6 | Backup created, verified, rehearsed and actually restored | Done (database and photos; SQLite and PostgreSQL) |
 | 7 | Production start refuses unsafe configuration; starts with a safe one | Done |
 | 8 | `/health/live` and `/health/ready` OK; `/docs`, `/metrics` closed | Done |
 | 9 | Security headers, CSRF, HttpOnly/Secure/SameSite cookie, rate limits | Done (backend); HSTS is the proxy's job |
@@ -21,7 +21,7 @@ Status is as of the Phase 20 audit. "Done" means it was executed in this reposit
 | 15 | Performance baseline recorded (SQLite) | Done |
 | 16 | Load test on production-like hardware and database | **Not done** |
 | 17 | Docker images built and run | **Not done** (no Docker available) |
-| 18 | PostgreSQL migrations and test suite run on a real server | **Not done** |
+| 18 | PostgreSQL migrations and test suite run on a real server | Done on a local PostgreSQL 16; **not** on a remote/managed service |
 | 19 | TLS, HSTS and proxy headers configured at the edge | **Operator** |
 | 20 | Each external integration configured and tested by the shop (SMTP, SMS/WhatsApp, payments, S3) | **Operator**; none is claimed working |
 | 21 | Off-machine backup copy of database and photos, restore practised | **Operator** |

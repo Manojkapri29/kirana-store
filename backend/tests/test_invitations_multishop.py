@@ -349,7 +349,7 @@ class TestExportsNeedTheirPermissions:
                 text("SELECT action, user_id, after_json, request_id FROM audit_log WHERE action = 'export'")
             ).one()
         assert (
-            row[0] == "export" and row[1] is not None and "customers" in row[2] and row[3].startswith("req_")
+            row[0] == "export" and row[1] is not None and "customers" in str(row[2]) and row[3].startswith("req_")
         )
 
 

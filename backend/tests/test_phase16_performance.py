@@ -37,7 +37,7 @@ def big(tenant_a, units, engine):
     with engine.begin() as c:
         c.execute(
             text(
-                f"INSERT INTO products (shop_id, sku, name, category_id, unit_id, reorder_level, selling_price, is_active, updated_at, created_at) VALUES (:s, :sku, :name, :cat, :unit, 5000, 2500, 1, {NOW}, {NOW})"
+                f"INSERT INTO products (shop_id, sku, name, category_id, unit_id, reorder_level, selling_price, is_active, updated_at, created_at) VALUES (:s, :sku, :name, :cat, :unit, 5000, 2500, TRUE, {NOW}, {NOW})"
             ),
             [
                 {"s": shop, "sku": f"P{i:05d}", "name": f"Product {i:05d}", "cat": category, "unit": unit}
@@ -52,7 +52,7 @@ def big(tenant_a, units, engine):
         )
         c.execute(
             text(
-                f"INSERT INTO customers (shop_id, name, is_active, updated_at, created_at) VALUES (:s, :name, 1, {NOW}, {NOW})"
+                f"INSERT INTO customers (shop_id, name, is_active, updated_at, created_at) VALUES (:s, :name, TRUE, {NOW}, {NOW})"
             ),
             [{"s": shop, "name": f"Customer {i:05d}"} for i in range(CUSTOMERS)],
         )
@@ -105,7 +105,7 @@ def big(tenant_a, units, engine):
         )
         c.execute(
             text(
-                f"INSERT INTO suppliers (shop_id, name, is_active, updated_at, created_at) VALUES (:s, :name, 1, {NOW}, {NOW})"
+                f"INSERT INTO suppliers (shop_id, name, is_active, updated_at, created_at) VALUES (:s, :name, TRUE, {NOW}, {NOW})"
             ),
             [{"s": shop, "name": f"Supplier {i}"} for i in range(40)],
         )
@@ -133,6 +133,9 @@ def big(tenant_a, units, engine):
             ),
             {"s": shop, "fp": first_product, "unit": unit},
         )
+    if engine.dialect.name == "postgresql":  # a real server refreshes planner statistics on its own (autovacuum); a bulk load in a test must ask
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as c:
+            c.execute(text("ANALYZE"))
     return {"shop": shop}
 
 

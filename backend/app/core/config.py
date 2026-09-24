@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     rate_limit_webhook: int = Field(default=120, ge=1)
     # Argon2id needs ~64 MiB per hash. Sign-ins beyond this many at once wait their turn instead of all taking memory together.
     password_hash_concurrency: int = Field(default=4, ge=1, le=64)
+    rate_limit_store_order: int = Field(default=10, ge=1)  # public: orders placed from one address per window
     rate_limit_sync: int = Field(default=600, ge=1)  # offline batches (up to 50 operations each)
     rate_limit_message: int = Field(default=60, ge=1)  # messages sent to customers cost money and can annoy people
     rate_limit_payment: int = Field(default=120, ge=1)

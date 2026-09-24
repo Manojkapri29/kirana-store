@@ -148,15 +148,16 @@ class TestCreation:
             not outcome.ok and outcome.error_code == "disk_error" and "read-only" not in outcome.error_message
         )
 
-    def test_a_database_that_is_not_sqlite_or_a_storage_that_does_not_exist_is_not_configured(
+    def test_an_unreachable_postgresql_server_fails_honestly_and_a_storage_that_does_not_exist_is_not_configured(
         self, env, monkeypatch
     ):
-        assert (
-            backup_service.perform_backup(
-                BackupKind.MANUAL, "x", Settings(_env_file=None, database_url="postgresql+psycopg://u:p@h/db")
-            ).error_code
-            == "not_configured"
+        # PostgreSQL is backed up with pg_dump. Here there is no such server, so the backup FAILS (it is never reported as made);
+        # without the tools installed it says so.
+        outcome = backup_service.perform_backup(
+            BackupKind.MANUAL, "x", Settings(_env_file=None, database_url="postgresql+psycopg://u:p@127.0.0.1:1/db")
         )
+        assert not outcome.ok and outcome.error_code in ("dump_failed", "tools_missing")
+        assert "u:p" not in (outcome.error_message or "")
         assert (
             backup_service.perform_backup(
                 BackupKind.MANUAL, "x", Settings(_env_file=None, backup_storage_provider="s3")

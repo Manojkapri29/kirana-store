@@ -427,12 +427,12 @@ Barcode scanner integrations and UPI/payment gateways: the schema carries a null
 reference fields, and the `UPI` payment method exists, but no integrations are built. Also out of scope:
 GST invoicing, payment reminders, multi-shop accounts, subscriptions, WhatsApp notifications, and the AI assistant.
 
-## O. Online ordering (future, not in the MVP)
+## O. Online ordering (implemented after Phase 20: see ONLINE_STORE.md)
 
 - **O1.** A future customer storefront, cart, online orders (COD/UPI), delivery and order history must reuse
   the same products, customers, pricing and inventory as in-store sales, and must work for every business
   type (order stages: accepted, preparing, ready, out for delivery, delivered).
-- **O2.** There is **no second inventory system**. Stock remains the sum of `inventory_transactions`. An
+- **O2.** (Implemented.) There is **no second inventory system**. Stock remains the sum of `inventory_transactions`. An
   accepted online order is fulfilled by creating a normal Detailed Sale, so stock, cost snapshots, MRP checks,
   returns and reports all behave exactly as for a shop sale.
 

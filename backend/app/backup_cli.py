@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         record, confirmation=args.confirm, actor="cli", via_api=False, settings=settings
     )
     if result.ok:
-        restore_service.note_in_database(result, "cli", backup_service.database_file(settings))
+        restore_service.record_restore(result, "cli", settings)
     print("OK" if result.ok else "REFUSED/FAILED", result.detail)
     return 0 if result.ok else 1
 

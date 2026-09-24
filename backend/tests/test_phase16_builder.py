@@ -54,7 +54,7 @@ class TestAllowlist:
                 builder.validate({}, name, ALL)
 
     def test_online_orders_cannot_be_run(self):
-        with pytest.raises(InvalidInputError, match="not connected"):
+        with pytest.raises(InvalidInputError, match="Not Available in the report builder"):
             builder.validate({}, "online_orders", ALL)
 
     def test_limits_are_enforced(self):

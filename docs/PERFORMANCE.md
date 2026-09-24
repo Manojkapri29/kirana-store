@@ -2,8 +2,7 @@
 
 All numbers were measured on SQLite (development database) on a developer laptop, through the real HTTP stack, against a
 synthetic dataset of 25,000 sales, 3,000 products and 100,000 audit rows (`tests/test_phase19_baseline.py`, which prints
-`PERF` lines). They are relative indicators, not a production benchmark. **No load test was run against PostgreSQL or against
-a deployed environment: there was no PostgreSQL server available.**
+`PERF` lines). They are relative indicators, not a production benchmark. **PostgreSQL:** the same baseline was later run on a local PostgreSQL 16 server (table below). No load test was run against a remote database or a deployed environment.
 
 ## Baseline (SQLite)
 
@@ -68,3 +67,18 @@ part of the database backup**: back up the image directory (or the S3 bucket) se
 | message | 60 |
 | payment | 120 |
 | webhook | see `rate_limit_webhook` |
+
+## PostgreSQL 16 (local, one machine, same dataset, no ANALYZE after the bulk load)
+
+| Endpoint | Time | Queries |
+|---|---|---|
+| Products / customers pages | 25–41 ms | 4 |
+| Inventory page / sales page / quick sales page | 510 / 659 / 267 ms | 3 |
+| Dashboard overview | 1.35 s | 37 |
+| Inventory KPIs (year) / executive dashboard | 2.6 s / 1.9 s | 143 / 153 |
+| Finance dashboard | 1.9 s | 370 |
+| Export sales (2.5 MB) / products | 985 / 106 ms | 22 / 19 |
+| Offline snapshot, products | 70 ms | 4 |
+
+All within the test limits. The dashboards are slower than on SQLite mainly because the freshly loaded tables had no planner statistics (autovacuum analyses them in
+normal running); the query counts are identical. Hot queries can use their indexes (`tests/test_phase11_performance.py`, PostgreSQL branch).

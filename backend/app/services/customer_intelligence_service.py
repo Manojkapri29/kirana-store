@@ -18,8 +18,8 @@ from enum import StrEnum
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Customer, QuickSale, Sale, SalePromotion
-from app.models.enums import SaleStatus
+from app.models import Customer, OnlineOrder, QuickSale, Sale, SalePromotion
+from app.models.enums import OnlineOrderStatus, SaleStatus
 from app.services import khata_service
 from app.services.errors import NotFoundError
 
@@ -63,7 +63,7 @@ class CustomerAnalytics:
     days_since_last_purchase: int | None
     days_since_last_payment: int | None
     segments: list[CustomerSegment]
-    online_order_count: int  # always 0: there is no online store yet; kept so the shape does not change later
+    online_order_count: int  # orders the shop accepted for this customer (not rejected or cancelled)
 
 
 def _segments(
@@ -103,6 +103,20 @@ def _segments(
     return segments
 
 
+def _online_counts(session: Session, shop_id: int) -> dict[int, int]:
+    """Accepted online orders per customer (an order is linked to its customer when accepted)."""
+    rows = session.execute(
+        select(OnlineOrder.customer_id, func.count())
+        .where(
+            OnlineOrder.shop_id == shop_id,
+            OnlineOrder.customer_id.isnot(None),
+            OnlineOrder.status.notin_([OnlineOrderStatus.REJECTED, OnlineOrderStatus.CANCELLED]),
+        )
+        .group_by(OnlineOrder.customer_id)
+    )
+    return {customer_id: n for customer_id, n in rows}
+
+
 def _bulk_rows(
     session: Session, shop_id: int, today: date, *, new_days: int, active_days: int, frequent_visits: int,
     long_inactive_days: int, high_value_threshold: Decimal | None, frequent_buyer_visits: int,
@@ -136,6 +150,7 @@ def _bulk_rows(
             .group_by(QuickSale.customer_id)
         )
     }  # fmt: skip
+    online = _online_counts(session, shop_id)
     last_payment = khata_service.last_payment_dates(session, shop_id, list(customers))
     accounts = {
         a.customer.id: a for a in khata_service.list_accounts(session, shop_id, active=None, limit=None)[0]
@@ -182,7 +197,7 @@ def _bulk_rows(
                     long_inactive_days=long_inactive_days, high_value_threshold=high_value_threshold,
                     frequent_buyer_visits=frequent_buyer_visits,
                 ),
-                online_order_count=0,
+                online_order_count=online.get(customer_id, 0),
             )
         )  # fmt: skip
     return out
@@ -242,5 +257,6 @@ def analytics_for(
         customer_id=customer.id, name=customer.name, phone=customer.phone, is_active=customer.is_active,
         detailed_sale_count=0, quick_sale_count=0, total_purchases=ZERO, average_transaction_value=None,
         first_purchase=None, last_purchase=None, outstanding=ZERO, advance=ZERO, last_payment_date=None,
-        days_since_last_purchase=None, days_since_last_payment=None, segments=[], online_order_count=0,
+        days_since_last_purchase=None, days_since_last_payment=None, segments=[],
+        online_order_count=_online_counts(session, shop_id).get(customer.id, 0),
     )  # fmt: skip

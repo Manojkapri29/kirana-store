@@ -72,7 +72,7 @@ A KPI is never invented: when the data is not there it is reported as **Not Avai
 | KPI (key) | Unit | Description | Formula | Source | Permission | Limitations |
 | --- | --- | --- | --- | --- | --- | --- |
 | **Discounts given** (`discount_given`) | money | Discounts allowed on sales (line, bill and offers). | Line + bill + promotion discounts on detailed sales, plus quick-sale discounts | Posted sales and quick sales | `REPORT_VIEW` | A quick sale's discount is its single transaction discount. |
-| **Online orders** (`online_orders`) | count | Orders placed online. | Not available | None: this application has no online orders | `REPORT_VIEW` | There is no online-order module. |
+| **Online orders** (`online_orders`) | count | Orders customers placed in the online store. | Count of online orders placed in the period (any status) | The shop's online orders | `REPORT_VIEW` | Delivered online orders are ordinary detailed sales: their revenue is already inside sales and is not added again. |
 | **Return rate** (`return_rate`) | percent | Refunds as a share of sales. | Sales-return value / (Detailed net + Quick net) x 100 | Posted sales and sales returns | `REPORT_VIEW` | By value, not by number of returns. |
 | **Promotion usage** (`promotion_usage`) | percent | Share of detailed sales that used an offer or coupon. | Sales with at least one promotion / detailed sales x 100 | Posted sales and their promotion snapshots | `PROMOTION_VIEW` | Quick Sales cannot use offers. |
 | **Loyalty points issued** (`loyalty_activity`) | count | Loyalty points earned in the period. | Sum of EARN ledger points dated in the period | The loyalty ledger | `LOYALTY_VIEW` | Points, not money. |

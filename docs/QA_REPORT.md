@@ -87,3 +87,27 @@ photo folder was copied back, after which its SHA-256 matched. See findings M1 a
 **Conditionally ready for a single-machine SQLite deployment behind an operator-provided HTTPS proxy, for a shop willing to complete the operator items in
 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) (items 19–22) and to configure and test each integration it wants.** **Not** verified for PostgreSQL, container deployment, high load,
 or any real external provider. No critical blocker was found; the HIGH items are unverified targets, not known defects.
+
+
+---
+
+# Follow-up after the audit (same repository, later date)
+
+The audit's findings were worked through. Status now:
+
+| Finding | Status |
+|---|---|
+| H1 PostgreSQL never executed | **Verified locally on PostgreSQL 16** (migrations, whole test suite, production-mode server, backup/restore, performance smoke). It found and fixed 7 real problems (see POSTGRES_MIGRATION_CHECKLIST.md). A remote/managed service is still unverified. |
+| H2 no real integrations | unchanged: still configure-and-test by the shop |
+| M1 backups exclude photos | **Fixed** for local photo storage (archive in the backup, restored without overwriting; tested). S3 photos rely on the bucket's own durability. |
+| M2 Docker unverified | **Still unverified**: Docker is not installed on this machine. The nginx configuration itself was tested with a real nginx. |
+| M3 per-process rate limits | unchanged |
+| M4 SQLite single writer | unchanged, but PostgreSQL is now an option |
+| M5 no load test / monitoring | unchanged (PostgreSQL smoke on one machine only) |
+| L1 backup list hidden after restore | **Fixed** (re-listed from manifests) |
+| L2 no HSTS | **Fixed**, and a larger nginx defect was found and fixed: the security headers were missing on `/` and the built files because nginx does not inherit `add_header` into a location that sets its own |
+| L5 new shop has no categories | not a defect: the business-type screen suggests categories the owner chooses |
+| I1 no online store | **Built** (ONLINE_STORE.md): public storefront, order workflow, delivery creates the ordinary sale; reports, KPI, insights and the assistant now use the real numbers |
+
+Also fixed while doing this: a first-use race in the monthly usage counter (PostgreSQL), NUL characters causing HTTP 500 on PostgreSQL (now 422), deadlocks now a retryable 503.
+Tests: see the numbers in the final summary of the follow-up.

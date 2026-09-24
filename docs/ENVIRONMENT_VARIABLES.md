@@ -1,12 +1,14 @@
 # Environment variables
 
-Generated from `backend/app/core/config.py` (`Settings`) during Phase 20 and kept honest by `tests/test_phase20_release.py`, which fails if a setting
+Generated from `backend/app/core/config.py` (`Settings`) and kept honest by `tests/test_phase20_release.py`, which fails if a setting
 is missing from `backend/.env.example`. Every backend variable is read from the environment (or `backend/.env`). **Nothing here is a secret default:**
 secrets are unset until you provide them, and only their *names* are ever stored in the database (integrations).
 
 Frontend: only `VITE_*` variables exist, and they are public (built into the JavaScript). Never put a secret in one.
 
 In production the application refuses to start unless `KIRANA_SECRET_KEY` (32+ chars), `KIRANA_FRONTEND_URL` (https), `KIRANA_CORS_ORIGINS` (includes the frontend, not `*`), debug off, rate limiting on, Argon2 cost at or above the minimum, dev auth bypass off, secure cookies on and (if metrics are enabled) a metrics token are all set. See `Settings.production_problems`.
+
+For PostgreSQL set `KIRANA_DATABASE_URL=postgresql+psycopg://user:password@host:5432/dbname` (the password lives only in the environment) and see `POSTGRES_MIGRATION_CHECKLIST.md`.
 
 | Variable | Type | Default | Notes |
 |---|---|---|---|
@@ -27,6 +29,7 @@ In production the application refuses to start unless `KIRANA_SECRET_KEY` (32+ c
 | `KIRANA_RATE_LIMIT_EXPORT` | int | `20` |  |
 | `KIRANA_RATE_LIMIT_WEBHOOK` | int | `120` |  |
 | `KIRANA_PASSWORD_HASH_CONCURRENCY` | int | `4` |  |
+| `KIRANA_RATE_LIMIT_STORE_ORDER` | int | `10` |  |
 | `KIRANA_RATE_LIMIT_SYNC` | int | `600` |  |
 | `KIRANA_RATE_LIMIT_MESSAGE` | int | `60` |  |
 | `KIRANA_RATE_LIMIT_PAYMENT` | int | `120` |  |

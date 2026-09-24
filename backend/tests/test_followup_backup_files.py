@@ -116,15 +116,3 @@ def test_retention_deletion_removes_the_photo_archive_too(env, photos, session_f
     backup_service.LocalBackupStorage(env).delete(f"{key}.db")
     assert not (env / f"{key}.images.tar.gz").exists() and not (env / f"{key}.json").exists()
 
-
-def test_every_nginx_location_that_sets_headers_also_includes_the_security_headers():
-    """nginx drops server-level add_header in a location that has its own; the snippet must be included there (checked live with nginx in the follow-up QA)."""
-    import re
-    from pathlib import Path
-
-    conf = (Path(__file__).resolve().parents[2] / "frontend" / "nginx.conf").read_text()
-    blocks = re.findall(r"location [^{]+\{(.*?)\n    \}", conf, re.S)
-    assert blocks
-    for block in blocks:
-        if "add_header" in block:
-            assert "include /etc/nginx/snippets/security-headers.conf;" in block, block

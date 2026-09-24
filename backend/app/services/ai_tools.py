@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.core.context import RequestContext
 from app.models import Product
+from app.reporting import online as online_report
 from app.services import (
     ai_bi_tools,
     ai_dates,
@@ -661,16 +662,34 @@ def _promotion_summary(tc: ToolContext, args: PeriodArgs) -> Answer:
     )
 
 
-def _online_orders(tc: ToolContext, _args: PeriodArgs) -> Answer:
+def _online_orders(tc: ToolContext, args: PeriodArgs) -> Answer:
+    period = tc.period(args, "this month")
+    r = online_report.period_summary(tc.session, tc.ctx.shop_id, period.start, period.end)
+    source = tc.t("Online orders placed in the period", "अवधि में आए ऑनलाइन ऑर्डर")
+    if r["placed"] == 0:
+        return Answer(
+            NO_DATA, "get_online_order_summary", tc.t("Online orders", "ऑनलाइन ऑर्डर"),
+            tc.t(f"No online orders were placed in {period.label}.", f"{period.label} में कोई ऑनलाइन ऑर्डर नहीं आया।"),
+            sources=[source], period=_period_info(period),
+        )  # fmt: skip
     return Answer(
-        NOT_AVAILABLE,
+        ANSWERED,
         "get_online_order_summary",
         tc.t("Online orders", "ऑनलाइन ऑर्डर"),
         tc.t(
-            "Online ordering is not part of this application yet, so there are no online orders or online revenue to report. Nothing has been estimated.",
-            "ऑनलाइन ऑर्डर अभी इस ऐप में नहीं है, इसलिए बताने के लिए कोई ऑनलाइन ऑर्डर या आय नहीं है।",
+            f"{r['placed']} online orders were placed in {period.label}; {r['delivered']} were delivered, worth {_rupees(r['delivered_value'])}. "
+            "Delivered orders are ordinary sales, so that revenue is already in your sales figures.",
+            f"{period.label} में {r['placed']} ऑनलाइन ऑर्डर आए; {r['delivered']} डिलीवर हुए, कुल {_rupees(r['delivered_value'])}। यह आय आपकी बिक्री में पहले से शामिल है।",
         ),
-        sources=[tc.t("Online ordering is planned for a later phase", "ऑनलाइन ऑर्डर बाद के चरण में आएगा")],
+        [
+            Figure(tc.t("Orders placed", "आए ऑर्डर"), str(r["placed"])),
+            Figure(tc.t("Delivered", "डिलीवर हुए"), str(r["delivered"])),
+            Figure(tc.t("Rejected or cancelled", "अस्वीकार या रद्द"), str(r["rejected_or_cancelled"])),
+            Figure(tc.t("Delivered value", "डिलीवर हुआ मूल्य"), _rupees(r["delivered_value"])),
+        ],
+        None,
+        [source],
+        _period_info(period),
     )
 
 
@@ -1482,7 +1501,7 @@ def _revenue_summary(tc: ToolContext, args: PeriodArgs) -> Answer:
     p = pnl_service.compute(tc.session, tc.ctx.shop_id, period.start, period.end)
     notes = [
         tc.t(
-            "Calculation: Detailed Sales + Quick Sales - Sales Returns, by posted date. There are no online orders in this application, so none are added.",
+            "Calculation: Detailed Sales + Quick Sales - Sales Returns, by posted date. Online store orders are ordinary detailed sales, so they are already included.",
             "गणना: विस्तृत बिक्री + क्विक सेल - बिक्री वापसी। इस ऐप में ऑनलाइन ऑर्डर नहीं हैं, इसलिए कुछ नहीं जोड़ा गया।",
         )
     ]
@@ -2072,7 +2091,7 @@ TOOLS: dict[str, Tool] = {
         ),
         Tool(
             "get_online_order_summary",
-            "Online orders for a period (online ordering is not built yet).",
+            "Online store orders for a period: how many came in, how many were delivered, and their value.",
             PeriodArgs,
             BASIC,
             _online_orders,

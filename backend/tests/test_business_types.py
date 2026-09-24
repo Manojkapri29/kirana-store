@@ -133,7 +133,7 @@ class TestChangingTheBusinessType:
         assert client_a.get("/api/v1/shop").json()["business_type"] == "GROCERY"
 
     def test_an_inactive_type_cannot_be_chosen(self, client_a, session):
-        session.execute(text("UPDATE business_types SET is_active = 0 WHERE code = 'HARDWARE'"))
+        session.execute(text("UPDATE business_types SET is_active = FALSE WHERE code = 'HARDWARE'"))
         session.commit()
 
         assert client_a.patch("/api/v1/shop", json={"business_type": "HARDWARE"}).status_code == 422

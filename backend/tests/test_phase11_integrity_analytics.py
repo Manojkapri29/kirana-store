@@ -57,13 +57,13 @@ class TestIntegrityChecker:
     ):
         with engine.begin() as c:
             c.execute(
-                text("UPDATE shops SET allow_negative_stock = 1 WHERE id = :i"), {"i": tenant_a.shop.id}
+                text("UPDATE shops SET allow_negative_stock = TRUE WHERE id = :i"), {"i": tenant_a.shop.id}
             )
         sold(client_a, [item(shop["rice"], "25")])  # 20 in stock: allowed while the shop permits it
         assert "negative_stock_where_forbidden" not in findings(session_factory)
         with engine.begin() as c:
             c.execute(
-                text("UPDATE shops SET allow_negative_stock = 0 WHERE id = :i"), {"i": tenant_a.shop.id}
+                text("UPDATE shops SET allow_negative_stock = FALSE WHERE id = :i"), {"i": tenant_a.shop.id}
             )
         assert shop["rice"]["id"] in findings(session_factory)["negative_stock_where_forbidden"].sample_ids
 

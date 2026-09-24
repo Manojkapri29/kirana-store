@@ -20,6 +20,7 @@ from app.services import (
     inventory_service,
     khata_service,
     notification_service,
+    pg_backup,
     system_event_service,
 )
 from app.services.shop_service import get_shop, shop_today
@@ -149,7 +150,8 @@ def backup_status(session: Session, settings: Settings | None = None) -> dict[st
     settings = settings or get_settings()
     try:
         backup_service.get_storage(settings)
-        backup_service.database_file(settings)
+        if not pg_backup.is_postgres(settings):
+            backup_service.database_file(settings)
     except backup_service.BackupNotConfigured:
         return {"state": "not_configured", "last_backup_at": None}
     latest = backup_service.latest_verified(session)

@@ -35,3 +35,16 @@ def test_production_defaults_refuse_an_unsafe_start(monkeypatch):
     settings = Settings(environment="production")
     problems = settings.production_problems()
     assert any("SECRET_KEY" in p for p in problems) and any("FRONTEND_URL" in p for p in problems)
+
+
+def test_every_nginx_location_that_sets_headers_also_includes_the_security_headers():
+    """nginx drops server-level add_header in a location that has its own; the snippet must be included there (checked live with nginx in the follow-up QA)."""
+    import re
+    from pathlib import Path
+
+    conf = (Path(__file__).resolve().parents[2] / "frontend" / "nginx.conf").read_text()
+    blocks = re.findall(r"location [^{]+\{(.*?)\n    \}", conf, re.S)
+    assert blocks
+    for block in blocks:
+        if "add_header" in block:
+            assert "include /etc/nginx/snippets/security-headers.conf;" in block, block

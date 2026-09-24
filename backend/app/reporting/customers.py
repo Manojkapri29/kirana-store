@@ -5,7 +5,7 @@ sale belongs to nobody and is never invented into a customer. Everything reporte
 own records. Nothing here infers a sensitive attribute, a personality or a protected characteristic; segments are the
 CRM's own factual buckets (recency, frequency, spend, credit).
 
-Online customer activity is Not Available: this application has no online orders.
+Online customer activity counts the shop's own online orders; their revenue is already in the detailed sales above.
 """
 
 from datetime import UTC, date, datetime, time, timedelta
@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Campaign, CampaignSend, LoyaltyLedger, ReferralEvent
-from app.reporting import facts
+from app.reporting import facts, online
 from app.reporting.filters import ReportFilters, ReportTable
 from app.reporting.sales import _table
 from app.services import customer_intelligence_service as cis
@@ -23,7 +23,7 @@ from app.services import retention_service
 
 ZERO = Decimal("0.00")
 _HONOURED = {"customer_id", "active"}
-ONLINE_NA = "Not Available: this application has no online orders."
+ONLINE_NA = "Online orders are ordinary detailed sales once delivered, so their revenue is already inside the figures above."
 
 
 def _pct(n: int, d: int) -> Decimal | None:
@@ -63,7 +63,7 @@ def overview(session: Session, shop_id: int, f: ReportFilters, today: date) -> d
         "repeat_purchase_rate_pct": r.repeat_purchase_rate,
         "inactive_customers": r.inactive_customer_count,
         "reactivated_customers": r.reactivated_count,
-        "online_customer_activity": None,
+        "online_customer_activity": online.period_summary(session, shop_id, f.period.start, f.period.end),
         "online_note": ONLINE_NA,
         "notes": [
             "Only purchases that name a customer are attributed; walk-in sales are not customers.",

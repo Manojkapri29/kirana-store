@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.models import LoyaltyLedger, Sale, SalePromotion, Unit
 from app.models.enums import LoyaltyEntryType, SaleStatus
-from app.reporting import facts
+from app.reporting import facts, online
 from app.reporting.filters import Period, ReportFilters
 from app.services import (
     analytics_service,
@@ -314,8 +314,8 @@ def _discount_given(s: Snapshot) -> Value:
     return ok(s.sales.detailed.discount + s.sales.quick.discount)
 
 
-def _online(_s: Snapshot) -> Value:
-    return na("This application has no online orders, so there is nothing to count.")
+def _online(s: Snapshot) -> Value:
+    return ok(online.period_summary(s.session, s.shop_id, s.period.start, s.period.end)["placed"])
 
 
 _D = KpiDefinition
@@ -717,11 +717,11 @@ _register(
         "online_orders",
         "Online orders",
         _O,
-        "Orders placed online.",
-        "Not available",
-        "None: this application has no online orders",
+        "Orders customers placed in the online store.",
+        "Count of online orders placed in the period (any status)",
+        "The shop's online orders",
         "count",
-        "There is no online-order module.",
+        "Delivered online orders are ordinary detailed sales: their revenue is already inside sales and is not added again.",
         "REPORT_VIEW",
     ),
     _online,

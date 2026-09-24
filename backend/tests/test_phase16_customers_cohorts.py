@@ -42,7 +42,7 @@ class TestOverview:
         assert (o["new_customers"], o["returning_customers"], o["purchasing_customers"]) == (1, 1, 2)
         assert o["average_customer_value"] == "200.00" and o["purchase_frequency"] == "1.00"
         assert o["revenue_from_identified_customers"] == "400.00"
-        assert o["online_customer_activity"] is None and "no online orders" in o["online_note"]
+        assert o["online_customer_activity"]["placed"] == 0 and "already inside" in o["online_note"]  # counted from the shop's own online orders; none here
 
     def test_an_empty_period_has_no_average_and_no_frequency(self, session, tenant_a, client_a):
         o = _get(client_a, "customers/overview")

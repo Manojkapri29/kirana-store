@@ -6,3 +6,4 @@ SQLAlchemy==2.0.54
 alembic==1.20.0
 openpyxl==3.1.5  # XLSX export
 argon2-cffi==25.1.0  # password hashing (Argon2id)
+psycopg[binary]==3.3.6  # PostgreSQL driver (used only when KIRANA_DATABASE_URL is a postgresql+psycopg:// URL)

@@ -567,3 +567,29 @@ class SyncStatus(StrEnum):
     CONFLICT = "CONFLICT"  # refused as queued (no stock, changed total, closed period): a person decides
     FAILED = "FAILED"  # invalid or not permitted: nothing was applied
     DISCARDED = "DISCARDED"  # a person dropped a conflict or failure; nothing was applied
+
+
+# --- Online store -----------------------------------------------------------------------------------------
+
+
+class OnlineOrderStatus(StrEnum):
+    PLACED = "PLACED"  # the customer sent it; nothing has moved (no stock, no money)
+    ACCEPTED = "ACCEPTED"
+    PREPARING = "PREPARING"
+    READY = "READY"
+    OUT_FOR_DELIVERY = "OUT_FOR_DELIVERY"
+    DELIVERED = "DELIVERED"  # delivered or collected: the ordinary Detailed Sale is created and posted here
+    REJECTED = "REJECTED"  # by the shop, before it was accepted
+    CANCELLED = "CANCELLED"  # by the customer (while PLACED) or by the shop (any time before DELIVERED)
+
+
+class OnlineOrderFulfilment(StrEnum):
+    DELIVERY = "DELIVERY"
+    PICKUP = "PICKUP"
+
+
+class OnlineOrderPayment(StrEnum):
+    """How the customer pays. Nothing is charged online: the money is taken by hand."""
+
+    COD = "COD"  # cash on delivery / at pickup
+    UPI = "UPI"  # the customer pays by UPI when the order reaches them

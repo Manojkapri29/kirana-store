@@ -194,10 +194,10 @@ class TestProfitPromotionsOnlineAndDashboard:
         assert figures(answer)["Total discounts"] == "₹10.00"
         assert answer["table"]["rows"][0][0] == "Festival"
 
-    def test_online_orders_are_not_invented(self, client_a, shop):
+    def test_online_orders_are_never_invented(self, client_a, shop):
         answer = ask(client_a, "How many online orders did I receive?")
-        assert answer["status"] == "NOT_AVAILABLE" and "not part of this application yet" in answer["message"]
-        assert answer["figures"] == []
+        assert answer["tool"] == "get_online_order_summary" and answer["status"] == "NO_DATA"  # the shop has none: it says so, no number
+        assert "No online orders" in answer["message"] and answer["figures"] == []
 
     def test_the_dashboard_and_monthly_report(self, client_a, busy):
         dash = ask(client_a, "Give me a business overview")

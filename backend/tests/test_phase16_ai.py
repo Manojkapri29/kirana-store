@@ -140,7 +140,7 @@ class TestAnswers:
         a = ai_tools.run_tool(session, weak, "get_kpi", {"kpi": "gross_profit"})
         assert a.status == "NO_DATA" and not a.figures
 
-    def test_sales_summary_states_online_is_not_available(self, session, tenant_a):
+    def test_sales_summary_says_online_orders_are_inside_detailed_sales(self, session, tenant_a):
         make_quick_sale(session, tenant_a, "80.00", day=TODAY)
         session.commit()
         a = _run(session, tenant_a, "get_sales_analytics", view="summary")

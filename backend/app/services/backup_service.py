@@ -24,6 +24,7 @@ import re
 import secrets
 import shutil
 import sqlite3
+import subprocess
 import tarfile
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -39,6 +40,7 @@ from app.core.config import BACKEND_DIR, Settings, get_settings
 from app.db.types import utc_now
 from app.models import BackupRecord
 from app.models.enums import BackupKind, BackupStatus
+from app.services import pg_backup
 
 MANIFEST_VERSION = 1
 IMAGE_MEMBER = re.compile(r"^\d{1,12}/[0-9a-f]{64}\.(jpg|png|webp)$")
@@ -104,7 +106,7 @@ class LocalBackupStorage:
         return self.directory() / filename
 
     def delete(self, filename: str) -> None:
-        stem = filename.removesuffix(".db")
+        stem = filename.removesuffix(".db").removesuffix(".dump")
         for name in (filename, stem + ".json", stem + ".images.tar.gz"):  # the database, its manifest, its photos
             path = self.path_of(name)
             if path.exists():
@@ -190,6 +192,19 @@ def _inspect(path: Path) -> tuple[dict[str, str], str | None]:
     return checks, revision
 
 
+def _inspect_dump(path: Path) -> tuple[dict[str, str], str | None]:
+    """Check a PostgreSQL archive: it can be listed, and it carries a migration revision."""
+    checks: dict[str, str] = {}
+    revision: str | None = None
+    try:
+        checks["archive"] = "ok" if pg_backup.check_archive(path) else "unreadable"
+        revision = pg_backup.revision_of(path) if checks["archive"] == "ok" else None
+    except (pg_backup.PgToolsMissing, OSError, subprocess.SubprocessError):
+        checks["archive"] = "unreadable"
+    checks["schema"] = "ok" if revision else "missing"
+    return checks, revision
+
+
 def compatibility_of(revision: str | None) -> str:
     """Can this code use a database at `revision`? current = yes; upgradable = older, run migrations; else incompatible."""
     if revision is None or revision not in schema_state.known_revisions():
@@ -205,7 +220,7 @@ def verify_file(path: Path, expected_sha256: str | None = None) -> Verification:
     sha = _sha256(path)
     if expected_sha256 is not None:
         checks["checksum"] = "ok" if sha == expected_sha256 else "mismatch"
-    inspected, revision = _inspect(path)
+    inspected, revision = _inspect_dump(path) if path.suffix == ".dump" else _inspect(path)
     checks.update(inspected)
     compat = compatibility_of(revision)
     checks["compatibility"] = "ok" if compat != "incompatible" else "incompatible"
@@ -229,6 +244,8 @@ def perform_backup(
     """Take, verify and store one backup. Never raises for a disk or database problem: returns a FAILED outcome."""
     settings = settings or get_settings()
     key = new_key()
+    if pg_backup.is_postgres(settings):
+        return _perform_pg_backup(kind, initiated_by, settings, storage, key)
     try:
         source = database_file(settings)
         store = storage or get_storage(settings)
@@ -324,6 +341,52 @@ def perform_backup(
     finally:
         if partial is not None:
             partial.unlink(missing_ok=True)
+
+
+def _perform_pg_backup(kind: BackupKind, initiated_by: str, settings: Settings, storage: BackupStorage | None, key: str) -> BackupOutcome:
+    """A PostgreSQL backup: one `pg_dump` archive, verified, with a manifest (and the kept photos, as for SQLite)."""
+    try:
+        store = storage or get_storage(settings)
+    except BackupNotConfigured:
+        return _failure(key, kind, initiated_by, "not_configured", "Backups are not configured for this database or storage.")
+    if not pg_backup.tools_available():
+        return _failure(key, kind, initiated_by, "tools_missing", "pg_dump and pg_restore must be installed on this machine to back up PostgreSQL.")
+    partial = store.path_of(f"{key}.tmp.dump")  # ends in .dump so verification treats it as an archive
+    try:
+        if store.free_bytes() < settings.backup_min_free_mb * 1024 * 1024:
+            return _failure(key, kind, initiated_by, "disk_space", "There is not enough free disk space for a backup.")
+        filename = f"{key}.dump"
+        pg_backup.dump(settings, partial)
+        verification = verify_file(partial)
+        if not verification.ok:
+            return _failure(key, kind, initiated_by, "verification_failed", "The backup could not be verified and was discarded.")
+        images_count, images_sha = 0, None
+        photos = image_folder(settings)
+        if photos is not None and photos.is_dir():
+            images_partial = store.path_of(f"{key}.images.partial")
+            try:
+                images_count, images_sha = _archive_images(photos, images_partial)
+                if images_count:
+                    os.replace(images_partial, store.path_of(images_filename(key)))
+            finally:
+                images_partial.unlink(missing_ok=True)
+        os.replace(partial, store.path_of(filename))
+        manifest: dict[str, Any] = {
+            "manifest_version": MANIFEST_VERSION, "backup_key": key, "kind": kind.value, "created_at": utc_now().isoformat(),
+            "filename": filename, "size_bytes": verification.size_bytes, "sha256": verification.sha256,
+            "schema_revision": verification.schema_revision, "initiated_by": initiated_by, "engine": "postgresql",
+            "images_file": images_filename(key) if images_count else None, "images_count": images_count,
+            "images_sha256": images_sha if images_count else None,
+        }  # fmt: skip
+        store.path_of(f"{key}.json").write_text(json.dumps(manifest, indent=2))
+        observability.log_event("backup", "backup created", backup_key=key, size_bytes=verification.size_bytes)
+        return BackupOutcome(key, kind, initiated_by, True, filename, verification.size_bytes, verification.sha256, verification.schema_revision)
+    except (RuntimeError, OSError, subprocess.SubprocessError):
+        return _failure(key, kind, initiated_by, "dump_failed", "The database could not be dumped for the backup.")
+    except Exception:  # noqa: BLE001
+        return _failure(key, kind, initiated_by, "unexpected", "The backup failed unexpectedly.")
+    finally:
+        partial.unlink(missing_ok=True)
 
 
 def record_outcome(session: Session, outcome: BackupOutcome, storage_name: str = "local") -> BackupRecord:

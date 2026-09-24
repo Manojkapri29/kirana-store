@@ -82,7 +82,7 @@ class TestForeignKeys:
         assert_rejected(session, new_product(session, tenant_a, unit_id=99999), match="FOREIGN KEY")
 
     def test_a_shop_cannot_be_deleted_while_it_owns_data(self, session, tenant_a):
-        with pytest.raises(Exception, match="FOREIGN KEY"):
+        with pytest.raises(Exception, match="(?i)foreign key"):
             session.execute(Shop.__table__.delete().where(Shop.id == tenant_a.shop.id))
         session.rollback()
 
@@ -238,7 +238,7 @@ class TestValuesMustBeValid:
             session,
             "INSERT INTO users (shop_id, email, password_hash, full_name, role, is_active,"
             " created_at, updated_at)"
-            " VALUES (:shop, 'x@test.local', '!', 'X', 'ADMIN', 1, '2026-01-01', '2026-01-01')",
+            " VALUES (:shop, 'x@test.local', '!', 'X', 'ADMIN', TRUE, '2026-01-01', '2026-01-01')",
             {"shop": tenant_a.shop.id},
             match="role",
         )

@@ -67,7 +67,7 @@ the code). 5. Roll back with a **restore** of the backup (`BACKUP_AND_RESTORE.md
 write conflicts are queued, not deadlocked). Concurrency is bounded on purpose: **run one backend process (or a few workers on the same
 machine) and never put the file on a network share**. Back up with `backup_cli` (the online backup API, not `cp`). Restore only with the application stopped.
 
-**PostgreSQL (recommended for more than one instance).** Not migrated and not tested here (`POSTGRES_MIGRATION_CHECKLIST.md` lists the work). For
+**PostgreSQL (recommended for more than one instance).** Verified on a local PostgreSQL 16 server (`POSTGRES_MIGRATION_CHECKLIST.md`); a remote/managed service was not. For
 when it is: use a connection pooler (PgBouncer, or SQLAlchemy's pool sized to the workers), run migrations from one place as a release step,
 back up with `pg_dump`/base backups or your provider's snapshots and **test restores**, require SSL (`sslmode=verify-full`), keep the credentials in the
 secret store, and give the application a role that owns only its own schema (no superuser, no `CREATE DATABASE`; the migration role may differ from the runtime role).
@@ -101,3 +101,11 @@ shop.example.com {
 - [ ] Daily backup runs (the worker's `--schedule`, or cron) **and** copies leave the machine; a restore was rehearsed (`backup_cli rehearse`)
 - [ ] Metrics and logs are collected (`MONITORING.md`); an alert exists for `/health/ready` failing
 - [ ] The proxy limits request size and sets forwarded headers
+
+
+## Security headers at the web container (updated)
+
+nginx does not inherit `add_header` from the server block into a `location` that sets its own, so the Content-Security-Policy, `X-Frame-Options` and the other headers
+were missing on the app page (`/`) and the built files. They now live in `frontend/security-headers.conf` (copied to `/etc/nginx/snippets/` by the Dockerfile) and every
+location that sets a header includes it; a test enforces this and the config was checked with a real nginx (`nginx -t` and `curl` on `/`, `/assets/*`, `/sw.js`, `/health/live`).
+`Strict-Transport-Security` is sent too; browsers ignore it over plain HTTP, so it takes effect once your HTTPS proxy serves the response.

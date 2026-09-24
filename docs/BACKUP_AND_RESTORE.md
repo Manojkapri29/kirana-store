@@ -68,6 +68,22 @@ Off-machine copies and encryption of backups at rest are not built; encrypt the 
 Restore drills are your responsibility: run `rehearse` regularly.
 
 
-## Uploaded files (Phase 19 note)
+## Photos (updated)
 
-The database backup does **not** contain uploaded product photos (local folder `KIRANA_IMAGE_STORAGE_DIR` or the S3 bucket). Back those up separately and restore them alongside the database; photos missing after a restore show as absent, the business data is unaffected. The restore drill test (`tests/test_phase19_restore_drill.py`) covers the database only.
+A backup made with the local image store (`KIRANA_STORAGE_PROVIDER=local`) also writes `<key>.images.tar.gz` beside the database backup, listed in the
+manifest with its count and SHA-256. Only valid photo files are archived. A restore puts the photos back **without overwriting** a file that is already
+there and without deleting any other, refuses an archive whose checksum does not match (the database is still restored, and the result says so), and never
+extracts a name that is not a photo key. Retention deletes a backup's photos with it. **Photos kept in object storage (S3) are not part of this backup:**
+the bucket has its own durability and versioning.
+
+## The list of backups after a restore (updated)
+
+The list of backups is stored in the database, so restoring an older backup used to hide newer ones. A restore now re-lists every backup that still has a
+manifest and file in the backup folder (a "pre-restore" safety backup is always made first and is re-listed too).
+
+## PostgreSQL
+
+With a PostgreSQL `KIRANA_DATABASE_URL` the same commands work through `pg_dump` (custom format, `<key>.dump`) and `pg_restore`; the tools must be installed. The
+password is passed to them by environment variable, never on a command line. `restore` runs `pg_restore --clean --if-exists --single-transaction`: it is
+all-or-nothing and needs the application **stopped**. `rehearse` restores into a scratch database (needs `CREATEDB`) and drops it. Backup files can also be made
+with your own `pg_dump` / provider snapshots; whichever you use, practise a restore.

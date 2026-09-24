@@ -24,7 +24,7 @@ def _by_key(body):
 
 def test_online_repeat_is_not_available_never_zero(session, tenant_a, client_a):
     i = _by_key(_get(client_a))["online_repeat_customers"]
-    assert i["availability"] == "NOT_AVAILABLE" and "not connected" in i["statement"]
+    assert i["availability"] == "NOT_AVAILABLE" and "not analysed separately" in i["statement"]
 
 
 def test_empty_shop_reports_insufficient_data_not_zeros(session, tenant_a, client_a):

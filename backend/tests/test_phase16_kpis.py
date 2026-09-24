@@ -285,13 +285,9 @@ class TestFinanceAndOperations:
         session.commit()
         assert _value(session, tenant_a, "net_cash_flow").amount == D("200.00")
 
-    def test_online_orders_are_not_available_because_none_exist(self, session, tenant_a):
+    def test_online_orders_counts_the_shops_own_orders_and_is_zero_only_because_there_are_none(self, session, tenant_a):
         v = _value(session, tenant_a, "online_orders")
-        assert (
-            v.amount is None
-            and v.availability is kpis.Availability.NOT_AVAILABLE
-            and "no online orders" in v.reason
-        )
+        assert v.amount == D("0") and v.availability is kpis.Availability.AVAILABLE  # a real count of a real (empty) list
 
     def test_loyalty_activity_and_promotion_usage(self, session, tenant_a):
         from app.services import loyalty_service

@@ -9,6 +9,10 @@ import { NotFoundPage } from '@/pages/NotFoundPage'
 import { NAV_ITEMS } from './navigation'
 
 /** Every screen is loaded when first opened, so the first page a phone downloads is small (see docs/PWA_OFFLINE.md). */
+const OnlineOrdersPage = lazy(() => import('@/features/onlineStore/OnlineOrdersPage').then((m) => ({ default: m.OnlineOrdersPage })))
+const OnlineStorePage = lazy(() => import('@/features/onlineStore/OnlineStorePage').then((m) => ({ default: m.OnlineStorePage })))
+const PublicOrderPage = lazy(() => import('@/features/onlineStore/PublicOrderPage').then((m) => ({ default: m.PublicOrderPage })))
+const PublicStorePage = lazy(() => import('@/features/onlineStore/PublicStorePage').then((m) => ({ default: m.PublicStorePage })))
 const OfflinePage = lazy(() => import('@/features/offline/OfflinePage').then((m) => ({ default: m.OfflinePage })))
 const AdminConsolePage = lazy(() => import('@/features/admin/AdminConsolePage').then((m) => ({ default: m.AdminConsolePage })))
 const AssistantPage = lazy(() => import('@/features/assistant/AssistantPage').then((m) => ({ default: m.AssistantPage })))
@@ -79,6 +83,9 @@ export function App() {
     <Suspense fallback={<Spinner />}>
     <Routes>
       <Route path="accept-invitation" element={<AcceptInvitationPage />} />
+      {/* The public storefront: no sign-in, no shop navigation. */}
+      <Route path="store/:slug" element={<PublicStorePage />} />
+      <Route path="store/:slug/order/:reference" element={<PublicOrderPage />} />
       <Route
         element={
           <AuthGate>
@@ -122,6 +129,8 @@ export function App() {
         <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="customers/:id/crm" element={<CustomerCrmPage />} />
         <Route path="offline" element={<OfflinePage />} />
+        <Route path="online-orders" element={<OnlineOrdersPage />} />
+        <Route path="online-store" element={<OnlineStorePage />} />
         <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="analytics" element={<ExecutivePage />} />
         <Route path="analytics/reports" element={<ReportsPage />} />

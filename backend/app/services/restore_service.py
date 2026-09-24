@@ -20,10 +20,12 @@ because it runs with the application stopped, which is the safe way to restore.
 import json
 import shutil
 import sqlite3
+import subprocess
 import tarfile
 import tempfile
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from alembic import command
@@ -34,7 +36,7 @@ from app.core.config import BACKEND_DIR, Settings, get_settings
 from app.db.types import utc_now
 from app.models import BackupRecord
 from app.models.enums import BackupKind, BackupStatus, RestoreMode
-from app.services import backup_service
+from app.services import backup_service, pg_backup
 from app.services.backup_service import BackupStorage, Verification
 
 CONFIRM_PREFIX = "RESTORE "
@@ -106,6 +108,9 @@ def rehearse(record: BackupRecord, actor: str, storage: BackupStorage | None = N
         )
         _log(store, result, actor)
         return result
+    settings = get_settings()
+    if pg_backup.is_postgres(settings):
+        return _rehearse_postgres(record, actor, store, settings)
     with tempfile.TemporaryDirectory(prefix="rehearsal_") as folder:
         copy = Path(folder) / "rehearsal.db"
         try:
@@ -153,6 +158,27 @@ def rehearse(record: BackupRecord, actor: str, storage: BackupStorage | None = N
     return result
 
 
+def _rehearse_postgres(record: BackupRecord, actor: str, store: BackupStorage, settings: Settings) -> RestoreResult:
+    """Restore the archive into a scratch database, count the main tables, drop it. The live database is not touched."""
+    path = store.path_of(record.filename or "")
+    first = backup_service.verify_file(path, record.sha256)
+    if not first.ok:
+        result = RestoreResult(False, RestoreMode.REHEARSAL, record.backup_key, "The backup did not pass its checks.", first)
+    else:
+        try:
+            report = pg_backup.rehearse(settings, path)
+            ok = first.compatibility == "current"
+            detail = "The backup restores cleanly." if ok else "The backup restores, but it is from an older schema: run the migrations after restoring."
+            result = RestoreResult(ok or first.compatibility == "upgradable", RestoreMode.REHEARSAL, record.backup_key, detail, first, report=report)
+        except (RuntimeError, pg_backup.PgToolsMissing, OSError, subprocess.SubprocessError):
+            result = RestoreResult(
+                False, RestoreMode.REHEARSAL, record.backup_key,
+                "The trial restore failed. It needs pg_restore and a database role that may create a scratch database.", first,
+            )  # fmt: skip
+    _log(store, result, actor)
+    return result
+
+
 IN_USE_WAIT_SECONDS = 5.0
 
 
@@ -194,6 +220,8 @@ def restore(
     if not safety.ok:
         return refuse("A safety backup of the current database could not be made, so nothing was changed.")
 
+    if pg_backup.is_postgres(settings):
+        return _restore_postgres(record, actor, store, settings, verification, safety)
     live = backup_service.database_file(settings)
     try:
         source = sqlite3.connect(f"file:{store.path_of(record.filename)}?mode=ro", uri=True)
@@ -234,7 +262,7 @@ def restore(
     photos_note = _restore_photos(record.backup_key, store, settings)
     if photos_note:
         detail += " " + photos_note
-    _reregister_backups(live, store)
+    _reregister_backups(live, store, settings)
     if verification.compatibility == "upgradable":
         detail += " Run the migrations (alembic upgrade head) before starting the application."
     result = RestoreResult(
@@ -247,6 +275,47 @@ def restore(
     )
     _log(store, result, actor)
     return result
+
+
+def _restore_postgres(
+    record: BackupRecord, actor: str, store: BackupStorage, settings: Settings, verification: Verification, safety
+) -> RestoreResult:  # noqa: ANN001
+    try:
+        pg_backup.restore_into_live(settings, store.path_of(record.filename or ""))
+    except (RuntimeError, pg_backup.PgToolsMissing, OSError, subprocess.SubprocessError):
+        result = RestoreResult(
+            False, RestoreMode.RESTORE, record.backup_key,
+            "The database could not be restored (is the application stopped?). The restore is all-or-nothing, so nothing was changed.",
+            pre_restore_key=safety.key,
+        )  # fmt: skip
+        _log(store, result, actor)
+        return result
+    revision = _live_revision(settings)
+    ok = revision is not None and revision == verification.schema_revision
+    after = Verification(ok, {"restored": "ok" if ok else "revision_mismatch"}, revision, backup_service.compatibility_of(revision))
+    detail = "The database was restored from the backup."
+    if verification.compatibility == "upgradable":
+        detail += " Run the migrations (alembic upgrade head) before starting the application."
+    photos_note = _restore_photos(record.backup_key, store, settings)
+    if photos_note:
+        detail += " " + photos_note
+    _reregister_backups(None, store, settings)
+    result = RestoreResult(ok, RestoreMode.RESTORE, record.backup_key, detail if ok else "The restored database failed its checks. Restore the safety backup.", after, safety.key)
+    _log(store, result, actor)
+    return result
+
+
+def _live_revision(settings: Settings) -> str | None:
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(settings.database_url)
+    try:
+        with engine.connect() as connection:
+            return connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        engine.dispose()
 
 
 def _restore_photos(key: str, store: BackupStorage, settings: Settings) -> str:
@@ -288,30 +357,61 @@ def _restore_photos(key: str, store: BackupStorage, settings: Settings) -> str:
     return f"{restored} photo(s) restored."
 
 
-def _reregister_backups(database: Path, store: BackupStorage) -> None:
+def _manifests(store: BackupStorage) -> list[dict]:
+    """Every backup that still has a manifest and its file beside it."""
+    folder = store.directory()
+    found = []
+    for manifest_path in sorted(folder.glob("*.json")):
+        try:
+            m = json.loads(manifest_path.read_text())
+            key, filename = m["backup_key"], m["filename"]
+        except (OSError, ValueError, KeyError):
+            continue
+        if (folder / filename).is_file():
+            found.append({**m, "backup_key": key, "filename": filename})
+    return found
+
+
+def _reregister_backups(database: Path | None, store: BackupStorage, settings: Settings | None = None) -> None:
     """The list of backups lives in the database, so restoring an older backup forgets newer ones. Every backup file that still has a
     manifest beside it is written back into the restored database's list (a backup already listed is left alone)."""
+    settings = settings or get_settings()
+    now = utc_now().isoformat(sep=" ")[:26]  # the format the database stores (UTC, no offset)
+    insert = (
+        "INSERT INTO backup_records (backup_key, kind, status, storage_provider, filename, size_bytes, sha256, schema_revision,"
+        " initiated_by, verified_at, updated_at, created_at) VALUES (:key, :kind, 'VERIFIED', :provider, :filename, :size, :sha,"
+        " :revision, :by, :now, :now, :created)"
+    )
+
+    def row(m: dict) -> dict:
+        return {
+            "key": m["backup_key"], "kind": m.get("kind", "MANUAL"), "provider": store.name, "filename": m["filename"],
+            "size": m.get("size_bytes"), "sha": m.get("sha256"), "revision": m.get("schema_revision"),
+            "by": m.get("initiated_by", "unknown"), "now": now, "created": (m.get("created_at") or now).replace("T", " ")[:26],
+        }  # fmt: skip
+
     try:
-        folder = store.directory()
+        if pg_backup.is_postgres(settings):
+            from sqlalchemy import create_engine, text
+
+            engine = create_engine(settings.database_url)
+            try:
+                with engine.begin() as connection:
+                    known = {r[0] for r in connection.execute(text("SELECT backup_key FROM backup_records"))}
+                    for m in _manifests(store):
+                        if m["backup_key"] not in known:
+                            created = datetime.fromisoformat(m["created_at"]) if m.get("created_at") else utc_now()
+                            connection.execute(text(insert), {**row(m), "now": utc_now(), "created": created})
+            finally:
+                engine.dispose()
+            return
+        assert database is not None
         with sqlite3.connect(database, timeout=5) as connection:
             known = {r[0] for r in connection.execute("SELECT backup_key FROM backup_records")}
-            for manifest_path in sorted(folder.glob("*.json")):
-                try:
-                    m = json.loads(manifest_path.read_text())
-                    key, filename = m["backup_key"], m["filename"]
-                except (OSError, ValueError, KeyError):
-                    continue
-                if key in known or not (folder / filename).is_file():
-                    continue
-                now = utc_now().isoformat(sep=" ")[:26]  # the format SQLite stores (UTC, no offset)
-                connection.execute(
-                    "INSERT INTO backup_records (backup_key, kind, status, storage_provider, filename, size_bytes, sha256,"
-                    " schema_revision, initiated_by, verified_at, updated_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (key, m.get("kind", "MANUAL"), "VERIFIED", store.name, filename, m.get("size_bytes"), m.get("sha256"),
-                     m.get("schema_revision"), m.get("initiated_by", "unknown"), now,
-                     now, (m.get("created_at") or now).replace("T", " ")[:26]),
-                )  # fmt: skip
-    except sqlite3.Error:
+            for m in _manifests(store):
+                if m["backup_key"] not in known:
+                    connection.execute(insert, row(m))
+    except Exception:  # noqa: BLE001
         pass  # the restore itself succeeded; the list can be rebuilt from the manifests later
 
 
@@ -328,6 +428,30 @@ def record_attempt(session, result: RestoreResult, actor: str) -> None:  # noqa:
             detail=result.detail[:300],
         )
     )
+
+
+def record_restore(result: RestoreResult, actor: str, settings: Settings | None = None) -> None:
+    """After a restore, write the attempt into the restored database (SQLite file or PostgreSQL)."""
+    settings = settings or get_settings()
+    if not pg_backup.is_postgres(settings):
+        note_in_database(result, actor, backup_service.database_file(settings))
+        return
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(settings.database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO restore_records (backup_key, mode, status, initiated_by, detail, attempts, created_at)"
+                    " VALUES (:key, :mode, :status, :by, :detail, 1, :now)"
+                ),
+                {"key": result.backup_key, "mode": result.mode.value, "status": "OK" if result.ok else "FAILED", "by": actor, "detail": result.detail[:300], "now": utc_now()},
+            )
+    except Exception:  # noqa: BLE001
+        pass
+    finally:
+        engine.dispose()
 
 
 def note_in_database(result: RestoreResult, actor: str, database: Path) -> None:

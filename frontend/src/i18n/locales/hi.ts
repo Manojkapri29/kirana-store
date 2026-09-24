@@ -28,6 +28,8 @@ export const hi: Translations = {
     analytics: 'विश्लेषण',
     integrations: 'इंटीग्रेशन',
     offline: 'ऑफ़लाइन काउंटर',
+    onlineOrders: 'ऑनलाइन ऑर्डर',
+    onlineStore: 'ऑनलाइन स्टोर',
   },
   modules: {
     expenses: {
@@ -1340,6 +1342,9 @@ export const hi: Translations = {
     offerUses: 'लगाए गए ऑफ़र',
     couponUses: 'इस्तेमाल हुए कूपन',
     onlineStore: 'ऑनलाइन स्टोर',
+    onlinePlaced: 'आए ऑर्डर',
+    onlineDelivered: 'डिलीवर हुए',
+    onlineValue: 'डिलीवर हुआ मूल्य',
   },
   admin: {
     title: 'एडमिनिस्ट्रेटर कंसोल',
@@ -2038,5 +2043,36 @@ export const hi: Translations = {
     provider: 'प्रोवाइडर', enabled: 'चालू करें', save: 'सहेजें', configure: 'सेट करें', enable: 'चालू करें', disable: 'बंद करें', test: 'कनेक्शन जाँचें',
     settings: { host: 'मेल सर्वर', port: 'पोर्ट', security: 'सुरक्षा (starttls, ssl या none)', sender: 'भेजने वाले का पता', username: 'यूज़र नाम', url: 'गेटवे का पता (https)' },
     platform: 'पूरे इंस्टॉलेशन के लिए तय', needsReview: 'जिन भुगतानों की समीक्षा चाहिए', recentCalls: 'हाल की कॉल',
+  },
+
+  onlineStore: {
+    setup: {
+      title: 'ऑनलाइन स्टोर', subtitle: 'एक वेब पेज जहाँ ग्राहक आपसे ऑर्डर कर सकते हैं। ऑर्डर सिर्फ़ अनुरोध है: डिलीवरी होने तक स्टॉक और पैसे में कुछ नहीं बदलता।',
+      address: 'वेब पता', addressHint: 'अक्षर, अंक और हाइफ़न। ग्राहक /store/<यह> खोलेंगे।', name: 'स्टोर का नाम', open: 'अभी ऑर्डर ले रहे हैं',
+      cod: 'डिलीवरी / पिकअप पर नकद', upi: 'पहुँचने पर UPI', delivery: 'घर पर डिलीवरी', pickup: 'दुकान से पिकअप', minOrder: 'न्यूनतम ऑर्डर (₹)',
+      phone: 'ग्राहक इस नंबर पर कॉल कर सकते हैं', announcement: 'स्टोर पर दिखने वाली सूचना', save: 'सहेजें', saved: 'सहेज लिया।', viewStore: 'स्टोर पेज खोलें', shareLink: 'आपके स्टोर का लिंक',
+      noPayment: 'भुगतान का कम से कम एक तरीका रखें।', noWay: 'डिलीवरी, पिकअप या दोनों रखें।',
+      payNote: 'ऑनलाइन कुछ नहीं कटता। ग्राहक ऑर्डर पहुँचने पर नकद या UPI से हाथ से भुगतान करता है।',
+      productsTitle: 'स्टोर में दिखने वाला सामान', productsHint: 'सिर्फ़ वही सामान दिखता है जो आप चालू करें। ग्राहक कीमत और स्टॉक में है या नहीं देखते हैं, आपकी लागत या मात्रा कभी नहीं।',
+      search: 'सामान खोजें', show: 'दिखाएँ', hide: 'छिपाएँ', shown: 'दिख रहा है', hidden: 'छिपा है', inactive: 'निष्क्रिय सामान', noProducts: 'कोई सामान नहीं मिला।',
+    },
+    orders: {
+      title: 'ऑनलाइन ऑर्डर', subtitle: 'ऑर्डर स्वीकार करें, आगे बढ़ाएँ और डिलीवर होने पर चिह्नित करें: इससे बिक्री बन जाती है।', empty: 'अभी कोई ऑर्डर नहीं।',
+      all: 'सभी', open: 'खुले ऑर्डर', placedAt: 'कब आया', customer: 'ग्राहक', phone: 'फ़ोन', address: 'पता', notes: 'टिप्पणी', items: 'सामान', total: 'कुल',
+      payment: 'भुगतान', fulfilment: 'कैसे', sale: 'बिक्री', saleTotal: 'बिक्री का कुल', history: 'इतिहास', warnings: 'ध्यान दें',
+      accept: 'स्वीकार करें', reject: 'अस्वीकार करें', cancel: 'ऑर्डर रद्द करें', reasonLabel: 'कारण (ग्राहक को बताया जा सकता है)', confirm: 'पक्का करें', back: 'वापस', deliveredHint: 'डिलीवर करने पर बिक्री बनती है और स्टॉक घटता है।',
+      status: { PLACED: 'नया', ACCEPTED: 'स्वीकार', PREPARING: 'तैयार हो रहा है', READY: 'तैयार', OUT_FOR_DELIVERY: 'डिलीवरी के लिए निकला', DELIVERED: 'डिलीवर हुआ', REJECTED: 'अस्वीकार', CANCELLED: 'रद्द' },
+      next: { PREPARING: 'तैयारी शुरू करें', READY: 'तैयार चिह्नित करें', OUT_FOR_DELIVERY: 'डिलीवरी के लिए भेजें', DELIVERED: 'डिलीवर चिह्नित करें' },
+      how: { DELIVERY: 'डिलीवरी', PICKUP: 'पिकअप' }, pay: { COD: 'नकद', UPI: 'UPI' }, actor: { CUSTOMER: 'ग्राहक', STAFF: 'दुकान' },
+      viewSale: 'बिक्री देखें',
+    },
+    public: {
+      closed: 'यह स्टोर अभी ऑर्डर नहीं ले रहा है।', notFound: 'यह स्टोर नहीं मिला।', search: 'खोजें', inStock: 'स्टॉक में', outOfStock: 'स्टॉक ख़त्म', add: 'जोड़ें',
+      cart: 'आपका ऑर्डर', cartEmpty: 'अभी कुछ नहीं जोड़ा।', remove: 'हटाएँ', total: 'कुल', minimum: 'न्यूनतम ऑर्डर {{amount}}', checkout: 'ऑर्डर करें', yourName: 'आपका नाम',
+      yourPhone: 'फ़ोन नंबर', how: 'आप इसे कैसे लेंगे?', delivery: 'मुझे डिलीवर करें', pickup: 'मैं ख़ुद ले जाऊँगा', address: 'डिलीवरी का पता', payHow: 'भुगतान कैसे करेंगे?',
+      payCod: 'नकद', payUpi: 'UPI', notes: 'दुकान के लिए टिप्पणी', place: 'ऑर्डर करें', placing: 'भेज रहे हैं…', placed: 'ऑर्डर भेज दिया', placedHint: 'दुकान जल्द स्वीकार करेगी। अपना ऑर्डर देखने के लिए यह पेज खुला रखें या लिंक सहेज लें।',
+      trackTitle: 'आपका ऑर्डर', status: 'स्थिति', cancelOrder: 'यह ऑर्डर रद्द करें', cancelled: 'आपका ऑर्डर रद्द हो गया।', callShop: 'दुकान को कॉल करें', noMore: 'और सामान नहीं है।',
+      loadMore: 'और दिखाएँ', qty: 'मात्रा', payAtDoor: 'सामान पहुँचने पर आप हाथ से भुगतान करेंगे। ऑनलाइन कुछ नहीं कटता।', backToStore: 'स्टोर पर वापस',
+    },
   },
 }

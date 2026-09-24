@@ -90,7 +90,7 @@ class Role(TimestampMixin, Base):
         not_blank("code"),
         not_blank("name"),
         CheckConstraint(
-            "(is_system = 1 AND shop_id IS NULL) OR (is_system = 0 AND shop_id IS NOT NULL)",
+            "(is_system = TRUE AND shop_id IS NULL) OR (is_system = FALSE AND shop_id IS NOT NULL)",
             name="system_means_global",
         ),
     )

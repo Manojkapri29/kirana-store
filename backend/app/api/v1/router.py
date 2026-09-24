@@ -26,10 +26,12 @@ from app.api.v1 import (
     intelligence,
     inventory,
     loyalty,
+    online_store,
     payments,
     price_intelligence,
     products,
     promotions,
+    public_store,
     purchases,
     quick_sales,
     reference,
@@ -84,6 +86,8 @@ api_v1_router.include_router(integrations.router)
 api_v1_router.include_router(payments.router)
 api_v1_router.include_router(sync.router)
 api_v1_router.include_router(webhooks.router)
+api_v1_router.include_router(online_store.router)
+api_v1_router.include_router(public_store.router)
 api_v1_router.include_router(finance.router)
 api_v1_router.include_router(finance_reports.router)
 api_v1_router.include_router(campaigns.router)

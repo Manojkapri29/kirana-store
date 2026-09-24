@@ -28,6 +28,8 @@ export const en = {
     analytics: 'Analytics',
     integrations: 'Integrations',
     offline: 'Offline till',
+    onlineOrders: 'Online orders',
+    onlineStore: 'Online store',
   },
   modules: {
     expenses: {
@@ -1340,6 +1342,9 @@ export const en = {
     offerUses: 'Offers applied',
     couponUses: 'Coupons used',
     onlineStore: 'Online store',
+    onlinePlaced: 'Orders placed',
+    onlineDelivered: 'Delivered',
+    onlineValue: 'Delivered value',
   },
   admin: {
     title: 'Administrator console',
@@ -2038,6 +2043,36 @@ export const en = {
     provider: 'Provider', enabled: 'Turn it on', save: 'Save', configure: 'Configure', enable: 'Enable', disable: 'Disable', test: 'Test connection',
     settings: { host: 'Mail server', port: 'Port', security: 'Security (starttls, ssl or none)', sender: 'From address', username: 'User name', url: 'Gateway address (https)' },
     platform: 'Set for the whole installation', needsReview: 'Payments that need review', recentCalls: 'Recent calls',
+  },
+  onlineStore: {
+    setup: {
+      title: 'Online store', subtitle: 'A web page where customers can order from you. Orders are requests: nothing moves in stock or money until you deliver them.',
+      address: 'Web address', addressHint: 'Letters, digits and hyphens. Customers open /store/<this>.', name: 'Store name', open: 'Taking orders now',
+      cod: 'Cash on delivery / at pickup', upi: 'UPI when it arrives', delivery: 'Home delivery', pickup: 'Pickup from the shop', minOrder: 'Minimum order (₹)',
+      phone: 'Phone customers can call', announcement: 'Notice shown on the store', save: 'Save', saved: 'Saved.', viewStore: 'Open the store page', shareLink: 'Your store link',
+      noPayment: 'Accept at least one way to pay.', noWay: 'Offer delivery, pickup or both.',
+      payNote: 'Nothing is charged online. The customer pays cash or UPI by hand when the order reaches them.',
+      productsTitle: 'Products shown in the store', productsHint: 'Only the products you switch on are visible. Customers see the price and whether it is in stock, never your cost or quantity.',
+      search: 'Search products', show: 'Show', hide: 'Hide', shown: 'Shown', hidden: 'Hidden', inactive: 'Inactive product', noProducts: 'No products found.',
+    },
+    orders: {
+      title: 'Online orders', subtitle: 'Accept an order, move it along, and mark it delivered: that creates the sale.', empty: 'No orders yet.',
+      all: 'All', open: 'Open orders', placedAt: 'Placed', customer: 'Customer', phone: 'Phone', address: 'Address', notes: 'Notes', items: 'Items', total: 'Total',
+      payment: 'Payment', fulfilment: 'How', sale: 'Sale', saleTotal: 'Sale total', history: 'History', warnings: 'Heads-up',
+      accept: 'Accept', reject: 'Reject', cancel: 'Cancel order', reasonLabel: 'Reason (the customer may be told)', confirm: 'Confirm', back: 'Back', deliveredHint: 'Delivered creates and posts the sale, taking the stock out.',
+      status: { PLACED: 'New', ACCEPTED: 'Accepted', PREPARING: 'Preparing', READY: 'Ready', OUT_FOR_DELIVERY: 'Out for delivery', DELIVERED: 'Delivered', REJECTED: 'Rejected', CANCELLED: 'Cancelled' },
+      next: { PREPARING: 'Start preparing', READY: 'Mark ready', OUT_FOR_DELIVERY: 'Send out for delivery', DELIVERED: 'Mark delivered' },
+      how: { DELIVERY: 'Delivery', PICKUP: 'Pickup' }, pay: { COD: 'Cash', UPI: 'UPI' }, actor: { CUSTOMER: 'Customer', STAFF: 'Shop' },
+      viewSale: 'View the sale',
+    },
+    public: {
+      closed: 'This store is not taking orders right now.', notFound: 'This store was not found.', search: 'Search', inStock: 'In stock', outOfStock: 'Out of stock', add: 'Add',
+      cart: 'Your order', cartEmpty: 'Nothing added yet.', remove: 'Remove', total: 'Total', minimum: 'Minimum order {{amount}}', checkout: 'Place order', yourName: 'Your name',
+      yourPhone: 'Phone number', how: 'How do you want it?', delivery: 'Deliver to me', pickup: 'I will pick up', address: 'Delivery address', payHow: 'How will you pay?',
+      payCod: 'Cash', payUpi: 'UPI', notes: 'Note for the shop', place: 'Place order', placing: 'Placing…', placed: 'Order placed', placedHint: 'The shop will accept it soon. Keep this page or bookmark the link to follow your order.',
+      trackTitle: 'Your order', status: 'Status', cancelOrder: 'Cancel this order', cancelled: 'Your order was cancelled.', callShop: 'Call the shop', noMore: 'No more products.',
+      loadMore: 'Show more', qty: 'Quantity', payAtDoor: 'You pay by hand when it reaches you. Nothing is charged online.', backToStore: 'Back to the store',
+    },
   },
 }
 

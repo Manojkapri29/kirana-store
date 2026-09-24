@@ -23,6 +23,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.types import utc_now
@@ -227,13 +228,20 @@ def use_metered(session: Session, shop_id: int, metric: str, amount: int = 1) ->
         SubscriptionUsage.metric == metric,
     )
     row = session.scalar(query.with_for_update())
-    used = 0 if row is None else row.count
+    if row is None:
+        # The first use in a period creates the row. Two requests can get here at once (PostgreSQL does not
+        # serialise writers as SQLite does): one wins the insert, the other reads its row and locks it.
+        try:
+            with session.begin_nested():
+                session.add(SubscriptionUsage(shop_id=shop_id, period=period, metric=metric, count=0))
+                session.flush()
+        except IntegrityError:
+            pass
+        row = session.scalars(query.with_for_update()).one()
+    used = row.count
     limit_key = _LIMIT_OF_METRIC.get(metric)
     if limit_key is not None:
         check_limit(session, shop_id, limit_key, used, amount)
-    if row is None:
-        row = SubscriptionUsage(shop_id=shop_id, period=period, metric=metric, count=0)
-        session.add(row)
     row.count = used + amount
     session.flush()
     limit = get_entitlements(session, shop_id).limit(limit_key) if limit_key else None
