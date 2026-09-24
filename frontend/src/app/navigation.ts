@@ -4,6 +4,7 @@ import {
   Boxes,
   CreditCard,
   HeartHandshake,
+  Gauge,
   Landmark,
   Tag,
   Zap,
@@ -82,6 +83,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: Users,
     labelKey: 'nav.customers',
   },
+  { id: 'analytics', permission: 'ANALYTICS_VIEW', path: '/analytics', icon: Gauge, labelKey: 'nav.analytics' },
   { id: 'finance', permission: 'FINANCE_VIEW', path: '/finance', icon: Landmark, labelKey: 'nav.finance' },
   { id: 'crm', permission: 'CRM_ANALYTICS_VIEW', path: '/crm', icon: HeartHandshake, labelKey: 'nav.crm' },
   {

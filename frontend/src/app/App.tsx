@@ -1,5 +1,12 @@
 import { Route, Routes } from 'react-router-dom'
 
+import { BuilderPage } from '@/features/analytics/BuilderPage'
+import { DrillPage } from '@/features/analytics/DrillPage'
+import { ExecutivePage } from '@/features/analytics/ExecutivePage'
+import { ObservationsPage } from '@/features/analytics/InsightsPage'
+import { ReportsPage } from '@/features/analytics/ReportsPage'
+import { SavedReportsPage } from '@/features/analytics/SavedReportsPage'
+import { SchedulesPage } from '@/features/analytics/SchedulesPage'
 import { CashPage } from '@/features/finance/CashPage'
 import { ExpensesPage } from '@/features/finance/ExpensesPage'
 import { FinanceDashboardPage } from '@/features/finance/FinanceDashboardPage'
@@ -108,6 +115,13 @@ export function App() {
         <Route path="customers/new" element={<CustomerFormPage mode="create" />} />
         <Route path="customers/:id" element={<CustomerDetailPage />} />
         <Route path="customers/:id/crm" element={<CustomerCrmPage />} />
+        <Route path="analytics" element={<ExecutivePage />} />
+        <Route path="analytics/reports" element={<ReportsPage />} />
+        <Route path="analytics/drill" element={<DrillPage />} />
+        <Route path="analytics/builder" element={<BuilderPage />} />
+        <Route path="analytics/saved" element={<SavedReportsPage />} />
+        <Route path="analytics/schedules" element={<SchedulesPage />} />
+        <Route path="analytics/insights" element={<ObservationsPage />} />
         <Route path="finance" element={<FinanceDashboardPage />} />
         <Route path="finance/expenses" element={<ExpensesPage />} />
         <Route path="finance/cash" element={<CashPage />} />
