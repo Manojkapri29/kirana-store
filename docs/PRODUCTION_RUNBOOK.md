@@ -50,5 +50,5 @@ and the application integrity checks were clean, the schema was at head, sign-in
 
 ## Not verified
 
-Docker images/compose, TLS/proxy configuration, a remote or managed PostgreSQL service (local PostgreSQL 16 was verified), S3 storage against a real provider, real SMTP/SMS/payment providers, load on real hardware,
+TLS/proxy configuration, an orchestrator or registry (Docker images and compose were verified locally), a remote or managed PostgreSQL service (local PostgreSQL 16 was verified), S3 storage against a real provider, real SMTP/SMS/payment providers, load on real hardware,
 multi-instance rate limiting (limits are per process), and monitoring/alerting (none is wired to any external service).

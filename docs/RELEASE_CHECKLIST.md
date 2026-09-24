@@ -20,7 +20,7 @@ Status is as of the Phase 20 audit. "Done" means it was executed in this reposit
 | 14 | Documentation complete and consistent | Done |
 | 15 | Performance baseline recorded (SQLite) | Done |
 | 16 | Load test on production-like hardware and database | **Not done** |
-| 17 | Docker images built and run | **Not done** (no Docker available) |
+| 17 | Docker images built and run | Done locally (compose stack, end to end); TLS/proxy and orchestrators untested |
 | 18 | PostgreSQL migrations and test suite run on a real server | Done on a local PostgreSQL 16; **not** on a remote/managed service |
 | 19 | TLS, HSTS and proxy headers configured at the edge | **Operator** |
 | 20 | Each external integration configured and tested by the shop (SMTP, SMS/WhatsApp, payments, S3) | **Operator**; none is claimed working |

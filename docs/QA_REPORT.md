@@ -93,6 +93,8 @@ or any real external provider. No critical blocker was found; the HIGH items are
 
 # Follow-up after the audit (same repository, later date)
 
+Test results at the end of the follow-up: backend on SQLite **3905 passed** in the last full run (2 tests then updated for the online store and re-run green); on PostgreSQL 16 **3823 passed, 85 skipped** (SQLite-specific tests), the 2 failures being a slow-report test that needed `ANALYZE` (fixed) and an injection test that passes when run alone under load; frontend **188 passed**.
+
 The audit's findings were worked through. Status now:
 
 | Finding | Status |
@@ -100,7 +102,7 @@ The audit's findings were worked through. Status now:
 | H1 PostgreSQL never executed | **Verified locally on PostgreSQL 16** (migrations, whole test suite, production-mode server, backup/restore, performance smoke). It found and fixed 7 real problems (see POSTGRES_MIGRATION_CHECKLIST.md). A remote/managed service is still unverified. |
 | H2 no real integrations | unchanged: still configure-and-test by the shop |
 | M1 backups exclude photos | **Fixed** for local photo storage (archive in the backup, restored without overwriting; tested). S3 photos rely on the bucket's own durability. |
-| M2 Docker unverified | **Still unverified**: Docker is not installed on this machine. The nginx configuration itself was tested with a real nginx. |
+| M2 Docker unverified | **Verified locally**: both images build and the compose stack runs end to end (see PRODUCTION_DEPLOYMENT.md). TLS/proxy, orchestrators and image scanning remain untested. |
 | M3 per-process rate limits | unchanged |
 | M4 SQLite single writer | unchanged, but PostgreSQL is now an option |
 | M5 no load test / monitoring | unchanged (PostgreSQL smoke on one machine only) |

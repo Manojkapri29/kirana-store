@@ -1,9 +1,7 @@
 # Production deployment
 
 Nothing here deploys anything for you, and nothing was deployed. The files describe a deployment you run yourself, on any cloud or a
-plain server. **The Dockerfiles and compose file could not be built or run in the environment where Phase 12 was written (no Docker was
-installed): they are unverified. The backend and the frontend build, and the migration, start-up check, health endpoints and worker they
-rely on were run directly and are tested.** Try the images in a scratch environment before trusting them.
+plain server. **The Dockerfiles and compose file were built and run in the follow-up after Phase 20** (Docker 29 through Colima on an Apple-silicon Mac, plain HTTP, no TLS): both images build; the compose stack starts healthy (read-only root filesystem, non-root user, `cap_drop: ALL`); `/health/ready` is OK through nginx; the first shop was created inside the container; sign-in, a purchase, an online order placed through nginx and delivered into a sale, the integrity check and a backup all worked; the worker ran its periodic jobs. **Still untested:** TLS and the reverse proxy in front, other CPU architectures, a registry/orchestrator (Kubernetes, ECS, ...), and image vulnerability scanning.
 
 ## Architecture
 
