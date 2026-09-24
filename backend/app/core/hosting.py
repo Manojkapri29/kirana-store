@@ -46,9 +46,13 @@ def apply_vercel_defaults(environ: MutableMapping[str, str]) -> None:
     given("KIRANA_DB_POOL_SIZE", "2")
     given("KIRANA_DB_MAX_OVERFLOW", "3")
     given("KIRANA_LOG_FORMAT", "json")
-    database = (find_database_url(environ) or ("", ""))[1]
-    if database and not environ.get("KIRANA_SECRET_KEY"):
-        environ["KIRANA_SECRET_KEY"] = hmac.new(b"kirana-vercel-secret-key", database.encode(), hashlib.sha256).hexdigest()  # 64 hex characters
+    found = find_database_url(environ)
+    database = found[1] if found else ""
+    if not environ.get("KIRANA_SECRET_KEY"):
+        # With no database there is nothing to protect yet: the app starts (so it can say "database unavailable" instead of crashing) with a key
+        # tied to this deployment. With a database the key is derived from its URL, so it is stable and as secret as the database password.
+        seed = database or f"no-database:{environ.get('VERCEL_DEPLOYMENT_ID', 'local')}"
+        environ["KIRANA_SECRET_KEY"] = hmac.new(b"kirana-vercel-secret-key", seed.encode(), hashlib.sha256).hexdigest()  # 64 hex characters
 
 
 if __name__ == "__main__":  # used by the Vercel build: `eval "$(python -m app.core.hosting)"` (the URL is never printed to the log)
@@ -58,3 +62,11 @@ if __name__ == "__main__":  # used by the Vercel build: `eval "$(python -m app.c
     _found = find_database_url(os.environ)
     if _found and _found[0] not in STANDARD_NAMES:
         print(f"export KIRANA_DATABASE_URL={shlex.quote(_found[1])}")
+
+
+def describe(environ: Mapping[str, str]) -> str:
+    """One log line for the platform's runtime log: which database variable was found (its NAME, never its value)."""
+    found = find_database_url(environ)
+    return f"kirana-hosting: database variable = {found[0] if found else 'NONE'}; environment names seen = " + ", ".join(
+        sorted(n for n in environ if n.startswith(("DATABASE", "POSTGRES", "PG", "NEON", "STORAGE", "KIRANA_")))
+    )

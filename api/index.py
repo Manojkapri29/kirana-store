@@ -9,8 +9,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
-from app.core.hosting import apply_vercel_defaults  # noqa: E402
+from app.core.hosting import apply_vercel_defaults, describe  # noqa: E402
 
 apply_vercel_defaults(os.environ)  # Vercel-only defaults; nothing happens elsewhere
+if os.environ.get("VERCEL"):
+    print(describe(os.environ), file=sys.stderr)  # names only, for the runtime log
 
 from app.main import app  # noqa: E402,F401  (the ASGI application Vercel looks for)
