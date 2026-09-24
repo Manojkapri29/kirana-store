@@ -4,10 +4,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+python3 -m venv /tmp/kirana-venv
+/tmp/kirana-venv/bin/pip install --quiet -r backend/requirements.txt
+# Some integrations name the URL differently (for example STORAGE_URL): find it. Only variable NAMES are ever printed.
+eval "$(cd backend && /tmp/kirana-venv/bin/python -m app.core.hosting)"
+echo "== database variable present: $([ -n "${KIRANA_DATABASE_URL:-}${DATABASE_URL:-}${POSTGRES_URL:-}" ] && echo yes || echo no)"
+echo "== variables that look database-related (names only): $(env | cut -d= -f1 | grep -iE 'url|postgres|pg|neon|database|storage' | tr '\n' ' ')"
+
 if [ -n "${KIRANA_DATABASE_URL:-}${DATABASE_URL:-}${POSTGRES_URL:-}" ]; then
   echo "== migrating the database"
-  python3 -m venv /tmp/kirana-venv
-  /tmp/kirana-venv/bin/pip install --quiet -r backend/requirements.txt
   (cd backend && /tmp/kirana-venv/bin/python -m alembic upgrade head)
   # First deployment only: if the database has no account yet, create the first shop and its owner. The owner's email is derived from this
   # site's address (owner@<address>) so no personal data is committed; the ONE-TIME PASSWORD is printed below, in this build log only.

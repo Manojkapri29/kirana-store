@@ -92,3 +92,15 @@ def test_vercel_defaults_apply_only_on_vercel_and_never_override_the_operator():
     own = {"VERCEL": "1", "DATABASE_URL": "postgres://u:pw@h/db", "KIRANA_SECRET_KEY": "x" * 40}
     apply_vercel_defaults(own)
     assert own["KIRANA_SECRET_KEY"] == "x" * 40
+
+
+def test_a_custom_prefixed_database_url_is_found_and_the_pooled_one_preferred():
+    from app.core.hosting import apply_vercel_defaults, find_database_url
+
+    env = {"STORAGE_URL_UNPOOLED": "postgresql://u:p@direct/db", "STORAGE_URL": "postgresql://u:p@pooler/db", "UNRELATED": "x"}
+    assert find_database_url(env) == ("STORAGE_URL", "postgresql://u:p@pooler/db")
+    assert find_database_url({"DATABASE_URL": "postgres://a", "STORAGE_URL": "postgres://b"}) == ("DATABASE_URL", "postgres://a")
+    assert find_database_url({"X": "y"}) is None
+    on_vercel = {"VERCEL": "1", **env}
+    apply_vercel_defaults(on_vercel)
+    assert on_vercel["KIRANA_DATABASE_URL"] == "postgresql://u:p@pooler/db" and len(on_vercel["KIRANA_SECRET_KEY"]) >= 32
