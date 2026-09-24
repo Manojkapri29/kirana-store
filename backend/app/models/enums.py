@@ -163,6 +163,10 @@ class AiActionKind(StrEnum):
     PURCHASE_DRAFT = "PURCHASE_DRAFT"  # purchase_service.create_purchase: a DRAFT, never posted
     STOCK_ADJUSTMENT = "STOCK_ADJUSTMENT"  # inventory_service.record_adjustment with a reason code
     PROMOTION_DRAFT = "PROMOTION_DRAFT"  # promotion_service.create_promotion: a DRAFT, never activated
+    TASK_DRAFT = (
+        "TASK_DRAFT"  # task_service.create: a business task, never anything financial or inventory-changing
+    )
+    CAMPAIGN_DRAFT = "CAMPAIGN_DRAFT"  # campaign_service.create: a DRAFT campaign, never launched
 
 
 class AiActionStatus(StrEnum):
@@ -277,3 +281,138 @@ class JobStatus(StrEnum):
     FAILED = "FAILED"
     RETRYING = "RETRYING"
     CANCELLED = "CANCELLED"
+
+
+class StockCountScope(StrEnum):
+    """What a stock count covers. A count of a single category still only lists that category's products."""
+
+    FULL = "FULL"
+    CATEGORY = "CATEGORY"
+    PRODUCTS = "PRODUCTS"
+
+
+class StockCountStatus(StrEnum):
+    """DRAFT (scope chosen, expected quantities captured) -> COUNTING (counts being entered) -> REVIEW (all
+    counted, differences visible) -> APPROVED (a second look confirmed the differences) -> POSTED
+    (inventory_service has written the adjustments; irreversible). CANCELLED is possible from any state
+    before POSTED and creates no stock movement."""
+
+    DRAFT = "DRAFT"
+    COUNTING = "COUNTING"
+    REVIEW = "REVIEW"
+    APPROVED = "APPROVED"
+    POSTED = "POSTED"
+    CANCELLED = "CANCELLED"
+
+
+class TaskStatus(StrEnum):
+    OPEN = "OPEN"
+    IN_PROGRESS = "IN_PROGRESS"
+    WAITING = "WAITING"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+class TaskPriority(StrEnum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+class ApprovalStatus(StrEnum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
+
+
+class ReportSchedule(StrEnum):
+    DAILY = "DAILY"
+    WEEKLY = "WEEKLY"
+    MONTHLY = "MONTHLY"
+
+
+class CustomerType(StrEnum):
+    """A classification the shop assigns, not a computed segment. Generic across every business type."""
+
+    RETAIL = "RETAIL"
+    WHOLESALE = "WHOLESALE"
+    OTHER = "OTHER"
+
+
+class CustomerSource(StrEnum):
+    """How the customer first came to the shop. A fact recorded once, not inferred."""
+
+    WALK_IN = "WALK_IN"
+    REFERRAL = "REFERRAL"
+    ONLINE = "ONLINE"
+    CAMPAIGN = "CAMPAIGN"
+    OTHER = "OTHER"
+
+
+class LoyaltyEntryType(StrEnum):
+    """Insert-only loyalty ledger entries (BUSINESS_RULES-style: never overwrite a balance, only add a row).
+    Mirrors `CustomerLedgerEntryType`."""
+
+    EARN = "EARN"
+    REDEEM = "REDEEM"
+    ADJUST = "ADJUST"
+    EXPIRE = "EXPIRE"
+    REVERSAL = "REVERSAL"
+
+
+class CustomerGroupKind(StrEnum):
+    MANUAL = "MANUAL"  # membership is an explicit list, never recalculated automatically
+    RULE_BASED = "RULE_BASED"  # membership is a cached snapshot of a saved filter, recalculated on demand
+
+
+class CampaignStatus(StrEnum):
+    DRAFT = "DRAFT"
+    SCHEDULED = "SCHEDULED"
+    RUNNING = "RUNNING"
+    PAUSED = "PAUSED"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+class CampaignSendStatus(StrEnum):
+    """The honest outcome of one attempted send to one customer. SENT only appears when a real provider for
+    that channel is configured; otherwise the true reason is recorded — never a fabricated success."""
+
+    SENT = "SENT"
+    NOT_CONFIGURED = "NOT_CONFIGURED"  # no provider is set up for this channel
+    SKIPPED_NO_CONSENT = "SKIPPED_NO_CONSENT"  # the customer never opted in to this channel
+    SKIPPED_OPTED_OUT = "SKIPPED_OPTED_OUT"  # the customer explicitly opted out
+    FAILED = "FAILED"
+
+
+class AutomationTrigger(StrEnum):
+    NEW_CUSTOMER = "NEW_CUSTOMER"
+    INACTIVITY = "INACTIVITY"
+    LOYALTY_MILESTONE = "LOYALTY_MILESTONE"
+    PURCHASE_MILESTONE = "PURCHASE_MILESTONE"
+
+
+class AutomationAction(StrEnum):
+    CREATE_CAMPAIGN_DRAFT = "CREATE_CAMPAIGN_DRAFT"
+    CREATE_TASK = "CREATE_TASK"
+    NOTIFY = "NOTIFY"
+
+
+class AutomationRunStatus(StrEnum):
+    SUCCESS = "SUCCESS"
+    SKIPPED_COOLDOWN = "SKIPPED_COOLDOWN"
+    SKIPPED_CONDITION = "SKIPPED_CONDITION"
+    FAILED = "FAILED"
+
+
+class ReferralEventStatus(StrEnum):
+    """PENDING (referred customer signed up, no qualifying purchase yet) -> QUALIFIED (the qualifying
+    transaction happened) -> REWARDED (the reward was granted). EXPIRED and INVALID (e.g. self-referral,
+    duplicate) never reward."""
+
+    PENDING = "PENDING"
+    QUALIFIED = "QUALIFIED"
+    REWARDED = "REWARDED"
+    EXPIRED = "EXPIRED"
+    INVALID = "INVALID"

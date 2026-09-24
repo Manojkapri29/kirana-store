@@ -445,3 +445,21 @@ Additive, offline-renderable SQL for the data steps, tested up, down and up agai
 Every existing user becomes an account and a membership (OWNER stays OWNER; STAFF becomes CASHIER; an inactive user becomes SUSPENDED). Nothing is deleted.
 Downgrade removes the new structures and is **refused while one email belongs to more than one shop**. No new indexes beyond those the queries use.
 
+
+## Migration 0017: CRM, loyalty, campaigns, automation, referrals (Phase 14)
+
+| Change | Detail |
+|---|---|
+| `customers` | + `customer_type`, `source`, `tags`, `preferred_contact_channel`, four `marketing_opt_in_*` flags (default false), `referred_by_customer_id` (composite self-FK) |
+| `shops` | + `crm_campaign_audience_threshold`, `crm_loyalty_adjustment_threshold` (nullable, `>= 0`; NULL = no extra approval) |
+| `customer_notes` | insert-only |
+| `customer_groups`, `customer_group_members` | manual or rule-based groups |
+| `loyalty_programs`, `loyalty_ledger` | one program per shop; the ledger is insert-only, unique on (shop, customer, entry type, reference type, reference id) |
+| `campaigns`, `campaign_audience_snapshots`, `campaign_sends` | snapshots and sends are insert-only; `campaigns.requires_approval` |
+| `automation_rules`, `automation_runs` | runs are insert-only |
+| `referral_programs`, `referral_codes`, `referral_events` | one referred customer per referral (unique) |
+| `ai_actions.kind` | CHECK widened to include `CAMPAIGN_DRAFT` |
+| `role_permissions` | the 12 CRM permissions inserted for the system roles |
+
+All money is integer paise; every table carries `shop_id` with composite tenant foreign keys. Five tables get the existing insert-only
+triggers. Downgrade is tested (up → down → up). Nothing existing is renamed or dropped.

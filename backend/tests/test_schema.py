@@ -45,7 +45,7 @@ class TestNoStoredStockOrBalance:
         assert columns == {
             "id", "shop_id", "sku", "name", "brand", "category_id", "unit_id", "default_supplier_id",
             "reorder_level", "mrp", "selling_price", "purchase_price", "avg_cost", "barcode",
-            "is_active", "created_at", "updated_at",
+            "is_active", "created_at", "updated_at", "pack_size", "moq",
         }  # fmt: skip
 
     def test_no_table_stores_current_stock_or_a_running_balance(self, inspector):

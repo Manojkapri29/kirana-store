@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.context import RequestContext
@@ -1115,3 +1116,193 @@ def export_purchase_returns(
     """One row per purchase return."""
     dataset = _purchase_returns(session, ctx, q=q, statuses=statuses, date_from=date_from, date_to=date_to)
     return _file(session, ctx, dataset, fmt)
+
+
+# --- Phase 13: intelligence, planning, stock counting ------------------------------------------------
+
+
+REORDER_COLUMNS = [
+    Column("name", "Product"), Column("sku", "SKU"), Column("current_stock", "Current Stock", Kind.QUANTITY),
+    Column("reorder_level", "Reorder Level", Kind.QUANTITY),
+    Column("sold_recently", "Sold Recently", Kind.QUANTITY),
+    Column("window_days", "Window (days)", Kind.INTEGER),
+    Column("days_of_cover", "Days of Cover", Kind.QUANTITY),
+    Column("suggested_quantity", "Suggested Quantity", Kind.QUANTITY), Column("supplier_name", "Supplier"),
+    Column("unit_cost_used", "Unit Cost Used", Kind.MONEY), Column("cost_basis", "Cost Basis"),
+    Column("estimated_cost", "Estimated Cost", Kind.MONEY), Column("reasons", "Reasons"),
+]  # fmt: skip
+
+AGING_COLUMNS = [
+    Column("name", "Product"), Column("sku", "SKU"), Column("current_stock", "Current Stock", Kind.QUANTITY),
+    Column("days_since_last_inbound", "Days Since Last Stock In", Kind.INTEGER),
+    Column("stock_value", "Stock Value", Kind.MONEY),
+]  # fmt: skip
+
+SUPPLIER_ANALYTICS_COLUMNS = [
+    Column("name", "Supplier"), Column("purchase_count", "Purchases", Kind.INTEGER),
+    Column("total_value", "Total Value", Kind.MONEY),
+    Column("average_purchase_value", "Average Purchase Value", Kind.MONEY),
+    Column("supplied_product_count", "Products Supplied", Kind.INTEGER),
+    Column("first_purchase_date", "First Purchase", Kind.DATE),
+    Column("last_purchase_date", "Last Purchase", Kind.DATE),
+    Column("delivery_performance_note", "Delivery Performance"),
+]  # fmt: skip
+
+CUSTOMER_ANALYTICS_COLUMNS = [
+    Column("name", "Customer"), Column("detailed_sale_count", "Detailed Sales", Kind.INTEGER),
+    Column("quick_sale_count", "Quick Sales", Kind.INTEGER),
+    Column("total_purchases", "Total Purchases", Kind.MONEY),
+    Column("average_transaction_value", "Average Transaction", Kind.MONEY),
+    Column("last_purchase", "Last Purchase", Kind.DATE),
+    Column("outstanding", "Outstanding", Kind.MONEY), Column("last_payment_date", "Last Payment", Kind.DATE),
+    Column("segments", "Segments"),
+]  # fmt: skip
+
+STOCK_COUNT_COLUMNS = [
+    Column("name", "Product"), Column("sku", "SKU"), Column("expected_quantity", "Expected", Kind.QUANTITY),
+    Column("counted_quantity", "Counted", Kind.QUANTITY), Column("variance", "Variance", Kind.QUANTITY),
+    Column("variance_value", "Variance Value", Kind.MONEY), Column("note", "Note"),
+]  # fmt: skip
+
+
+def export_reorder_recommendations(
+    session: Session,
+    ctx: RequestContext,
+    fmt: ExportFormat,
+    *,
+    window_days: int | None = None,
+    cover_days: int | None = None,
+) -> ExportFile:
+    """Today's reorder recommendations (see `ai_insights_service.reorder_recommendations`): a suggestion,
+    never a purchase."""
+    from app.services import ai_insights_service
+
+    today = shop_today(get_shop(session, ctx.shop_id))
+    kwargs: dict[str, Any] = {}
+    if window_days is not None:
+        kwargs["window_days"] = window_days
+    if cover_days is not None:
+        kwargs["cover_days"] = cover_days
+    rows = ai_insights_service.reorder_recommendations(session, ctx.shop_id, today, **kwargs)
+    data = [{**r.__dict__, "reasons": "; ".join(r.reasons)} for r in rows]
+    return _file(session, ctx, _Dataset("reorder_recommendations", REORDER_COLUMNS, data), fmt)
+
+
+def export_stock_aging(session: Session, ctx: RequestContext, fmt: ExportFormat) -> ExportFile:
+    """See `inventory_intelligence_service.stock_aging`: an estimate from the ledger, not batch tracking."""
+    from app.services import inventory_intelligence_service
+
+    today = shop_today(get_shop(session, ctx.shop_id))
+    rows = [r.__dict__ for r in inventory_intelligence_service.stock_aging(session, ctx.shop_id, today)]
+    return _file(session, ctx, _Dataset("stock_aging", AGING_COLUMNS, rows), fmt)
+
+
+def export_supplier_analytics(session: Session, ctx: RequestContext, fmt: ExportFormat) -> ExportFile:
+    from app.services import supplier_intelligence_service
+
+    rows = [
+        a.__dict__ for a in supplier_intelligence_service.list_analytics(session, ctx.shop_id, limit=None)
+    ]
+    return _file(session, ctx, _Dataset("supplier_analytics", SUPPLIER_ANALYTICS_COLUMNS, rows), fmt)
+
+
+def export_customer_analytics(session: Session, ctx: RequestContext, fmt: ExportFormat) -> ExportFile:
+    from app.services import customer_intelligence_service
+
+    today = shop_today(get_shop(session, ctx.shop_id))
+    rows = []
+    for a in customer_intelligence_service.list_analytics(session, ctx.shop_id, today, limit=None):
+        row = dict(a.__dict__)
+        row["segments"] = ", ".join(s.value for s in a.segments)
+        rows.append(row)
+    return _file(session, ctx, _Dataset("customer_analytics", CUSTOMER_ANALYTICS_COLUMNS, rows), fmt)
+
+
+def export_stock_count(session: Session, ctx: RequestContext, fmt: ExportFormat, count_id: int) -> ExportFile:
+    """One stock count's lines: expected, counted, variance and its value where cost is known."""
+    from app.services import stock_count_service
+
+    stock_count_service.get(session, ctx.shop_id, count_id)  # 404 for another shop's count
+    rows = [i.__dict__ for i in stock_count_service.get_items(session, ctx.shop_id, count_id)]
+    return _file(session, ctx, _Dataset(f"stock_count_{count_id}", STOCK_COUNT_COLUMNS, rows), fmt)
+
+
+# --- Phase 14: CRM, loyalty, campaigns ----------------------------------------------------------------
+
+CUSTOMER_GROUP_MEMBER_COLUMNS = [
+    Column("customer_id", "Customer ID"), Column("name", "Customer"), Column("phone", "Phone"),
+]  # fmt: skip
+
+LOYALTY_LEDGER_COLUMNS = [
+    Column("entry_date", "Date", Kind.DATE), Column("entry_type", "Type"),
+    Column("points_delta", "Points", Kind.INTEGER), Column("reference_type", "Source"),
+    Column("note", "Note"),
+]  # fmt: skip
+
+CAMPAIGN_SEND_COLUMNS = [
+    Column("customer_id", "Customer ID"), Column("channel", "Channel"), Column("status", "Outcome"),
+    Column("detail", "Detail"),
+]  # fmt: skip
+
+
+def export_customer_group(
+    session: Session, ctx: RequestContext, fmt: ExportFormat, group_id: int
+) -> ExportFile:
+    """A customer group's current membership: who is in it, right now."""
+    from app.models import Customer
+    from app.services import crm_segment_service
+
+    membership = crm_segment_service.members_of(
+        session, ctx.shop_id, group_id
+    )  # 404 for another shop's group
+    customers = {
+        c.id: c
+        for c in session.scalars(
+            select(Customer).where(Customer.shop_id == ctx.shop_id, Customer.id.in_(membership.customer_ids))
+        )
+    }
+    rows = [
+        {"customer_id": cid, "name": customers[cid].name, "phone": customers[cid].phone}
+        for cid in membership.customer_ids
+        if cid in customers
+    ]
+    return _file(
+        session, ctx, _Dataset(f"customer_group_{group_id}", CUSTOMER_GROUP_MEMBER_COLUMNS, rows), fmt
+    )
+
+
+def export_loyalty_ledger(
+    session: Session, ctx: RequestContext, fmt: ExportFormat, customer_id: int
+) -> ExportFile:
+    """One customer's full loyalty history, oldest rule intact: the ledger, exactly as recorded."""
+    from app.services import loyalty_service
+
+    rows_data, _ = loyalty_service.list_ledger(session, ctx.shop_id, customer_id, limit=None)
+    rows = [
+        {
+            "entry_date": r.entry_date, "entry_type": r.entry_type.value, "points_delta": r.points_delta,
+            "reference_type": r.reference_type, "note": r.note,
+        }
+        for r in rows_data
+    ]  # fmt: skip
+    return _file(session, ctx, _Dataset(f"loyalty_ledger_{customer_id}", LOYALTY_LEDGER_COLUMNS, rows), fmt)
+
+
+def export_campaign_sends(
+    session: Session, ctx: RequestContext, fmt: ExportFormat, campaign_id: int
+) -> ExportFile:
+    """One campaign's per-customer send outcomes, honest as recorded (mostly "Not Configured" until a real
+    provider is set up)."""
+    from app.services import campaign_service
+
+    sends = campaign_service.send_outcomes(
+        session, ctx.shop_id, campaign_id
+    )  # 404 for another shop's campaign
+    rows = [
+        {
+            "customer_id": s.customer_id, "channel": s.channel.value, "status": s.status.value,
+            "detail": s.detail,
+        }
+        for s in sends
+    ]  # fmt: skip
+    return _file(session, ctx, _Dataset(f"campaign_sends_{campaign_id}", CAMPAIGN_SEND_COLUMNS, rows), fmt)

@@ -63,6 +63,9 @@ class Recommendation:
     estimated_cost: Decimal | None
     reasons: list[str] = field(default_factory=list)
     low_history: bool = False
+    pack_size: Decimal | None = None
+    moq: Decimal | None = None
+    lead_time_days: int | None = None
 
 
 @dataclass(frozen=True)
@@ -131,35 +134,56 @@ def _round_up(quantity: Decimal, allows_decimal: bool) -> Decimal:
 # --- Reorder and purchase suggestions ---------------------------------------------------------------
 
 
-def reorder_recommendations(session: Session, shop_id: int, today: date) -> list[Recommendation]:
+def reorder_recommendations(
+    session: Session,
+    shop_id: int,
+    today: date,
+    *,
+    window_days: int = WINDOW_DAYS,
+    cover_days: int = COVER_DAYS,
+) -> list[Recommendation]:
     """Active products that are at or below their reorder level, or will run out within a week at the recent pace.
 
-    Suggested quantity brings stock up to (recent daily sales x 21 days) + the reorder level; a product
-    with no
-    recent sales is brought to twice its reorder level. Wording and figures are for a person to review: no
-    purchase
-    is created here.
+    Suggested quantity brings stock up to (recent daily sales x `cover_days`) + the reorder level; a product with no
+    recent sales is brought to twice its reorder level. When the product has a pack size or a minimum order quantity
+    set, the suggestion is rounded up to respect them, and a reason says so. Wording and figures are for a person to
+    review: no purchase is created here.
     """
     rows, _ = inventory_service.list_inventory(session, shop_id, active=True, limit=None)
-    sold = analytics_service.sales_velocity(session, shop_id, today, WINDOW_DAYS)
+    sold = analytics_service.sales_velocity(session, shop_id, today, window_days)
     products = {p.id: p for p in session.scalars(select(Product).where(Product.shop_id == shop_id))}
-    suppliers = {s.id: s.name for s in session.scalars(select(Supplier).where(Supplier.shop_id == shop_id))}
+    suppliers = {s.id: s for s in session.scalars(select(Supplier).where(Supplier.shop_id == shop_id))}
     out: list[Recommendation] = []
     for row in rows:
         recent = max(sold.get(row.product_id, ZERO), ZERO)
-        per_day = recent / WINDOW_DAYS
+        per_day = recent / window_days
         cover = row.current_stock / per_day if per_day > 0 else None
         at_or_below = row.current_stock <= row.reorder_level and (row.reorder_level > 0 or recent > 0)
         running_out = cover is not None and cover < RUNNING_OUT_DAYS
         if not (at_or_below or running_out):
             continue
-        target = recent * COVER_DAYS / WINDOW_DAYS + row.reorder_level  # multiply first: no rounding drift
+        target = recent * cover_days / window_days + row.reorder_level  # multiply first: no rounding drift
         if per_day == 0:
             target = row.reorder_level * 2
         suggested = _round_up(max(target - row.current_stock, ZERO), row.allows_decimal)
         if suggested <= 0:
             continue
         product = products[row.product_id]
+        supplier = suppliers.get(product.default_supplier_id) if product.default_supplier_id else None
+        pack_reasons: list[str] = []
+        if product.pack_size and product.pack_size > 0:
+            packs = (suggested / product.pack_size).quantize(Decimal("1"), rounding=ROUND_CEILING)
+            rounded = packs * product.pack_size
+            if rounded != suggested:
+                pack_reasons.append(
+                    f"Rounded up to whole packs of {fmt.quantity(product.pack_size)} {row.unit_code}"
+                )
+            suggested = rounded
+        if product.moq and suggested < product.moq:
+            pack_reasons.append(
+                f"Raised to the supplier's minimum order quantity of {fmt.quantity(product.moq)} {row.unit_code}"
+            )
+            suggested = product.moq
         unit_cost, basis = (
             (product.purchase_price, "latest purchase price")
             if product.purchase_price is not None
@@ -174,6 +198,9 @@ def reorder_recommendations(session: Session, shop_id: int, today: date) -> list
             reasons.append("At or below the reorder level")
         if running_out:
             reasons.append(f"About {cover:.0f} days of stock left at the recent pace")
+        reasons.extend(pack_reasons)
+        if supplier is not None and supplier.lead_time_days is None:
+            reasons.append("The supplier's lead time is not set: this does not account for delivery time")
         out.append(
             Recommendation(
                 product_id=row.product_id,
@@ -183,14 +210,12 @@ def reorder_recommendations(session: Session, shop_id: int, today: date) -> list
                 current_stock=row.current_stock,
                 reorder_level=row.reorder_level,
                 sold_recently=recent,
-                window_days=WINDOW_DAYS,
+                window_days=window_days,
                 per_day=per_day.quantize(Decimal("0.01")),
                 days_of_cover=cover.quantize(Decimal("0.1")) if cover is not None else None,
                 suggested_quantity=suggested,
                 supplier_id=product.default_supplier_id,
-                supplier_name=suppliers.get(product.default_supplier_id)
-                if product.default_supplier_id
-                else None,
+                supplier_name=supplier.name if supplier else None,
                 latest_purchase_price=product.purchase_price,
                 avg_cost=product.avg_cost,
                 unit_cost_used=unit_cost,
@@ -200,15 +225,27 @@ def reorder_recommendations(session: Session, shop_id: int, today: date) -> list
                 else None,
                 reasons=reasons,
                 low_history=recent < LOW_HISTORY_UNITS,
+                pack_size=product.pack_size,
+                moq=product.moq,
+                lead_time_days=supplier.lead_time_days if supplier else None,
             )
         )
     return sorted(out, key=lambda r: (r.days_of_cover is None, r.days_of_cover or ZERO, r.name.casefold()))
 
 
-def purchase_suggestions(session: Session, shop_id: int, today: date) -> list[SupplierGroup]:
+def purchase_suggestions(
+    session: Session,
+    shop_id: int,
+    today: date,
+    *,
+    window_days: int = WINDOW_DAYS,
+    cover_days: int = COVER_DAYS,
+) -> list[SupplierGroup]:
     """The reorder list grouped by each product's preferred supplier (products with none are grouped last)."""
     groups: dict[int | None, list[Recommendation]] = {}
-    for rec in reorder_recommendations(session, shop_id, today):
+    for rec in reorder_recommendations(
+        session, shop_id, today, window_days=window_days, cover_days=cover_days
+    ):
         groups.setdefault(rec.supplier_id, []).append(rec)
     result = [
         SupplierGroup(

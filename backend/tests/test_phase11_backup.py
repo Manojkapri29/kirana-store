@@ -4,7 +4,7 @@ import gc
 import json
 import sqlite3
 import threading
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -220,7 +220,9 @@ class TestRetention:
     S = Settings(_env_file=None, backup_keep_daily_days=7, backup_keep_weekly_weeks=3)
 
     def test_recent_backups_are_kept_old_ones_thinned_to_one_a_week(self):
-        now = utc_now()
+        # Pinned: the weekly window is 21 days of time, which touches 3 or 4 calendar weeks depending on the weekday
+        # the test happens to run on. A Monday makes it exactly 3, so the test no longer depends on today's date.
+        now = datetime(2026, 1, 5, 12, 0, tzinfo=UTC)
         rs = [record(f"d{i}", i, now=now) for i in range(0, 30)]
         keep, delete = backup_service.plan_retention(rs, now, self.S)
         kept = {r.backup_key for r in keep}

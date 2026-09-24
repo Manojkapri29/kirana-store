@@ -33,16 +33,26 @@ from sqlalchemy.orm import Session
 from app.core.context import RequestContext
 from app.db.types import utc_now
 from app.models import AiAction, Product, Supplier, Unit
-from app.models.enums import AdjustmentReason, AiActionKind, AiActionStatus, PromotionScope, PromotionType
+from app.models.enums import (
+    AdjustmentReason,
+    AiActionKind,
+    AiActionStatus,
+    NotificationChannel,
+    PromotionScope,
+    PromotionType,
+    TaskPriority,
+)
 from app.services import (
     ai_format as fmt,
 )
 from app.services import (
     authorization_service,
+    campaign_service,
     entitlement_service,
     inventory_service,
     promotion_service,
     purchase_service,
+    task_service,
 )
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
@@ -61,6 +71,8 @@ _NEEDS_FEATURE = {
     AiActionKind.PURCHASE_DRAFT: "ai_assistant",
     AiActionKind.STOCK_ADJUSTMENT: "ai_assistant",
     AiActionKind.PROMOTION_DRAFT: "ai_assistant",
+    AiActionKind.TASK_DRAFT: "ai_assistant",
+    AiActionKind.CAMPAIGN_DRAFT: "ai_assistant",
 }
 _DOCUMENT_FEATURES = {"invoice_photo", "stock_list_photo"}
 
@@ -123,10 +135,35 @@ class PromotionDraftPayload(_Payload):
         return value
 
 
+class TaskDraftPayload(_Payload):
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    kind: str | None = Field(default=None, max_length=40)
+    priority: TaskPriority = TaskPriority.MEDIUM
+    due_date: date | None = None
+    entity_type: str | None = Field(default=None, max_length=40)
+    entity_id: int | None = None
+
+
+class CampaignDraftPayload(_Payload):
+    """A DRAFT campaign only — never launched by this payload. `campaign_service.launch` is a separate,
+    separately-permissioned (`CAMPAIGN_LAUNCH`) step a person takes afterwards."""
+
+    name: str = Field(min_length=1, max_length=150)
+    description: str | None = Field(default=None, max_length=2000)
+    channel: NotificationChannel = NotificationChannel.IN_APP
+    target_group_id: int | None = None
+    target_segment: str | None = Field(default=None, max_length=40)
+    promotion_id: int | None = None
+    message_template: str = Field(min_length=1, max_length=4000)
+
+
 _MODELS: dict[AiActionKind, type[_Payload]] = {
     AiActionKind.PURCHASE_DRAFT: PurchaseDraftPayload,
     AiActionKind.STOCK_ADJUSTMENT: StockAdjustmentPayload,
     AiActionKind.PROMOTION_DRAFT: PromotionDraftPayload,
+    AiActionKind.TASK_DRAFT: TaskDraftPayload,
+    AiActionKind.CAMPAIGN_DRAFT: CampaignDraftPayload,
 }
 
 
@@ -288,6 +325,50 @@ def preview_of(
                 "Stock will match your count. Each entry stays in the product's history and can be reversed.",
             ],
         )
+    elif kind is AiActionKind.TASK_DRAFT:
+        data_task = TaskDraftPayload.model_validate(payload)
+        base.update(
+            title="Create Task",
+            summary=data_task.title,
+            lines={
+                "columns": ["Title", "Priority", "Due"],
+                "rows": [
+                    [
+                        data_task.title,
+                        data_task.priority.value.title(),
+                        data_task.due_date.isoformat() if data_task.due_date else "—",
+                    ]
+                ],
+            },
+            impact=[
+                f"This will create a task: '{data_task.title}'.",
+                "It changes nothing else: no stock, price, order or financial record is touched.",
+            ],
+        )
+    elif kind is AiActionKind.CAMPAIGN_DRAFT:
+        data_campaign = CampaignDraftPayload.model_validate(payload)
+        base.update(
+            title="Create Campaign Draft",
+            summary=data_campaign.name,
+            lines={
+                "columns": ["Name", "Channel", "Target"],
+                "rows": [
+                    [
+                        data_campaign.name,
+                        data_campaign.channel.value,
+                        (
+                            f"Group #{data_campaign.target_group_id}"
+                            if data_campaign.target_group_id
+                            else (data_campaign.target_segment or "—")
+                        ),
+                    ]
+                ],
+            },
+            impact=[
+                f"This will create a DRAFT campaign: '{data_campaign.name}'.",
+                "Nothing is sent: a person must review the audience and launch it separately.",
+            ],
+        )
     else:
         data_pro = PromotionDraftPayload.model_validate(payload)
         if data_pro.scope is PromotionScope.PRODUCTS:
@@ -358,6 +439,8 @@ ACTION_PERMISSION = {
     AiActionKind.PURCHASE_DRAFT: "PURCHASE_CREATE",
     AiActionKind.STOCK_ADJUSTMENT: "INVENTORY_ADJUST",
     AiActionKind.PROMOTION_DRAFT: "PROMOTION_CREATE",
+    AiActionKind.TASK_DRAFT: "TASK_CREATE",
+    AiActionKind.CAMPAIGN_DRAFT: "CAMPAIGN_MANAGE",
 }
 
 
@@ -485,6 +568,10 @@ def confirm(session: Session, ctx: RequestContext, action_id: int) -> ActionView
         result_type, ids = _run_purchase(session, ctx, action)
     elif action.kind is AiActionKind.STOCK_ADJUSTMENT:
         result_type, ids = _run_adjustment(session, ctx, action)
+    elif action.kind is AiActionKind.TASK_DRAFT:
+        result_type, ids = _run_task(session, ctx, action)
+    elif action.kind is AiActionKind.CAMPAIGN_DRAFT:
+        result_type, ids = _run_campaign(session, ctx, action)
     else:
         result_type, ids = _run_promotion(session, ctx, action)
     action.status = AiActionStatus.EXECUTED
@@ -544,6 +631,25 @@ def record_failure(
 
 # --- Executors: each calls one existing service
 # ---------------------------------------------------------------
+
+
+def _run_task(session: Session, ctx: RequestContext, action: AiAction) -> tuple[str, list[int]]:
+    data = TaskDraftPayload.model_validate(action.current)
+    task = task_service.create(
+        session, ctx, title=data.title, description=data.description, kind=data.kind, priority=data.priority,
+        due_date=data.due_date, entity_type=data.entity_type, entity_id=data.entity_id,
+    )  # fmt: skip
+    return "task", [task.id]
+
+
+def _run_campaign(session: Session, ctx: RequestContext, action: AiAction) -> tuple[str, list[int]]:
+    data = CampaignDraftPayload.model_validate(action.current)
+    campaign = campaign_service.create(
+        session, ctx, name=data.name, description=data.description, channel=data.channel,
+        target_group_id=data.target_group_id, target_segment=data.target_segment,
+        promotion_id=data.promotion_id, message_template=data.message_template,
+    )  # fmt: skip
+    return "campaign", [campaign.id]
 
 
 def _run_purchase(session: Session, ctx: RequestContext, action: AiAction) -> tuple[str, list[int]]:

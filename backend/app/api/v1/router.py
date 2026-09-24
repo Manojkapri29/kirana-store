@@ -10,23 +10,34 @@ from app.api.v1 import (
     account,
     admin,
     ai,
+    approvals,
     auth,
+    automation,
+    campaigns,
+    crm,
+    crm_dashboard,
     customers,
     exports,
     image_intelligence,
+    intelligence,
     inventory,
+    loyalty,
     price_intelligence,
     products,
     promotions,
     purchases,
     quick_sales,
     reference,
+    referrals,
     reports,
     returns,
     sales,
+    scheduled_reports,
     staff,
+    stock_counts,
     subscription,
     suppliers,
+    tasks,
 )
 
 api_v1_router = APIRouter()
@@ -53,3 +64,14 @@ api_v1_router.include_router(account.notifications)
 api_v1_router.include_router(auth.router)
 api_v1_router.include_router(staff.staff)
 api_v1_router.include_router(staff.roles)
+api_v1_router.include_router(intelligence.router)
+api_v1_router.include_router(stock_counts.router)
+api_v1_router.include_router(tasks.router)
+api_v1_router.include_router(approvals.router)
+api_v1_router.include_router(scheduled_reports.router)
+api_v1_router.include_router(crm.router)
+api_v1_router.include_router(crm_dashboard.router)
+api_v1_router.include_router(loyalty.router)
+api_v1_router.include_router(campaigns.router)
+api_v1_router.include_router(automation.router)
+api_v1_router.include_router(referrals.router)

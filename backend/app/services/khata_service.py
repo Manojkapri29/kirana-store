@@ -155,6 +155,23 @@ def get_balance_map(session: Session, shop_id: int, customer_ids: Sequence[int])
     return balances
 
 
+def last_payment_dates(session: Session, shop_id: int, customer_ids: Sequence[int]) -> dict[int, date]:
+    """Most recent payment-entry date for several customers in one query. A customer with no payment
+    is left out."""
+    if not customer_ids:
+        return {}
+    rows = session.execute(
+        select(CustomerLedgerEntry.customer_id, func.max(CustomerLedgerEntry.entry_date))
+        .where(
+            CustomerLedgerEntry.shop_id == shop_id,
+            CustomerLedgerEntry.customer_id.in_(customer_ids),
+            CustomerLedgerEntry.entry_type == CustomerLedgerEntryType.PAYMENT,
+        )
+        .group_by(CustomerLedgerEntry.customer_id)
+    )
+    return dict(rows.all())
+
+
 def get_account(session: Session, shop_id: int, customer_id: int) -> CustomerAccount:
     customer = customer_service.get_customer(session, shop_id, customer_id)
     count = session.scalar(

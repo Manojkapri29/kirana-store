@@ -105,6 +105,26 @@ def get_stock_map(session: Session, shop_id: int, product_ids: Sequence[int]) ->
     return stock
 
 
+INBOUND_TXN_TYPES = (InventoryTxnType.OPENING, InventoryTxnType.PURCHASE, InventoryTxnType.SALE_RETURN)
+
+
+def last_inbound_dates(session: Session, shop_id: int, product_ids: Sequence[int]) -> dict[int, date]:
+    """Most recent date each product's stock was added to (opening, purchase or a sales return), for several
+    products in one query. A product with no inbound transaction is left out of the result."""
+    if not product_ids:
+        return {}
+    rows = session.execute(
+        select(InventoryTransaction.product_id, func.max(InventoryTransaction.txn_date))
+        .where(
+            InventoryTransaction.shop_id == shop_id,
+            InventoryTransaction.product_id.in_(product_ids),
+            InventoryTransaction.txn_type.in_(INBOUND_TXN_TYPES),
+        )
+        .group_by(InventoryTransaction.product_id)
+    )
+    return dict(rows.all())
+
+
 def count_movements(session: Session, shop_id: int, product_id: int) -> int:
     return session.scalar(
         select(func.count()).where(

@@ -406,4 +406,9 @@ class TestNoBusinessSpecificCodeInTheCore:
     def test_a_product_has_no_business_specific_columns(self):
         columns = {c.name for c in Product.__table__.columns}
 
-        assert not {c for c in columns if re.search(r"grocery|weight|imei|size|color|serial|expiry", c)}
+        # pack_size is exempt: it is a generic "how many units per pack" purchasing concept (already used by
+        # image/document/price intelligence across every business type), not a business-specific attribute like
+        # "shoe_size" or "clothing_size".
+        assert not {
+            c for c in columns if re.search(r"grocery|weight|imei|(?<!pack_)size|color|serial|expiry", c)
+        }

@@ -259,6 +259,16 @@ def _backup(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
     return {"backup_key": outcome.key}
 
 
+@register("reports.run_scheduled")
+def _scheduled_reports(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
+    """Run every scheduled report that is due, across every shop. Safe to repeat: a report not yet due is skipped,
+    and a repeat within the same shop-local day does not raise a second SCHEDULED_REPORT_READY notification
+    (`notification_service.emit` de-duplicates by day)."""
+    from app.services import scheduled_report_service
+
+    return {"ran": scheduled_report_service.run_due(session)}
+
+
 @register("maintenance.purge_sessions")
 def _purge_sessions(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
     from app.services import auth_service

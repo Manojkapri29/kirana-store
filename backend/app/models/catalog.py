@@ -73,6 +73,8 @@ class Product(TimestampMixin, Base):
         non_negative("selling_price"),
         non_negative("purchase_price"),
         non_negative("avg_cost"),
+        non_negative("pack_size"),
+        non_negative("moq"),
     )
 
     id: Mapped[int] = id_column()
@@ -93,3 +95,6 @@ class Product(TimestampMixin, Base):
     avg_cost: Mapped[Decimal | None] = mapped_column(Money)
     barcode: Mapped[str | None] = mapped_column(String(50))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=expression.true())
+    # Reorder planning (Phase 13): both optional. NULL means "not set" (assumed 1 / no minimum), never 0.
+    pack_size: Mapped[Decimal | None] = mapped_column(Quantity)  # bought/sold in multiples of this many units
+    moq: Mapped[Decimal | None] = mapped_column(Quantity)  # the supplier's minimum order quantity

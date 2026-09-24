@@ -23,6 +23,8 @@ order matters: for example, the stock ledger exists (Phase 3) before purchases a
 | 12 | Multi-user staff, roles and permissions, sign-in, deployment, monitoring (this replaced the old Dashboard/Authentication slots) | Done, awaiting review |
 | — | Dashboard (was Phase 12) | Partly delivered (real dashboard and Insights arrived in Phase 11); charts deferred |
 | 13 | Reports | Planned |
+| — | Business intelligence, stock counting, workflow automation (delivered as "Phase 13" of the build) | Done, backend only |
+| — | CRM, loyalty, campaigns, retention, referrals (delivered as "Phase 14" of the build) | Done, backend only |
 | — | Authentication (was Phase 14) | Done in Phase 12 |
 | 15 | Testing, validation and PostgreSQL gate | Planned |
 | 16 | Deployment preparation | Planned |

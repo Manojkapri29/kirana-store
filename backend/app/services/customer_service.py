@@ -32,6 +32,12 @@ from app.services.contact_validation import blank_to_none, normalize_email, norm
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
 
 UPDATABLE_FIELDS = {"name", "phone", "email", "address", "notes"}
+# CRM (Phase 14): classification facts and marketing consent. Distinct from UPDATABLE_FIELDS because they are
+# changed through the CRM screens, not the plain customer-edit form, and are validated by `crm_service`.
+CRM_FIELDS = {
+    "customer_type", "source", "tags", "preferred_contact_channel",
+    "marketing_opt_in_email", "marketing_opt_in_sms", "marketing_opt_in_whatsapp", "marketing_opt_in_push",
+}  # fmt: skip
 AUDITED_FIELDS = (*sorted(UPDATABLE_FIELDS), "is_active")
 
 
@@ -188,8 +194,10 @@ def create_customer(session: Session, ctx: RequestContext, data: dict[str, Any])
 def update_customer(
     session: Session, ctx: RequestContext, customer_id: int, changes: dict[str, Any]
 ) -> SaveResult:
-    """Change some details. Only fields present in `changes` are touched; `null` clears an optional field."""
-    unknown = set(changes) - UPDATABLE_FIELDS
+    """Change some details. Only fields present in `changes` are touched; `null` clears an optional field.
+    Also accepts the CRM classification/consent fields (`CRM_FIELDS`): they are ordinary customer columns,
+    changed and audited the same way — `crm_service` calls this rather than writing its own updater."""
+    unknown = set(changes) - UPDATABLE_FIELDS - CRM_FIELDS
     if unknown:
         raise InvalidInputError(f"These fields cannot be changed: {', '.join(sorted(unknown))}.")
     if "name" in changes and changes["name"] is None:

@@ -1,18 +1,20 @@
 """Tenancy: shops and their users."""
 
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import expression
 
-from app.db.types import UTCDateTime
+from app.db.types import Money, UTCDateTime
 from app.models.base import (
     Base,
     IdType,
     TimestampMixin,
     enum_type,
     id_column,
+    non_negative,
     not_blank,
     shop_id_column,
 )
@@ -49,6 +51,15 @@ class Shop(TimestampMixin, Base):
         not_blank("phone"),
         not_blank("address"),
         not_blank("timezone"),
+        non_negative("stock_count_variance_threshold"),
+        CheckConstraint(
+            "crm_campaign_audience_threshold IS NULL OR crm_campaign_audience_threshold >= 0",
+            name="crm_campaign_audience_threshold_non_negative",
+        ),
+        CheckConstraint(
+            "crm_loyalty_adjustment_threshold IS NULL OR crm_loyalty_adjustment_threshold >= 0",
+            name="crm_loyalty_adjustment_threshold_non_negative",
+        ),
     )
 
     id: Mapped[int] = id_column()
@@ -81,6 +92,15 @@ class Shop(TimestampMixin, Base):
         enum_type(MrpValidationMode, "mrp_validation_mode"),
         default=MrpValidationMode.WARN,
     )
+    # Stock counting (Phase 13): a posted count whose variance is worth at least this much money needs a SEPARATE
+    # approval (a second person, not the reviewer) before it can post. NULL = no extra approval; the shop has not
+    # configured one. Never a hardcoded number: the shop sets it, or nothing extra is required.
+    stock_count_variance_threshold: Mapped[Decimal | None] = mapped_column(Money)
+    # CRM safety controls (Phase 14): launching a campaign whose audience is LARGER than this, or applying a manual
+    # loyalty adjustment whose size is LARGER than this many points, needs a separate approval (a second person).
+    # NULL = no extra approval; never a hardcoded number.
+    crm_campaign_audience_threshold: Mapped[int | None] = mapped_column(Integer)
+    crm_loyalty_adjustment_threshold: Mapped[int | None] = mapped_column(Integer)
 
 
 class User(TimestampMixin, Base):

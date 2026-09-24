@@ -113,12 +113,17 @@ All configuration comes from environment variables; nothing secret is committed.
 - [Architecture](docs/ARCHITECTURE.md): layers, service boundaries, ledgers, SaaS readiness
 - [Database](docs/DATABASE.md): planned schema and SQLite to PostgreSQL strategy
 - [Business rules](docs/BUSINESS_RULES.md): the approved rules every phase must follow
-- [Roadmap](docs/ROADMAP.md): Phases 1 to 16 (Phase 12 is the latest)
+- [Roadmap](docs/ROADMAP.md): Phases 1 to 16 (build Phase 14, CRM, is the latest; backend only, see "What Phase 14 added" below)
 - [Production](docs/PRODUCTION.md), [Security](docs/SECURITY.md), [Observability](docs/OBSERVABILITY.md)
 - [Backup and restore](docs/BACKUP_AND_RESTORE.md), [Notifications](docs/NOTIFICATIONS.md), [SaaS administration](docs/SAAS_ADMIN.md)
 - [PostgreSQL migration checklist](docs/POSTGRES_MIGRATION_CHECKLIST.md)
 - [Authentication](docs/AUTHENTICATION.md), [Roles and permissions](docs/RBAC.md), [Staff management](docs/STAFF_MANAGEMENT.md)
 - [Production deployment](docs/PRODUCTION_DEPLOYMENT.md), [Monitoring](docs/MONITORING.md), [Background jobs](docs/BACKGROUND_JOBS.md)
+- Phase 13: [Advanced inventory](docs/ADVANCED_INVENTORY.md), [Stock counting](docs/STOCK_COUNTING.md), [Reorder planning](docs/REORDER_PLANNING.md), [Purchase planning](docs/PURCHASE_PLANNING.md)
+- Phase 13: [Supplier analytics](docs/SUPPLIER_ANALYTICS.md), [Customer analytics](docs/CUSTOMER_ANALYTICS.md), [Business health](docs/BUSINESS_HEALTH.md)
+- Phase 13: [Workflow automation](docs/WORKFLOW_AUTOMATION.md), [Scheduled reports](docs/SCHEDULED_REPORTS.md)
+- Phase 14: [CRM](docs/CRM.md), [Loyalty](docs/LOYALTY.md), [Campaigns and reactivation](docs/CAMPAIGNS.md), [Marketing automation](docs/MARKETING_AUTOMATION.md)
+- Phase 14: [Retention](docs/RETENTION.md), [Referrals and consent](docs/REFERRALS.md), [CRM AI tools](docs/CRM_AI_TOOLS.md)
 
 ## What Phase 8 added
 
@@ -264,3 +269,61 @@ See [Production deployment](docs/PRODUCTION_DEPLOYMENT.md), [Monitoring](docs/MO
 
 **Not done (on purpose).** Password reset by email, MFA, ownership transfer, email delivery of invitations, an online store and orders, payments.
 
+## What Phase 13 added
+
+**Business intelligence, read-only.** Inventory health, fast/slow/dead-moving products and stock aging, all with
+configurable time periods; supplier analytics and price history; customer analytics and factual segments; a
+business-health comparison of the current period against the previous one, reusing the existing anomaly detector.
+Money is always "Not Available," never invented, when a cost is unknown. See
+[Advanced inventory](docs/ADVANCED_INVENTORY.md), [Supplier analytics](docs/SUPPLIER_ANALYTICS.md),
+[Customer analytics](docs/CUSTOMER_ANALYTICS.md), [Business health](docs/BUSINESS_HEALTH.md).
+
+**Stock counting.** A full cycle-count workflow (create, count, review differences, approve, post), with a
+required creator/approver split and an optional per-shop threshold that routes a large variance to a second
+approval. Posting only ever goes through the existing `inventory_service`. See
+[Stock counting](docs/STOCK_COUNTING.md).
+
+**Reorder and purchase planning.** A transparent reorder formula (never a black box), respecting pack size and
+minimum order quantity, that states its assumptions (an unset supplier lead time is called out, never assumed) —
+turned into a purchase **draft** by the planning workspace, never auto-posted. See
+[Reorder planning](docs/REORDER_PLANNING.md), [Purchase planning](docs/PURCHASE_PLANNING.md).
+
+**Workflow automation.** Generic business tasks (assign, comment, complete) and a generic approval queue with a
+strict no-self-approval rule, reused today for the stock-count variance gate. Scheduled daily/weekly/monthly
+reports re-run the existing summaries and notify when ready — no email/SMS provider is bundled. See
+[Workflow automation](docs/WORKFLOW_AUTOMATION.md), [Scheduled reports](docs/SCHEDULED_REPORTS.md).
+
+**AI integration.** The assistant gained a `TASK_DRAFT` confirmable action and two new read-only tools (dead
+stock, supplier analytics) — every number still comes from the services above, never invented, and every write
+still goes through the propose → confirm → authorize → execute → audit pipeline from Phase 10.
+
+**Not done (on purpose, this phase).** No frontend screens were built for Phase 13 — everything above is a backend
+API and service layer only (see each linked doc's "Known limitations" and the Phase 13 audit for the full list).
+No real email/SMS delivery for scheduled reports. No online-order or payment features (unchanged from Phase 12).
+
+## What Phase 14 added
+
+**CRM on the existing customer record.** Classification, tags, per-channel marketing consent (default off), a
+profile and a read-only timeline, notes, factual segments and manual/rule-based groups. There is no second
+customer table. See [CRM](docs/CRM.md).
+
+**Loyalty.** A configurable program and an insert-only points ledger (balance = sum of the ledger, reversal on
+sale void, idempotent, on-demand expiry). Only `loyalty_service` touches it. See [Loyalty](docs/LOYALTY.md).
+
+**Campaigns, reactivation and automation.** Draft → schedule → launch lifecycle with audience snapshots and an
+honest per-customer outcome — **no email/SMS/WhatsApp/push provider exists**, so every send is recorded as
+`NOT_CONFIGURED` (or `SKIPPED_NO_CONSENT`), never faked. Reactivation previews who and why, then creates a draft only.
+Automation rules only ever create a draft, a task or a staff notification. See
+[Campaigns](docs/CAMPAIGNS.md), [Marketing automation](docs/MARKETING_AUTOMATION.md), [Retention](docs/RETENTION.md).
+
+**Referrals and consent.** Self-/duplicate-referral prevention, rewards only after a qualifying purchase and only
+through the loyalty ledger; marketing consent is separate from transactional messages and every change is audited.
+See [Referrals](docs/REFERRALS.md).
+
+**Safety and AI.** Large campaign audiences and large loyalty adjustments (thresholds are per-shop settings, off by
+default) need a second person's approval via the Phase 13 queue. The assistant gained nine read-only CRM tools and a
+`CAMPAIGN_DRAFT` action that can only create a draft. See [CRM AI tools](docs/CRM_AI_TOOLS.md).
+
+**Not done (on purpose, this phase).** No frontend screens; no real messaging provider; no scheduler for automation
+rules or campaign start times; referral rewards are not reversed on a sale void; no birthday/anniversary triggers
+(no such data) and no abandoned-cart (no online store).

@@ -22,9 +22,13 @@ EXPECTED_TABLES = {
     "plan_features", "plans", "price_observations", "product_images", "promotions", "purchase_items", "purchase_return_items", "purchase_returns", "purchases", "quick_sales",
     "sale_items", "sale_promotions", "sales", "sales_return_items", "sales_returns", "shop_subscriptions", "shops",
     "subscription_usage", "suppliers", "units", "users",
+    "approval_requests", "business_tasks", "scheduled_reports", "stock_count_items", "stock_counts", "task_comments",
+    "automation_rules", "automation_runs", "campaigns", "campaign_audience_snapshots", "campaign_sends",
+    "customer_groups", "customer_group_members", "customer_notes", "loyalty_ledger", "loyalty_programs",
+    "referral_codes", "referral_events", "referral_programs",
 }  # fmt: skip
 
-HEAD = "0015"  # the newest revision: the one place to change when a migration is added
+HEAD = "0017"  # the newest revision: the one place to change when a migration is added
 
 MIGRATION_FILES = sorted((BACKEND_DIR / "migrations" / "versions").glob("*.py"))
 
@@ -138,7 +142,9 @@ def test_migration_renders_valid_looking_postgresql_ddl():
     assert "DEFAULT false" in sql and "DEFAULT true" in sql
     assert not re.search(r"BOOLEAN DEFAULT [01]\b", sql), "boolean defaults must not be SQLite-style 0/1"
     assert "CREATE FUNCTION kirana_forbid_change()" in sql
-    assert sql.count("CREATE TRIGGER") == 4  # + admin_audit_logs (0014)
+    assert (
+        sql.count("CREATE TRIGGER") == 10
+    )  # + admin_audit_logs (0014), + task_comments (0016), + 5 more (0017)
     assert sql.count("INSERT INTO units") == 12
     assert "AUTOINCREMENT" not in sql
 

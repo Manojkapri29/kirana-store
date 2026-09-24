@@ -482,3 +482,14 @@ so they cannot be reported. Seasonal analysis and server-side conversation memor
   `users(shop_id, id)`; posted documents are still never deleted. `users` became the membership instead of being replaced (see `STAFF_MANAGEMENT.md`).
 * **Deployment.** `PRODUCTION_DEPLOYMENT.md`; the frontend is served by nginx which also forwards `/api`, so the browser sees one origin.
 
+
+## Phase 14 additions: CRM and retention
+
+New services: `crm_service` (profile, timeline, notes, consent, approval settings), `crm_segment_service` (rules and groups),
+`loyalty_service` (the **only** owner of `loyalty_ledger`, enforced by `test_architecture.py`), `campaign_service`,
+`reactivation_service`, `automation_service`, `retention_service`, `referral_service`, `crm_dashboard_service`. They **reuse**
+`customer_service`, `customer_intelligence_service`, `khata_service`, `promotion_service`, `notification_service`, `task_service` and
+the Phase 13 `approval_service`; nothing is duplicated and CRM never writes inventory or a customer's khata balance.
+Loyalty earning/reversal and referral qualification hook into the sale/quick-sale post and void paths in a savepoint, so they can
+never block a sale. Sending is behind `notification_service.provider_for`, which returns nothing for every channel today, so
+campaigns record `NOT_CONFIGURED`. The assistant only ever creates a campaign **draft** through the confirmable-action pipeline.

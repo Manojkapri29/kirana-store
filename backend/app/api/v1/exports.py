@@ -440,3 +440,61 @@ def export_purchase_returns(
             session, ctx, fmt, q=q, statuses=status, date_from=date_from, date_to=date_to
         )
     )
+
+
+@router.get("/reorder-recommendations")
+def export_reorder_recommendations(
+    ctx: Ctx,
+    session: ReadSession,
+    fmt: Format = ExportFormat.CSV,
+    window_days: int | None = None,
+    cover_days: int | None = None,
+) -> Response:
+    return download(
+        export_datasets.export_reorder_recommendations(
+            session, ctx, fmt, window_days=window_days, cover_days=cover_days
+        )
+    )
+
+
+@router.get("/stock-aging")
+def export_stock_aging(ctx: Ctx, session: ReadSession, fmt: Format = ExportFormat.CSV) -> Response:
+    return download(export_datasets.export_stock_aging(session, ctx, fmt))
+
+
+@router.get("/supplier-analytics")
+def export_supplier_analytics(ctx: Ctx, session: ReadSession, fmt: Format = ExportFormat.CSV) -> Response:
+    return download(export_datasets.export_supplier_analytics(session, ctx, fmt))
+
+
+@router.get("/customer-analytics")
+def export_customer_analytics(ctx: Ctx, session: ReadSession, fmt: Format = ExportFormat.CSV) -> Response:
+    return download(export_datasets.export_customer_analytics(session, ctx, fmt))
+
+
+@router.get("/stock-counts/{count_id}")
+def export_stock_count(
+    count_id: int, ctx: Ctx, session: ReadSession, fmt: Format = ExportFormat.CSV
+) -> Response:
+    return download(export_datasets.export_stock_count(session, ctx, fmt, count_id))
+
+
+@router.get("/customer-groups/{group_id}")
+def export_customer_group(
+    group_id: int, ctx: Ctx, session: ReadSession, fmt: Format = ExportFormat.CSV
+) -> Response:
+    return download(export_datasets.export_customer_group(session, ctx, fmt, group_id))
+
+
+@router.get("/loyalty-ledger/{customer_id}")
+def export_loyalty_ledger(
+    customer_id: int, ctx: Ctx, session: ReadSession, fmt: Format = ExportFormat.CSV
+) -> Response:
+    return download(export_datasets.export_loyalty_ledger(session, ctx, fmt, customer_id))
+
+
+@router.get("/campaigns/{campaign_id}")
+def export_campaign_sends(
+    campaign_id: int, ctx: Ctx, session: ReadSession, fmt: Format = ExportFormat.CSV
+) -> Response:
+    return download(export_datasets.export_campaign_sends(session, ctx, fmt, campaign_id))

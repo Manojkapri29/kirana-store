@@ -120,6 +120,8 @@ def test_the_action_service_can_only_do_what_the_documented_list_says():
         ("inventory_service", "get_stock_map"), ("inventory_service", "lock_products"),
         ("promotion_service", "create_promotion"), ("entitlement_service", "require_feature"),
         ("authorization_service", "require"),  # the action needs the permission of what it does (Phase 12)
+        ("task_service", "create"),  # TASK_DRAFT: a task, never anything financial or inventory-changing (Phase 13)
+        ("campaign_service", "create"),  # CAMPAIGN_DRAFT: a DRAFT campaign, never launched (Phase 14)
     }  # fmt: skip
     assert calls <= allowed, calls - allowed
     for banned in ("post_purchase", "activate_promotion", "void_purchase", "post_sale", "record_payment"):

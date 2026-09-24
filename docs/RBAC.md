@@ -67,6 +67,13 @@ cannot use is declined in words ("You don't have permission to see that informat
 403. Reading a document needs what it leads to (invoice: `PURCHASE_CREATE`; stock list: `INVENTORY_ADJUST`). The assistant cannot see
 beyond its user, cannot change a role, and still only proposes: a person confirms.
 
+## CRM permissions (Phase 14)
+
+`CRM_VIEW`, `CRM_MANAGE`, `CRM_SEGMENT_MANAGE`, `CRM_ANALYTICS_VIEW`, `LOYALTY_VIEW`, `LOYALTY_MANAGE`, `CAMPAIGN_VIEW`,
+`CAMPAIGN_MANAGE`, `CAMPAIGN_LAUNCH`, `AUTOMATION_MANAGE`, `REFERRAL_VIEW`, `REFERRAL_MANAGE` (details in [CRM.md](CRM.md)).
+Launching a campaign is a separate permission from managing one. The CRM AI tools are each gated by the matching `*_VIEW` code and
+`CAMPAIGN_DRAFT` needs `CAMPAIGN_MANAGE`.
+
 ## Adding a route or a permission
 
 1. Add the route. 2. Add its `_r(...)` line to `ROUTE_RULES`. 3. Run `pytest tests/test_rbac.py`: it names any route without a rule.

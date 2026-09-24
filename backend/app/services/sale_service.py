@@ -57,10 +57,12 @@ from app.services import (
     entitlement_service,
     inventory_service,
     khata_service,
+    loyalty_service,
     notification_service,
     numbering_service,
     payment_service,
     promotion_service,
+    referral_service,
 )
 from app.services import sale_calculation as calc
 from app.services.audit_service import record_audit
@@ -1032,6 +1034,16 @@ def post_sale(
             entry_date=sale.sale_date,
             note=f"Sale {sale.invoice_no}",
         )
+    # Loyalty points, if the shop has an active program: a savepoint, exactly like the notification below,
+    # so a loyalty problem never fails a sale.
+    loyalty_service.earn_for_sale(
+        session, ctx, customer_id=sale.customer_id, amount=sale.total_amount,
+        reference_type="SALE", reference_id=sale.id, entry_date=sale.sale_date,
+    )  # fmt: skip
+    referral_service.qualify_from_sale(
+        session, ctx, customer_id=sale.customer_id, amount=sale.total_amount,
+        reference_type="SALE", reference_id=sale.id, entry_date=sale.sale_date,
+    )  # fmt: skip
     record_audit(
         session,
         ctx,
@@ -1084,6 +1096,9 @@ def void_sale(session: Session, ctx: RequestContext, sale_id: int, reason: str) 
             note=note,
         )
         khata_service.reverse_credit_sale(session, ctx, KhataReferenceType.SALE, sale.id, reason=note)
+        loyalty_service.reverse_for_sale(
+            session, ctx, reference_type="SALE", reference_id=sale.id, entry_date=sale.sale_date, reason=note
+        )
     sale.status = SaleStatus.VOID
     sale.void_reason = cleaned
     sale.voided_at = utc_now()

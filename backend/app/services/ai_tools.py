@@ -32,26 +32,36 @@ from app.services import (
     ai_dates,
     analytics_service,
     authorization_service,
+    campaign_service,
+    crm_dashboard_service,
+    crm_service,
     entitlement_service,
+    inventory_intelligence_service,
     inventory_service,
     khata_service,
+    loyalty_service,
     price_comparison_service,
+    referral_service,
+    retention_service,
     sales_report_service,
+    supplier_intelligence_service,
 )
 from app.services import ai_format as fmt
 from app.services import ai_insights_service as insights_service
+from app.services import customer_intelligence_service as cis
 from app.services.ai_answer import (
     ANSWERED,
     NO_DATA,
     NO_DATA_TEXT,
     NOT_AVAILABLE,
+    NOT_CONFIGURED,
     RECOMMENDATION_BADGE,
     Answer,
     Figure,
     Proposal,
     Table,
 )
-from app.services.errors import EntitlementError, InvalidInputError
+from app.services.errors import EntitlementError, InvalidInputError, NotFoundError
 from app.services.shop_service import get_shop, shop_today
 
 BASIC = "ai_assistant"
@@ -93,6 +103,14 @@ class LimitArgs(_Args):
 
 class PriceArgs(_Args):
     product: str = Field(min_length=1, max_length=100, description="The product's name, SKU or barcode.")
+
+
+class CustomerArgs(_Args):
+    customer_id: int = Field(description="The customer's id.")
+
+
+class DaysArgs(_Args):
+    days: int = Field(default=60, ge=1, le=730, description="How many days of inactivity counts.")
 
 
 # --- Tool plumbing --------------------------------------------------------------------------------------
@@ -1140,6 +1158,293 @@ def _price_comparison(tc: ToolContext, args: PriceArgs) -> Answer:
     return Answer(ANSWERED, "get_price_comparison", title, message, figures, table, [source], notes=notes)
 
 
+def _dead_stock(tc: ToolContext, _args: NoArgs) -> Answer:
+    days = 90
+    rows = inventory_intelligence_service.dead_stock(tc.session, tc.ctx.shop_id, tc.today, days)
+    source = f"Based on the inventory ledger and sales from the last {days} days"
+    if not rows:
+        return Answer(
+            NO_DATA, "get_dead_stock", tc.t("Dead stock", "डेड स्टॉक"),
+            tc.t(f"No product has gone {days} days with stock and no sales at all.", f"कोई उत्पाद {days} दिनों से बिना बिके स्टॉक में नहीं है।"),
+            sources=[source],
+        )  # fmt: skip
+    shown = rows[:15]
+    return Answer(
+        ANSWERED, "get_dead_stock", tc.t("Dead stock", "डेड स्टॉक"),
+        tc.t(f"{len(rows)} product{'s have' if len(rows) != 1 else ' has'} had stock but no sales at all in the last {days} days.", f"{len(rows)} उत्पादों में स्टॉक है पर पिछले {days} दिनों में कोई बिक्री नहीं हुई।"),
+        table=Table(
+            [tc.t("Product", "उत्पाद"), tc.t("Stock", "स्टॉक"), tc.t("Stock value", "स्टॉक मूल्य")],
+            [[r.name, f"{fmt.quantity(r.current_stock)} {r.unit_code}", fmt.money(r.stock_value) if r.stock_value is not None else NOT_AVAILABLE] for r in shown],
+        ),
+        sources=[source],
+        notes=[tc.t(f"Showing {len(shown)} of {len(rows)}.", f"{len(rows)} में से {len(shown)} दिखाए गए।")] if len(rows) > len(shown) else [],
+    )  # fmt: skip
+
+
+def _supplier_analytics(tc: ToolContext, _args: NoArgs) -> Answer:
+    rows = [
+        a
+        for a in supplier_intelligence_service.list_analytics(tc.session, tc.ctx.shop_id, limit=None)
+        if a.purchase_count > 0
+    ]
+    source = "Based on posted purchases"
+    if not rows:
+        return Answer(
+            NO_DATA,
+            "get_supplier_analytics",
+            tc.t("Suppliers", "सप्लायर"),
+            tc.t("No posted purchases yet.", "अभी कोई पोस्ट की गई खरीद नहीं है।"),
+            sources=[source],
+        )
+    shown = rows[:15]
+    return Answer(
+        ANSWERED, "get_supplier_analytics", tc.t("Suppliers", "सप्लायर"),
+        tc.t(f"{len(rows)} supplier{'s have' if len(rows) != 1 else ' has'} at least one posted purchase.", f"{len(rows)} सप्लायर से कम से कम एक खरीद हुई है।"),
+        table=Table(
+            [tc.t("Supplier", "सप्लायर"), tc.t("Purchases", "खरीद"), tc.t("Total value", "कुल मूल्य"), tc.t("Products supplied", "आपूर्ति किए उत्पाद")],
+            [[a.name, str(a.purchase_count), fmt.money(a.total_value), str(a.supplied_product_count)] for a in shown],
+        ),
+        sources=[source],
+        notes=[tc.t("Suppliers are not ranked \"best\": review the figures yourself.", "सप्लायर की \"सर्वश्रेष्ठ\" रैंकिंग नहीं की जाती; आंकड़े खुद देखें।")],
+    )  # fmt: skip
+
+
+# --- CRM (Phase 14): every figure comes from the same service the CRM screens use, never recomputed here ---
+
+
+def _customer_profile(tc: ToolContext, args: CustomerArgs) -> Answer:
+    try:
+        profile = crm_service.get_profile(tc.session, tc.ctx.shop_id, args.customer_id, tc.today)
+    except NotFoundError:
+        return Answer(
+            NO_DATA,
+            "get_customer_profile",
+            tc.t("Customer profile", "ग्राहक प्रोफ़ाइल"),
+            tc.t("Customer not found.", "ग्राहक नहीं मिला।"),
+        )
+    a = profile.analytics
+    figures = [
+        Figure(tc.t("Total purchases", "कुल खरीद"), fmt.money(a.total_purchases)),
+        Figure(tc.t("Outstanding", "बकाया"), fmt.money(a.outstanding)),
+        Figure(tc.t("Loyalty balance", "लॉयल्टी अंक"), f"{profile.loyalty_balance} pts"),
+        Figure(tc.t("Segments", "सेगमेंट"), ", ".join(s.value for s in a.segments) or "—"),
+    ]  # fmt: skip
+    source = "Based on the customer's sales, khata and loyalty records"
+    return Answer(
+        ANSWERED,
+        "get_customer_profile",
+        profile.customer.name,
+        tc.t("Customer profile.", "ग्राहक प्रोफ़ाइल।"),
+        figures,
+        sources=[source],
+    )
+
+
+def _customer_segments(tc: ToolContext, _args: NoArgs) -> Answer:
+    rows = cis.list_analytics(tc.session, tc.ctx.shop_id, tc.today, limit=None)
+    counts: dict[str, int] = {}
+    for r in rows:
+        for s in r.segments:
+            counts[s.value] = counts.get(s.value, 0) + 1
+    source = "Based on every customer's sales and khata history"
+    if not counts:
+        return Answer(
+            NO_DATA,
+            "get_customer_segments",
+            tc.t("Customer segments", "ग्राहक सेगमेंट"),
+            NO_DATA_TEXT,
+            sources=[source],
+        )
+    table = Table(
+        [tc.t("Segment", "सेगमेंट"), tc.t("Customers", "ग्राहक")],
+        [[k, str(v)] for k, v in sorted(counts.items(), key=lambda kv: -kv[1])],
+    )
+    return Answer(
+        ANSWERED,
+        "get_customer_segments",
+        tc.t("Customer segments", "ग्राहक सेगमेंट"),
+        tc.t(
+            f"{len(rows)} customer(s) in total, across {len(counts)} segment(s).",
+            f"कुल {len(rows)} ग्राहक, {len(counts)} सेगमेंट में।",
+        ),
+        table=table,
+        sources=[source],
+    )
+
+
+def _retention_summary(tc: ToolContext, _args: NoArgs) -> Answer:
+    s = retention_service.retention_summary(tc.session, tc.ctx.shop_id, tc.today)
+    source = "Based on every posted sale and quick sale"
+    figures = [
+        Figure(tc.t("Repeat purchase rate", "दोहराई खरीद दर"), f"{s.repeat_purchase_rate}%" if s.repeat_purchase_rate is not None else NOT_AVAILABLE),
+        Figure(tc.t("Customers with purchases", "खरीदने वाले ग्राहक"), str(s.customers_with_purchases)),
+        Figure(tc.t("Inactive customers", "निष्क्रिय ग्राहक"), str(s.inactive_customer_count)),
+        Figure(tc.t("Reactivated recently", "हाल में सक्रिय हुए"), str(s.reactivated_count)),
+        Figure(tc.t("Average days between purchases", "औसत अंतराल (दिन)"), str(s.average_purchase_interval_days) if s.average_purchase_interval_days is not None else NOT_AVAILABLE),
+        Figure(tc.t("Cohort retention", "कोहोर्ट रिटेंशन"), f"{s.cohort_retention_rate}%" if isinstance(s.cohort_retention_rate, Decimal) else str(s.cohort_retention_rate)),
+    ]  # fmt: skip
+    return Answer(
+        ANSWERED,
+        "get_customer_retention_summary",
+        tc.t("Retention summary", "रिटेंशन सारांश"),
+        tc.t(f"Figures for the last {s.period_days} days.", f"पिछले {s.period_days} दिनों के आंकड़े।"),
+        figures,
+        sources=[source],
+    )
+
+
+def _inactive_customers(tc: ToolContext, args: DaysArgs) -> Answer:
+    ids = retention_service.reactivation_candidates(
+        tc.session, tc.ctx.shop_id, tc.today, inactive_days=args.days
+    )
+    source = f"Based on posted sales, comparing each customer's last purchase to {args.days} days ago"
+    if not ids:
+        return Answer(
+            NO_DATA,
+            "get_inactive_customers",
+            tc.t("Inactive customers", "निष्क्रिय ग्राहक"),
+            tc.t(
+                f"No customer has been inactive for over {args.days} days.",
+                f"{args.days} दिनों से कोई ग्राहक निष्क्रिय नहीं है।",
+            ),
+            sources=[source],
+        )
+    rows = [
+        a
+        for a in cis.list_analytics(tc.session, tc.ctx.shop_id, tc.today, limit=None)
+        if a.customer_id in set(ids)
+    ]
+    shown = rows[:15]
+    table = Table(
+        [tc.t("Customer", "ग्राहक"), tc.t("Days since last purchase", "अंतिम खरीद से दिन")],
+        [[r.name, str(r.days_since_last_purchase)] for r in shown],
+    )
+    return Answer(
+        ANSWERED,
+        "get_inactive_customers",
+        tc.t("Inactive customers", "निष्क्रिय ग्राहक"),
+        tc.t(
+            f"{len(ids)} customer(s) have not purchased in over {args.days} days.",
+            f"{len(ids)} ग्राहकों ने {args.days} दिनों से खरीदारी नहीं की।",
+        ),
+        table=table,
+        sources=[source],
+        notes=[tc.t(f"Showing {len(shown)} of {len(ids)}.", "")] if len(ids) > len(shown) else [],
+    )
+
+
+def _reactivation_candidates(tc: ToolContext, args: DaysArgs) -> Answer:
+    return _inactive_customers(tc, args)  # the reactivation pool is exactly the inactive-customer list
+
+
+def _loyalty_summary(tc: ToolContext, _args: NoArgs) -> Answer:
+    program = loyalty_service.get_program(tc.session, tc.ctx.shop_id)
+    summary = loyalty_service.points_summary(tc.session, tc.ctx.shop_id)
+    source = "Based on the loyalty ledger"
+    if program is None:
+        return Answer(
+            NOT_CONFIGURED,
+            "get_loyalty_summary",
+            tc.t("Loyalty", "लॉयल्टी"),
+            tc.t(
+                "No loyalty program has been configured for this shop.",
+                "इस दुकान के लिए कोई लॉयल्टी प्रोग्राम सेट नहीं है।",
+            ),
+        )
+    figures = [
+        Figure(tc.t("Program active", "प्रोग्राम सक्रिय"), tc.t("Yes", "हाँ") if program.is_active else tc.t("No", "नहीं")),
+        Figure(tc.t("Points issued", "जारी अंक"), str(summary["points_issued"])),
+        Figure(tc.t("Points redeemed", "भुनाए गए अंक"), str(summary["points_redeemed"])),
+        Figure(tc.t("Points outstanding", "शेष अंक"), str(summary["points_outstanding"])),
+    ]  # fmt: skip
+    return Answer(
+        ANSWERED,
+        "get_loyalty_summary",
+        tc.t("Loyalty summary", "लॉयल्टी सारांश"),
+        tc.t("Loyalty program summary.", "लॉयल्टी प्रोग्राम सारांश।"),
+        figures,
+        sources=[source],
+    )
+
+
+def _campaign_summary(tc: ToolContext, _args: NoArgs) -> Answer:
+    rows, total = campaign_service.list_campaigns(tc.session, tc.ctx.shop_id, limit=1000)
+    source = "Based on the shop's campaigns"
+    if not rows:
+        return Answer(
+            NO_DATA,
+            "get_campaign_summary",
+            tc.t("Campaigns", "अभियान"),
+            tc.t("No campaigns yet.", "अभी कोई अभियान नहीं है।"),
+            sources=[source],
+        )
+    counts: dict[str, int] = {}
+    for c in rows:
+        counts[c.status.value] = counts.get(c.status.value, 0) + 1
+    table = Table(
+        [tc.t("Status", "स्थिति"), tc.t("Campaigns", "अभियान")], [[k, str(v)] for k, v in counts.items()]
+    )
+    return Answer(
+        ANSWERED,
+        "get_campaign_summary",
+        tc.t("Campaign summary", "अभियान सारांश"),
+        tc.t(f"{total} campaign(s) in total.", f"कुल {total} अभियान।"),
+        table=table,
+        sources=[source],
+    )
+
+
+def _referral_summary(tc: ToolContext, _args: NoArgs) -> Answer:
+    events = referral_service.list_events(tc.session, tc.ctx.shop_id, limit=1000)
+    source = "Based on the shop's referral events"
+    if not events:
+        return Answer(
+            NO_DATA,
+            "get_referral_summary",
+            tc.t("Referrals", "रेफ़रल"),
+            tc.t("No referrals recorded yet.", "अभी कोई रेफ़रल दर्ज नहीं है।"),
+            sources=[source],
+        )
+    rewarded = sum(1 for e in events if e.status.value == "REWARDED")
+    pending = sum(1 for e in events if e.status.value == "PENDING")
+    figures = [
+        Figure(tc.t("Total referrals", "कुल रेफ़रल"), str(len(events))),
+        Figure(tc.t("Rewarded", "पुरस्कृत"), str(rewarded)),
+        Figure(tc.t("Pending", "लंबित"), str(pending)),
+    ]  # fmt: skip
+    return Answer(
+        ANSWERED,
+        "get_referral_summary",
+        tc.t("Referral summary", "रेफ़रल सारांश"),
+        tc.t("Referral summary.", "रेफ़रल सारांश।"),
+        figures,
+        sources=[source],
+    )
+
+
+def _customer_growth_dashboard(tc: ToolContext, _args: NoArgs) -> Answer:
+    d = crm_dashboard_service.build(tc.session, tc.ctx.shop_id, tc.today)
+    source = "Based on the CRM dashboard's own figures (customer, revenue, retention, loyalty, campaign and referral services)"
+    figures = [
+        Figure(tc.t("Total customers", "कुल ग्राहक"), str(d.customers.total_customers)),
+        Figure(tc.t("New customers", "नए ग्राहक"), str(d.customers.new_customers)),
+        Figure(tc.t("Active customers", "सक्रिय ग्राहक"), str(d.customers.active_customers)),
+        Figure(tc.t("Customer revenue", "ग्राहक राजस्व"), fmt.money(d.revenue.customer_revenue)),
+        Figure(tc.t("Repeat purchase rate", "दोहराई खरीद दर"), f"{d.retention.repeat_purchase_rate}%" if d.retention.repeat_purchase_rate is not None else NOT_AVAILABLE),
+        Figure(tc.t("Loyalty points outstanding", "शेष लॉयल्टी अंक"), str(d.loyalty.points_outstanding)),
+        Figure(tc.t("Running campaigns", "चल रहे अभियान"), str(d.campaigns.running)),
+        Figure(tc.t("Successful referrals", "सफल रेफ़रल"), str(d.referrals.successful_referrals)),
+    ]  # fmt: skip
+    return Answer(
+        ANSWERED,
+        "get_customer_growth_dashboard",
+        tc.t("Customer growth dashboard", "ग्राहक वृद्धि डैशबोर्ड"),
+        tc.t(f"Figures for the last {d.period_days} days.", f"पिछले {d.period_days} दिनों के आंकड़े।"),
+        figures,
+        sources=[source],
+    )
+
+
 def _insights(tc: ToolContext, _args: NoArgs) -> Answer:
     found = insights_service.insights(tc.session, tc.ctx.shop_id, tc.today)
     if not found:
@@ -1263,6 +1568,17 @@ TOOL_PERMISSION: dict[str, str] = {
     "get_purchase_suggestions": "PURCHASE_VIEW", "get_promotion_summary": "PROMOTION_VIEW",
     "get_promotion_ideas": "PROMOTION_VIEW", "get_online_order_summary": "ONLINE_ORDER_VIEW",
     "get_price_comparison": "PRICE_INTELLIGENCE_USE",
+    "get_dead_stock": "INVENTORY_VIEW",
+    "get_supplier_analytics": "REPORT_VIEW",
+    "get_customer_profile": "CRM_VIEW",
+    "get_customer_segments": "CRM_VIEW",
+    "get_customer_retention_summary": "CRM_ANALYTICS_VIEW",
+    "get_inactive_customers": "CRM_VIEW",
+    "get_reactivation_candidates": "CRM_ANALYTICS_VIEW",
+    "get_loyalty_summary": "LOYALTY_VIEW",
+    "get_campaign_summary": "CAMPAIGN_VIEW",
+    "get_referral_summary": "REFERRAL_VIEW",
+    "get_customer_growth_dashboard": "CRM_ANALYTICS_VIEW",
 }  # fmt: skip
 
 TOOLS: dict[str, Tool] = {
@@ -1379,6 +1695,83 @@ TOOLS: dict[str, Tool] = {
             PriceArgs,
             ADVANCED,
             _price_comparison,
+        ),
+        Tool(
+            "get_dead_stock",
+            "Products with stock but no sales at all in the last 90 days.",
+            NoArgs,
+            BASIC,
+            _dead_stock,
+        ),
+        Tool(
+            "get_supplier_analytics",
+            "Purchase totals, frequency and product count per supplier, from posted purchases.",
+            NoArgs,
+            ADVANCED,
+            _supplier_analytics,
+        ),
+        Tool(
+            "get_customer_profile",
+            "One customer's purchases, outstanding balance, loyalty balance and segments.",
+            CustomerArgs,
+            BASIC,
+            _customer_profile,
+        ),
+        Tool(
+            "get_customer_segments",
+            "How many customers are in each factual segment (new, active, inactive, credit, etc).",
+            NoArgs,
+            BASIC,
+            _customer_segments,
+        ),
+        Tool(
+            "get_customer_retention_summary",
+            "Repeat purchase rate, inactive/reactivated counts, average purchase interval, cohort retention.",
+            NoArgs,
+            ADVANCED,
+            _retention_summary,
+        ),
+        Tool(
+            "get_inactive_customers",
+            "Customers who have not purchased in a given number of days.",
+            DaysArgs,
+            BASIC,
+            _inactive_customers,
+        ),
+        Tool(
+            "get_reactivation_candidates",
+            "The pool a reactivation campaign would target: customers inactive beyond a given number of days.",
+            DaysArgs,
+            BASIC,
+            _reactivation_candidates,
+        ),
+        Tool(
+            "get_loyalty_summary",
+            "The loyalty program's status and points issued/redeemed/outstanding.",
+            NoArgs,
+            BASIC,
+            _loyalty_summary,
+        ),
+        Tool(
+            "get_campaign_summary",
+            "How many campaigns exist, by status.",
+            NoArgs,
+            BASIC,
+            _campaign_summary,
+        ),
+        Tool(
+            "get_referral_summary",
+            "Total, rewarded and pending referrals.",
+            NoArgs,
+            BASIC,
+            _referral_summary,
+        ),
+        Tool(
+            "get_customer_growth_dashboard",
+            "The CRM dashboard's headline figures: customers, revenue, retention, loyalty, campaigns, referrals.",
+            NoArgs,
+            ADVANCED,
+            _customer_growth_dashboard,
         ),
         Tool("get_insights", "Plain-language insights from the shop's data.", NoArgs, ADVANCED, _insights),
         Tool(

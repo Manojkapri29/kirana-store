@@ -36,6 +36,8 @@ LEDGER_ACCESS = {
     r"\binventory_transactions\b": ("models/", "services/inventory_service.py", "reporting/"),
     r"\bCustomerLedgerEntry\b": ("models/", "services/khata_service.py", "reporting/"),
     r"\bcustomer_ledger\b": ("models/", "services/khata_service.py", "reporting/"),
+    r"\bLoyaltyLedger\b": ("models/", "services/loyalty_service.py", "reporting/"),
+    r"\bloyalty_ledger\b": ("models/", "services/loyalty_service.py", "reporting/"),
 }
 
 

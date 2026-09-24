@@ -28,7 +28,14 @@ from app.core.context import RequestContext
 from app.db.types import utc_now
 from app.models import Customer, QuickSale, User
 from app.models.enums import KhataReferenceType, PaymentMethod, PaymentType, SaleStatus
-from app.services import entitlement_service, khata_service, numbering_service, payment_service
+from app.services import (
+    entitlement_service,
+    khata_service,
+    loyalty_service,
+    numbering_service,
+    payment_service,
+    referral_service,
+)
 from app.services.audit_service import record_audit
 from app.services.errors import ConflictError, InvalidInputError, NotFoundError
 from app.services.shop_service import get_shop, shop_today
@@ -355,6 +362,14 @@ def post_quick_sale(
             entry_date=sale.sale_date,
             note=f"Quick sale {sale.quick_no}",
         )
+    loyalty_service.earn_for_sale(
+        session, ctx, customer_id=sale.customer_id, amount=sale.gross_amount,
+        reference_type="QUICK_SALE", reference_id=sale.id, entry_date=sale.sale_date,
+    )  # fmt: skip
+    referral_service.qualify_from_sale(
+        session, ctx, customer_id=sale.customer_id, amount=sale.gross_amount,
+        reference_type="QUICK_SALE", reference_id=sale.id, entry_date=sale.sale_date,
+    )  # fmt: skip
     record_audit(
         session, ctx, entity_type="quick_sale", entity_id=sale.id, action="post",
         before=before, after=_snapshot(sale),
@@ -376,9 +391,14 @@ def void_quick_sale(session: Session, ctx: RequestContext, quick_sale_id: int, r
     before = _snapshot(sale)
     was_posted = sale.status is SaleStatus.POSTED
     if was_posted:
+        void_reason = f"Void of {sale.quick_no}: {cleaned}"
         khata_service.reverse_credit_sale(
-            session, ctx, KhataReferenceType.QUICK_SALE, sale.id, reason=f"Void of {sale.quick_no}: {cleaned}"
+            session, ctx, KhataReferenceType.QUICK_SALE, sale.id, reason=void_reason
         )
+        loyalty_service.reverse_for_sale(
+            session, ctx, reference_type="QUICK_SALE", reference_id=sale.id, entry_date=sale.sale_date,
+            reason=void_reason,
+        )  # fmt: skip
     sale.status = SaleStatus.VOID
     sale.void_reason = cleaned
     sale.voided_at = utc_now()
