@@ -172,6 +172,15 @@ def _currency(value: Any) -> str | None:
     return None
 
 
+# Open Prices often leaves `currency` empty (about 96% of rows in a sample) but still gives the store's
+# country. The country's own currency is then used, so the price is kept. Never converted.
+COUNTRY_CURRENCY = {
+    "AT": "EUR", "BE": "EUR", "DE": "EUR", "ES": "EUR", "FI": "EUR", "FR": "EUR", "GR": "EUR", "IE": "EUR",
+    "IT": "EUR", "LU": "EUR", "NL": "EUR", "PT": "EUR", "GB": "GBP", "US": "USD", "CA": "CAD", "AU": "AUD",
+    "CH": "CHF", "IN": "INR",
+}
+
+
 def _day(value: Any) -> date | None:
     try:
         return date.fromisoformat(str(value)[:10])
@@ -244,7 +253,9 @@ def parse_open_prices(barcode: str, payload: Any) -> Outcome:
                 brand=_text((product.get("brands") or "").split(",")[0], 100),
                 pack_text=_text(f"{quantity} {unit}", 50) if quantity and unit else None,
             )
-        price, currency = _money(row.get("price")), _currency(row.get("currency"))
+        country_code = _text(location.get("osm_address_country_code"), 2)
+        price = _money(row.get("price"))
+        currency = _currency(row.get("currency")) or COUNTRY_CURRENCY.get((country_code or "").upper())
         if price is None or currency is None:
             continue
         city = _text(location.get("osm_address_city"), 80)

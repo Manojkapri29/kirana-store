@@ -150,6 +150,12 @@ class TestParsers:
         [q] = pp.parse_open_prices(BARCODE, rows).quotes
         assert q.currency == "INR" and q.observed_on is None
 
+    def test_open_prices_keeps_a_row_with_no_currency_when_the_country_gives_one(self):
+        # Real Open Prices rows often have currency=null; the store's country decides the currency.
+        rows = {"items": [{"price": 3.79, "currency": None, "location": {"osm_address_country_code": "FR", "osm_name": "Lidl"}}, {"price": 3.79, "currency": None, "location": {"osm_address_country_code": "XX"}}]}  # fmt: skip
+        [q] = pp.parse_open_prices(BARCODE, rows).quotes
+        assert (q.price, q.currency, q.location_text) == (D("3.79"), "EUR", "Lidl")
+
     @pytest.mark.parametrize(
         "payload", [None, [], "x", {}, {"items": None}, {"items": "no"}, {"items": [None]}]
     )
